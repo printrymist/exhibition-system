@@ -4,13 +4,86 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PlusLIKE</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f4f4f9;
+      margin: 0;
+      padding: 15px;
+    }
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      max-width: 400px;
+      margin: auto;
+    }
+    #status {
+      color: #666;
+      font-size: 0.9em;
+      margin-bottom: 15px;
+    }
+    #error {
+      color: red;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <h1>PlusLIKE テスト中</h1>
-  <p>作品ID: <span id="artwork-id"></span></p>
+  <div class="card">
+    <div id="status">接続確認中...</div>
+    <div id="error"></div>
+    <div id="result" style="display:none;">
+      <h2 id="exName"></h2>
+      <p id="artworkTitle"></p>
+      <p id="artworkArtist"></p>
+    </div>
+  </div>
+
   <script>
+    // URLパラメータを取得
     const params = new URLSearchParams(window.location.search);
-    document.getElementById('artwork-id').textContent = params.get('id') || '未指定';
+    const ex  = params.get('ex');
+    const id  = params.get('id');
+    const key = params.get('key');
+
+    const GAS_URL = 'ここにGASのURLを入れる';
+
+    document.getElementById('status').innerText = 
+      `接続中... ex=${ex} id=${id}`;
+
+    // GASにデータをリクエスト
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'getArtworkData',
+        ex: ex,
+        id: id,
+        key: key
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) {
+        document.getElementById('status').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error').innerText = 
+          'エラー: ' + data.error;
+        return;
+      }
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('exName').innerText = data.exName;
+      document.getElementById('artworkTitle').innerText = data.title;
+      document.getElementById('artworkArtist').innerText = data.artist;
+      document.getElementById('result').style.display = 'block';
+    })
+    .catch(err => {
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').innerText = 
+        '通信エラー: ' + err.message;
+    });
   </script>
 </body>
 </html>
