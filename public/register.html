@@ -1161,7 +1161,7 @@
       document.getElementById('btnSaveSetup').disabled = true;
       showMsg('saveMsgSetup', '<span class="spinner-sm"></span> 保存中...', '#888');
 
-      gasCall({ action: 'saveActiveFields', ex: currentEx, activeFields: JSON.stringify(result) })
+      gasCall({ action: 'saveRegistrationFields', ex: currentEx, fieldsJson: JSON.stringify(result) })
         .then(res => {
           document.getElementById('btnSaveSetup').disabled = false;
           if (res.success) {

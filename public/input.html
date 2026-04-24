@@ -570,7 +570,7 @@
         .then(res => {
           if (res.success) document.getElementById('exNameHeader').textContent = res.exName;
         });
-      gasCall({ action: 'getActiveFields', ex: ex })
+      gasCall({ action: 'getRegistrationFields', ex: ex })
         .then(res => {
           activeFields = (res && res.length > 0) ? res
             : ['title', 'artist', 'year', 'technique', 'size', 'price'].map(n => ({ name: n, required: false }));
