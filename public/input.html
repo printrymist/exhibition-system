@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f4f4f9; color: #333; padding: 20px; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 660px; margin: 0 auto 14px auto; }
+    .card-title { font-size: 0.95em; font-weight: bold; color: #1a73e8; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+    .name-row { display: flex; gap: 10px; align-items: center; }
+    .name-row input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
+    .name-row input:focus { outline: none; border-color: #1a73e8; }
+    .btn-primary { padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-primary:hover:not(:disabled) { background: #1557b0; }
+    .msg-ok    { font-size: 0.88em; color: #1a73e8; margin-top: 6px; min-height: 18px; }
+    .msg-error { font-size: 0.85em; color: #d93025; margin-top: 6px; min-height: 18px; }
+    #mainArea { display: none; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section-title { font-size: 1em; font-weight: bold; color: #333; }
+    .btn-add { padding: 8px 16px; background: #34a853; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; }
+    .btn-add:hover { background: #2d9249; }
+    .artwork-card { border: 1.5px solid #eee; border-radius: 10px; margin-bottom: 10px; overflow: hidden; transition: border-color 0.15s; }
+    .artwork-card:hover { border-color: #1a73e8; }
+    .artwork-card-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #fafafa; cursor: pointer; }
+    .artwork-card.open .artwork-card-header { background: #e8f0fe; border-bottom: 1px solid #dde8fc; }
+    .artwork-id-badge { font-size: 11px; color: #1a73e8; font-family: monospace; background: #e8f0fe; padding: 3px 7px; border-radius: 4px; flex-shrink: 0; }
+    .artwork-card-title { font-size: 0.9em; font-weight: bold; color: #333; flex: 1; }
+    .artwork-chevron { font-size: 12px; color: #aaa; transition: transform 0.2s; }
+    .artwork-card.open .artwork-chevron { transform: rotate(180deg); }
+    .edit-panel { display: none; padding: 16px; background: white; }
+    .artwork-card.open .edit-panel { display: block; }
+    .section-label { font-size: 0.78em; font-weight: bold; color: #fff; background: #1a73e8; padding: 4px 10px; border-radius: 4px; margin-bottom: 12px; display: inline-block; }
+    .section-label.green { background: #34a853; }
+    .input-field { margin-bottom: 14px; }
+    .input-label-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .input-label-row label { font-size: 0.82em; font-weight: bold; color: #555; }
+    .badge-required { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #fce8e6; color: #d93025; font-weight: bold; }
+    .badge-optional { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #f1f3f4; color: #999; }
+    .field-name-hint { font-size: 10px; color: #bbb; font-family: monospace; }
+    .input-field input[type="text"], .input-field textarea { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: sans-serif; transition: border-color 0.15s; }
+    .input-field input:focus, .input-field textarea:focus { outline: none; border-color: #1a73e8; }
+    .input-field input.error, .input-field textarea.error { border-color: #d93025; background: #fff8f8; }
+    .input-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    .sns-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    @media (max-width: 500px) { .input-grid, .sns-grid { grid-template-columns: 1fr; } }
+    .section-divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+    .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+    .btn-save { flex: 1; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+    .btn-save:hover { background: #1557b0; }
+    .btn-save:disabled { background: #ddd; color: #aaa; cursor: not-allowed; }
+    .btn-cancel { padding: 12px 18px; background: white; color: #888; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .btn-cancel:hover { background: #f5f5f5; }
+    .save-msg { font-size: 0.85em; margin-top: 8px; min-height: 18px; }
+    .btn-delete { width: 100%; padding: 10px; background: white; color: #d93025; border: 1px solid #d93025; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 4px; }
+    .btn-delete:hover { background: #fce8e6; }
+    .delete-confirm { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: #fce8e6; border-radius: 8px; margin-top: 4px; flex-wrap: wrap; }
+    .delete-confirm span { flex: 1; font-size: 0.85em; color: #d93025; font-weight: bold; min-width: 160px; }
+    .btn-delete-ok { padding: 8px 16px; background: #d93025; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: bold; }
+    .btn-delete-ok:hover { background: #b31412; }
+    .btn-delete-cancel { padding: 8px 14px; background: white; color: #888; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .btn-delete-cancel:hover { background: #f5f5f5; }
+    #newFormArea { display: none; }
+    .save-banner { display: none; padding: 12px 16px; border-radius: 8px; background: #e8f5e9; color: #2e7d32; font-size: 0.9em; font-weight: bold; margin-bottom: 14px; text-align: center; }
+    .empty-state { text-align: center; padding: 24px 0; color: #aaa; font-size: 0.9em; }
+    .artist-note { font-size: 0.78em; color: #f29900; margin-bottom: 10px; line-height: 1.6; }
+    .spinner-sm { width: 18px; height: 18px; border: 3px solid #e0e0e0; border-top: 3px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div style="text-align:center; margin-bottom:20px;">
+    <h1 style="font-size:1.3em; color:#1a73e8;">✏️ 作品情報入力</h1>
+    <p style="font-size:0.85em; color:#888; margin-top:4px;" id="exNameHeader"></p>
+  </div>
+
+  <div class="card" id="nameCard">
+    <div class="card-title">作家名を入力してください</div>
+    <div class="name-row">
+      <input type="text" id="artistNameInput" placeholder="作家名（日本語）"
+             onkeydown="if(event.key==='Enter') searchByArtist()">
+      <button class="btn-primary" id="btnSearch" onclick="searchByArtist()">開始</button>
+    </div>
+    <div class="msg-ok"    id="searchOk"></div>
+    <div class="msg-error" id="searchError"></div>
+  </div>
+
+  <div id="mainArea">
+    <div class="card" id="listCard" style="display:none;">
+      <div class="section-header">
+        <div class="section-title" id="listTitle">登録済みの作品</div>
+        <button class="btn-add" onclick="showNewForm()">＋ 作品を追加</button>
+      </div>
+      <div id="artworkCards"></div>
+    </div>
+
+    <div class="card" id="newFormArea">
+      <div class="save-banner" id="saveBanner"></div>
+      <div class="section-header" style="margin-bottom:0;">
+        <div class="card-title" style="margin-bottom:0; border-bottom:none;">🖼️ 新規作品を登録</div>
+        <button class="btn-cancel" style="padding:6px 12px; font-size:12px;" onclick="hideNewForm()">キャンセル</button>
+      </div>
+      <hr class="section-divider">
+      <div class="section-label green">👤 作家情報</div>
+      <div class="input-grid" id="artistFieldsGrid"></div>
+      <div style="font-size:0.78em; font-weight:bold; color:#34a853; margin:8px 0 10px;">SNS / Web</div>
+      <div class="sns-grid" id="snsFieldsGrid"></div>
+      <hr class="section-divider">
+      <div class="section-label">🖼️ 作品情報</div>
+      <div id="artworkFieldsGrid"></div>
+      <div class="msg-error" id="newFormError" style="margin-bottom:8px; min-height:0;"></div>
+      <button class="btn-save" id="btnNewSave" onclick="saveNewArtwork()">💾 登録する</button>
+    </div>
+  </div>
+
+<script>
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+
+  function gasCall(params) {
+    const body = new URLSearchParams(params);
+    return fetch(GAS_URL, { method: 'POST', body: body })
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP error: ' + r.status);
+        return r.json();
+      })
+      .catch(err => {
+        console.error('gasCall error:', err.message);
+        return { success: false, error: err.message };
+      });
+  }
+
+  function getUrlParam(name) {
+    return new URLSearchParams(window.location.search).get(name) || '';
+  }
+
+  const ARTIST_FIELDS     = ['artist','artist_en','birth_year','death_year'];
+  const SNS_FIELDS        = ['insta','x','facebook','web'];
+  const ALL_ARTIST_FIELDS = [...ARTIST_FIELDS, ...SNS_FIELDS];
+  const FIELD_DEFS = {
+    title:{label:'タイトル',desc:'作品名（日本語）',textarea:false},
+    title_en:{label:'タイトル（英語）',desc:'作品名（英語）',textarea:false},
+    year:{label:'制作年',desc:'制作された年（例：2024）',textarea:false},
+    series:{label:'シリーズ名',desc:'連作・シリーズのタイトル',textarea:false},
+    technique:{label:'技法',desc:'制作技法（例：油彩、版画）',textarea:false},
+    material:{label:'素材・支持体',desc:'使用素材や支持体',textarea:false},
+    size:{label:'サイズ',desc:'作品の寸法（例：530×455mm）',textarea:false},
+    edition:{label:'エディション',desc:'版画等のエディション番号（例：3/30）',textarea:false},
+    artist:{label:'作家名',desc:'作家名（日本語）',textarea:false},
+    artist_en:{label:'作家名（英語）',desc:'作家名（英語）',textarea:false},
+    birth_year:{label:'生年',desc:'作家の生まれ年（例：1965）',textarea:false},
+    death_year:{label:'没年',desc:'作家の没年。存命の場合は空欄',textarea:false},
+    birthplace:{label:'出身地', desc:'作家の出身地（例：東京都、Paris）', textarea:false},
+    price:{label:'価格',desc:'税込価格（数字のみ）',textarea:false},
+    price_framed:{label:'額装価格',desc:'額装込みの価格（数字のみ）',textarea:false},
+    certificate:{label:'証明書',desc:'真贋証明書・保証書の有無や種類',textarea:false},
+    collection:{label:'コレクション',desc:'所蔵先・コレクション名',textarea:false},
+    courtesy:{label:'クレジット',desc:'画廊・提供元のクレジット表記',textarea:false},
+    note:{label:'備考',desc:'キャプションに表示するその他の情報',textarea:true},
+    artist_note:{label:'作家コメント',desc:'作家自身によるコメント・ステートメント',textarea:true},
+    insta:{label:'Instagram',desc:'@username',textarea:false},
+    x:{label:'X (Twitter)',desc:'@username',textarea:false},
+    facebook:{label:'Facebook',desc:'URLまたはユーザー名',textarea:false},
+    web:{label:'Web',desc:'https://...',textarea:false},
+  };
+
+  const ex = getUrlParam('ex');
+  let activeFields  = [];
+  let currentArtist = '';
+  let existingWorks = [];
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!ex) {
+      document.getElementById('searchError').innerText = '展覧会コードが指定されていません。';
+      document.getElementById('btnSearch').disabled = true;
+      return;
+    }
+    gasCall({ action: 'verifyExCode', ex: ex })
+      .then(res => {
+        if (res.success) document.getElementById('exNameHeader').textContent = res.exName;
+      });
+    gasCall({ action: 'getActiveFields', ex: ex })
+      .then(res => {
+        activeFields = (res && res.length > 0) ? res
+          : ['title','artist','year','technique','size','price'].map(n => ({ name:n, required:false }));
+      });
+  });
+
+  function searchByArtist() {
+    const name = document.getElementById('artistNameInput').value.trim();
+    if (!name) return;
+    currentArtist = name;
+    document.getElementById('btnSearch').disabled    = true;
+    document.getElementById('searchOk').innerHTML    = '<span class="spinner-sm"></span> 検索中...';
+    document.getElementById('searchError').innerText = '';
+
+    gasCall({ action: 'getArtworksByArtist', ex: ex, artistName: name })
+      .then(res => {
+        document.getElementById('btnSearch').disabled = false;
+        if (!res.success) {
+          document.getElementById('searchOk').innerText  = '';
+          document.getElementById('searchError').innerText = res.error;
+          return;
+        }
+        existingWorks = res.artworks;
+        document.getElementById('searchOk').innerText = '';
+        document.getElementById('mainArea').style.display = 'block';
+        if (existingWorks.length > 0) { showArtworkList(); }
+        else { showNewForm(); }
+      });
+  }
+
+  function showArtworkList() {
+    const container = document.getElementById('artworkCards');
+    container.innerHTML = '';
+    document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
+    document.getElementById('listCard').style.display = 'block';
+    if (existingWorks.length === 0) { container.innerHTML = '<div class="empty-state">登録済みの作品はありません。</div>'; return; }
+    existingWorks.forEach(art => container.appendChild(makeArtworkCard(art)));
+  }
+
+  function makeArtworkCard(art) {
+    const card = document.createElement('div');
+    card.className = 'artwork-card'; card.dataset.id = art.artwork_id;
+    const header = document.createElement('div'); header.className = 'artwork-card-header';
+    header.innerHTML = `<span class="artwork-id-badge">${art.artwork_id}</span><span class="artwork-card-title">${art.title||art.title_en||'（タイトルなし）'}</span><span class="artwork-chevron">▼</span>`;
+    header.addEventListener('click', () => toggleCard(card, art));
+    card.appendChild(header);
+    const panel = document.createElement('div'); panel.className = 'edit-panel'; panel.id = 'editPanel_' + art.artwork_id;
+    card.appendChild(panel);
+    return card;
+  }
+
+  function toggleCard(card, art) {
+    const isOpen = card.classList.contains('open');
+    document.querySelectorAll('.artwork-card.open').forEach(c => c.classList.remove('open'));
+    if (isOpen) return;
+    card.classList.add('open');
+    buildEditPanel(card, art);
+  }
+
+  function buildEditPanel(card, art) {
+    const panel = document.getElementById('editPanel_' + art.artwork_id);
+    panel.innerHTML = '';
+    const artLabel = document.createElement('div'); artLabel.className = 'section-label'; artLabel.textContent = '🖼️ 作品情報'; panel.appendChild(artLabel);
+    const artFields = activeFields.filter(f => FIELD_DEFS[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
+    appendFieldsToPanel(panel, artFields, 'ep_' + art.artwork_id + '_', art);
+    panel.appendChild(makeDivider());
+    const artistLabel = document.createElement('div'); artistLabel.className = 'section-label green'; artistLabel.textContent = '👤 作家情報'; panel.appendChild(artistLabel);
+    const note = document.createElement('div'); note.className = 'artist-note'; note.textContent = '⚠️ 作家情報を変更すると、同じ作家名の全作品に反映されます。'; panel.appendChild(note);
+    const artistGrid = document.createElement('div'); artistGrid.className = 'input-grid';
+    ARTIST_FIELDS.forEach(name => {
+      const activeDef = activeFields ? activeFields.find(f => f.name === name) : null;
+      const required = activeDef ? activeDef.required : false;
+      artistGrid.appendChild(makeField({name,label:FIELD_DEFS[name].label,desc:FIELD_DEFS[name].desc,textarea:false},required,'ep_'+art.artwork_id+'_',art[name]||''));
+    });
+    panel.appendChild(artistGrid);
+    const snsLabel = document.createElement('div'); snsLabel.style.cssText='font-size:0.78em;font-weight:bold;color:#34a853;margin:8px 0 10px;'; snsLabel.textContent='SNS / Web'; panel.appendChild(snsLabel);
+    const snsGrid = document.createElement('div'); snsGrid.className = 'sns-grid';
+    SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({name,label:FIELD_DEFS[name].label,desc:FIELD_DEFS[name].desc,textarea:false},false,'ep_'+art.artwork_id+'_',art[name]||'')); });
+    panel.appendChild(snsGrid);
+    const btnRow = document.createElement('div'); btnRow.className = 'btn-row';
+    const btnSave = document.createElement('button'); btnSave.className = 'btn-save'; btnSave.textContent = '💾 更新する';
+    btnSave.addEventListener('click', () => updateArtwork(art.artwork_id, art.artist, card));
+    const btnCancel = document.createElement('button'); btnCancel.className = 'btn-cancel'; btnCancel.textContent = 'キャンセル';
+    btnCancel.addEventListener('click', () => card.classList.remove('open'));
+    btnRow.appendChild(btnSave); btnRow.appendChild(btnCancel); panel.appendChild(btnRow);
+    const msg = document.createElement('div'); msg.className = 'save-msg'; msg.id = 'editMsg_' + art.artwork_id; panel.appendChild(msg);
+    panel.appendChild(makeDivider());
+    const deleteArea = document.createElement('div'); deleteArea.id = 'deleteArea_' + art.artwork_id;
+    const btnDelete = document.createElement('button'); btnDelete.className = 'btn-delete'; btnDelete.textContent = '🗑️ この作品を削除する';
+    btnDelete.addEventListener('click', () => confirmDelete(art.artwork_id));
+    deleteArea.appendChild(btnDelete); panel.appendChild(deleteArea);
+  }
+
+  function confirmDelete(artworkId) {
+    const area = document.getElementById('deleteArea_' + artworkId);
+    area.innerHTML = `<div class="delete-confirm"><span>⚠️ 本当に削除しますか？この操作は取り消せません。</span><button class="btn-delete-cancel" id="btnDelCancel_${artworkId}">キャンセル</button><button class="btn-delete-ok" id="btnDelOk_${artworkId}">削除する</button></div>`;
+    document.getElementById('btnDelCancel_' + artworkId).addEventListener('click', () => cancelDelete(artworkId));
+    document.getElementById('btnDelOk_'    + artworkId).addEventListener('click', () => executeDelete(artworkId));
+  }
+
+  function cancelDelete(artworkId) {
+    const area = document.getElementById('deleteArea_' + artworkId);
+    area.innerHTML = '';
+    const btn = document.createElement('button'); btn.className = 'btn-delete'; btn.textContent = '🗑️ この作品を削除する';
+    btn.addEventListener('click', () => confirmDelete(artworkId));
+    area.appendChild(btn);
+  }
+
+  function executeDelete(artworkId) {
+    const area = document.getElementById('deleteArea_' + artworkId);
+    area.innerHTML = '<span class="spinner-sm"></span> 削除中...';
+    gasCall({ action: 'deleteArtwork', ex: ex, artworkId: artworkId })
+      .then(res => {
+        if (res.success) {
+          const card = document.querySelector('.artwork-card[data-id="' + artworkId + '"]');
+          if (card) card.remove();
+          existingWorks = existingWorks.filter(a => a.artwork_id !== artworkId);
+          document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
+          if (existingWorks.length === 0) { document.getElementById('listCard').style.display='none'; showNewForm(); }
+        } else {
+          area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">Error: ' + res.error + '</span>';
+        }
+      });
+  }
+
+  function showNewForm() {
+    buildNewForm();
+    document.getElementById('newFormArea').style.display = 'block';
+    document.getElementById('newFormArea').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function hideNewForm() {
+    document.getElementById('newFormArea').style.display = 'none';
+    if (existingWorks.length === 0) document.getElementById('mainArea').style.display = 'none';
+  }
+
+  function buildNewForm() {
+    const artistGrid = document.getElementById('artistFieldsGrid'); artistGrid.innerHTML = '';
+    ARTIST_FIELDS.forEach(name => {
+      const activeDef = activeFields ? activeFields.find(f => f.name === name) : null;
+      const required = name === 'artist' ? true : (activeDef ? activeDef.required : false);
+      artistGrid.appendChild(makeField({name,label:FIELD_DEFS[name].label,desc:FIELD_DEFS[name].desc,textarea:false},required,'new_',name==='artist'?currentArtist:''));
+    });
+    const snsGrid = document.getElementById('snsFieldsGrid'); snsGrid.innerHTML = '';
+    const ead = existingWorks.length > 0 ? existingWorks[0] : null;
+    SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({name,label:FIELD_DEFS[name].label,desc:FIELD_DEFS[name].desc,textarea:false},false,'new_',ead?(ead[name]||''):'')); });
+    if (ead) { ['artist_en','birth_year','death_year'].forEach(name => { const el=document.getElementById('new_'+name); if(el&&ead[name]) el.value=ead[name]; }); }
+    const artworkGrid = document.getElementById('artworkFieldsGrid'); artworkGrid.innerHTML = '';
+    const artFields = activeFields.filter(f => FIELD_DEFS[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
+    appendFieldsToPanel(artworkGrid, artFields, 'new_', {});
+  }
+
+  function saveNewArtwork() {
+    let hasError = false; document.getElementById('newFormError').innerText = '';
+    const artistEl = document.getElementById('new_artist'); artistEl.classList.remove('error');
+    if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
+    activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+      const el = document.getElementById('new_' + f.name); if (!el) return; el.classList.remove('error');
+      if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; }
+    });
+    if (hasError) { document.getElementById('newFormError').innerText = '⚠️ 必須項目を入力してください。'; return; }
+
+    const data = {};
+    ALL_ARTIST_FIELDS.forEach(name => { const el=document.getElementById('new_'+name); if(el) data[name]=el.value.trim(); });
+    activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el=document.getElementById('new_'+f.name); if(el) data[f.name]=el.value.trim(); });
+
+    document.getElementById('btnNewSave').disabled = true;
+
+    gasCall({ action: 'saveArtwork', ex: ex, data: JSON.stringify(data) })
+      .then(res => {
+        document.getElementById('btnNewSave').disabled = false;
+        if (res.success) {
+          const banner = document.getElementById('saveBanner');
+          banner.textContent = '✅ ' + res.artworkId + ' を登録しました。'; banner.style.display = 'block';
+          setTimeout(() => { banner.style.display = 'none'; }, 3000);
+          activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el=document.getElementById('new_'+f.name); if(el){el.value='';el.classList.remove('error');} });
+          gasCall({ action: 'getArtworksByArtist', ex: ex, artistName: currentArtist })
+            .then(res2 => { if(res2.success){existingWorks=res2.artworks;showArtworkList();} });
+        } else {
+          document.getElementById('newFormError').innerText = 'Error: ' + res.error;
+        }
+      });
+  }
+
+  function updateArtwork(artworkId, originalArtist, card) {
+    const prefix = 'ep_' + artworkId + '_';
+    const artworkData = {}; activeFields.filter(f=>!ALL_ARTIST_FIELDS.includes(f.name)).forEach(f=>{const el=document.getElementById(prefix+f.name);if(el)artworkData[f.name]=el.value.trim();});
+    const artistData  = {}; ALL_ARTIST_FIELDS.forEach(name=>{const el=document.getElementById(prefix+name);if(el)artistData[name]=el.value.trim();});
+    const btnSave = card.querySelector('.btn-save'); if(btnSave) btnSave.disabled=true;
+    const msgEl = document.getElementById('editMsg_'+artworkId);
+    if(msgEl){msgEl.innerHTML='<span class="spinner-sm"></span> 更新中...';msgEl.style.color='#888';}
+
+    gasCall({
+      action: 'updateArtwork',
+      ex: ex,
+      artworkId: artworkId,
+      artworkData: JSON.stringify(artworkData),
+      artistData: JSON.stringify(artistData),
+      originalArtist: originalArtist
+    })
+      .then(res => {
+        if(btnSave) btnSave.disabled=false;
+        if(res.success){
+          const msg='✅ 更新しました。'+(res.updatedArtistCount>1?'（作家情報を'+res.updatedArtistCount+'件の作品に反映）':'');
+          if(msgEl){msgEl.textContent=msg;msgEl.style.color='#1a73e8';}
+          existingWorks=existingWorks.map(a=>{if(a.artwork_id===artworkId)return Object.assign({},a,artworkData,artistData);if(a.artist===originalArtist)return Object.assign({},a,artistData);return a;});
+          const titleEl=card.querySelector('.artwork-card-title');if(titleEl)titleEl.textContent=artworkData.title||artworkData.title_en||'（タイトルなし）';
+        } else {
+          if(msgEl){msgEl.textContent='Error: '+res.error;msgEl.style.color='#d93025';}
+        }
+      });
+  }
+
+  function appendFieldsToPanel(parent, fields, prefix, values) {
+    let gridOpen=false, gridEl=null;
+    fields.forEach(f=>{
+      const def=FIELD_DEFS[f.name]; if(!def) return;
+      const val=values[f.name]!==undefined?values[f.name].toString():'';
+      if(def.textarea){if(gridOpen){parent.appendChild(gridEl);gridOpen=false;gridEl=null;}parent.appendChild(makeField({name:f.name,label:def.label,desc:def.desc,textarea:true},f.required,prefix,val));}
+      else{if(!gridOpen){gridEl=document.createElement('div');gridEl.className='input-grid';gridOpen=true;}gridEl.appendChild(makeField({name:f.name,label:def.label,desc:def.desc,textarea:false},f.required,prefix,val));}
+    });
+    if(gridOpen) parent.appendChild(gridEl);
+  }
+
+  function makeField(def, required, prefix, currentVal) {
+    const wrap=document.createElement('div');wrap.className='input-field';
+    const labelRow=document.createElement('div');labelRow.className='input-label-row';
+    const label=document.createElement('label');label.setAttribute('for',prefix+def.name);label.textContent=def.label;labelRow.appendChild(label);
+    const badge=document.createElement('span');badge.className=required?'badge-required':'badge-optional';badge.textContent=required?'必須':'任意';labelRow.appendChild(badge);
+    const hint=document.createElement('span');hint.className='field-name-hint';hint.textContent=def.name;labelRow.appendChild(hint);
+    wrap.appendChild(labelRow);
+    let input;
+    if(def.textarea){input=document.createElement('textarea');input.rows=4;}
+    else{input=document.createElement('input');input.type='text';}
+    input.id=prefix+def.name;input.placeholder=def.desc;
+    if(currentVal!==undefined) input.value=currentVal;
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function makeDivider() { const hr=document.createElement('hr');hr.className='section-divider';return hr; }
+</script>
+</body>
+</html>
