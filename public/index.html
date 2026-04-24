@@ -64,7 +64,9 @@
       '&ex=' + encodeURIComponent(ex) +
       '&id=' + encodeURIComponent(id) +
       '&key=' + encodeURIComponent(key);
-    fetch(requestUrl)
+    fetch(requestUrl, {
+      redirect: 'follow'
+    })
       .then(res => res.json())
       .then(data => {
         if (!data.success) {
