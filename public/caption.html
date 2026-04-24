@@ -1173,6 +1173,28 @@
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script>
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+
+    function gasCall(params) {
+      const body = new URLSearchParams(params);
+      return fetch(GAS_URL, {
+        method: 'POST',
+        body: body
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP error: ' + r.status);
+          return r.json();
+        })
+        .catch(err => {
+          console.error('gasCall error:', err.message);
+          return { success: false, error: err.message };
+        });
+    }
+
+    function getUrlParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+
     let artworkData = null;
     let printHtml = '';
     let currentTemplate = 'standard';
