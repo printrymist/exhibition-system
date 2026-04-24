@@ -1396,7 +1396,7 @@
           artworkData = data;
           qrAllData = { artworks: data.qrList, exCode: ex };
           document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
-          document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/?page=register&ex=' + ex;
+          document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.activeFields);
           selectTemplate('standard');
