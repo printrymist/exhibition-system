@@ -59,26 +59,13 @@
       `接続中... ex=${ex} id=${id}`;
 
     // GASにデータをリクエスト
-    fetch(GAS_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain'
-      },
-      body: JSON.stringify({
-        action: 'getArtworkData',
-        ex: ex,
-        id: id,
-        key: key
-      })
-    })
+    fetch(requestUrl)
       .then(res => res.json())
       .then(data => {
         if (!data.success) {
           document.getElementById('status').style.display = 'none';
           document.getElementById('error').style.display = 'block';
-          document.getElementById('error').innerText =
-            'エラー: ' + data.error;
+          document.getElementById('error').innerText = 'エラー: ' + data.error;
           return;
         }
         document.getElementById('status').style.display = 'none';
@@ -90,10 +77,10 @@
       .catch(err => {
         document.getElementById('status').style.display = 'none';
         document.getElementById('error').style.display = 'block';
-        document.getElementById('error').innerText =
-          '通信エラー: ' + err.message;
+        document.getElementById('error').innerText = '通信エラー: ' + err.message;
       });
   </script>
 </body>
+
 
 </html>
