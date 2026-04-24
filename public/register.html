@@ -935,7 +935,7 @@
   <script>
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
 
-    function gasCall(params) {
+    function gasCall(params, retries = 3) {
       const body = new URLSearchParams(params);
       return fetch(GAS_URL, {
         method: 'POST',
@@ -948,10 +948,14 @@
         })
         .catch(err => {
           console.error('gasCall error:', err.message);
+          if (retries > 0) {
+            console.log(`リトライします... 残り${retries}回`);
+            return new Promise(resolve => setTimeout(resolve, 2000))
+              .then(() => gasCall(params, retries - 1));
+          }
           return { success: false, error: err.message };
         });
     }
-
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
@@ -1076,7 +1080,7 @@
         .catch(err => console.log('loadArtistList error:', err.message));
     }
 
-     function onArtistSelect() {
+    function onArtistSelect() {
       const val = document.getElementById('artistSelect').value;
       const fields = document.getElementById('artistFields');
       if (val === '') { fields.classList.remove('open'); clearArtistFields(); return; }
