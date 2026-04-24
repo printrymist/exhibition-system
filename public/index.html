@@ -48,10 +48,10 @@
 
   <script>
     // URLパラメータを取得
-    const params = new URLSearchParams(window.location.search);
-    const ex = params.get('ex');
-    const id = params.get('id');
-    const key = params.get('key');
+    const gasParams = new URLSearchParams(window.location.search);
+    const ex = gasParams.get('ex');
+    const id = gasParams.get('id');
+    const key = gasParams.get('key');
 
     const GAS_URL = 'ここにGASのURLを入れる';
 
