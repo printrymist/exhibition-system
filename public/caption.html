@@ -2295,7 +2295,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const saveBtn = document.getElementById('btnSaveFormSettings');
       if (saveBtn) saveBtn.disabled = true;
 
-      gasCall({ action: 'saveActiveFields', ex: ex, activeFields: JSON.stringify(activeFields) })
+      gasCall({ action: 'saveCaptionFields', ex: ex, fieldsJson: JSON.stringify(activeFields) })
         .then(res => {
           if (res.success) {
             msg.style.color = '#1a73e8';
