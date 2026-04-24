@@ -1179,6 +1179,7 @@
       const body = new URLSearchParams(params);
       return fetch(GAS_URL, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body
       })
         .then(r => {
