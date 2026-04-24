@@ -59,6 +59,11 @@
       `接続中... ex=${ex} id=${id}`;
 
     // GASにデータをリクエスト
+    const requestUrl = GAS_URL +
+      '?action=getArtworkData' +
+      '&ex=' + encodeURIComponent(ex) +
+      '&id=' + encodeURIComponent(id) +
+      '&key=' + encodeURIComponent(key);
     fetch(requestUrl)
       .then(res => res.json())
       .then(data => {
