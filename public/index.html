@@ -59,13 +59,18 @@
       `接続中... ex=${ex} id=${id}`;
 
     // GASにデータをリクエスト
-    const requestUrl = GAS_URL +
-      '?action=getArtworkData' +
-      '&ex=' + encodeURIComponent(ex) +
-      '&id=' + encodeURIComponent(id) +
-      '&key=' + encodeURIComponent(key);
-    fetch(requestUrl, {
-      redirect: 'follow'
+    const params = new URLSearchParams();
+    params.append('action', 'getArtworkData');
+    params.append('ex', ex);
+    params.append('id', id);
+    params.append('key', key);
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params
     })
       .then(res => res.json())
       .then(data => {
