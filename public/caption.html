@@ -1378,7 +1378,7 @@
       buildFieldsGridFromPreset(currentTemplate);
       switchTab('custom');
     }
-    
+
     function loadExhibition() {
       const ex = document.getElementById('exCodeInput').value.trim();
       if (!ex) return;
@@ -2255,6 +2255,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     const FORM_FIELD_DEFS = [
       { name: 'title', label: 'タイトル（日本語）', required: true },
       { name: 'title_en', label: 'タイトル（英語）', required: false },
+      { name: 'artist', label: '作家名（日本語）', required: false },  // ← 追加
+      { name: 'artist_en', label: '作家名（英語）', required: false },  // ← 追加
       { name: 'year', label: '制作年', required: false },
       { name: 'series', label: 'シリーズ名', required: false },
       { name: 'technique', label: '技法', required: false },
