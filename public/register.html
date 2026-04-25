@@ -822,6 +822,19 @@
         </div>
         <button class="btn-wide" id="btnSaveSetup" onclick="saveSettings()">💾 保存する</button>
         <div class="save-msg" id="saveMsgSetup"></div>
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加</p>
+          <div style="display:flex; gap:10px;">
+            <input type="number" id="addArtworkCount" placeholder="追加数 (例: 10)" min="1" max="100"
+              style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
+            <button onclick="addArtworks()" style="padding:10px 16px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8;
+              border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+              追加
+            </button>
+          </div>
+          <div id="addArtworkMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
+        </div>
+
       </div>
     </div>
 
@@ -1525,6 +1538,30 @@
         loadExhibition();
       }
     });
+
+    function addArtworks() {
+      const addCount = parseInt(document.getElementById('addArtworkCount').value);
+      if (!addCount || addCount < 1) return;
+      const msg = document.getElementById('addArtworkMsg');
+      msg.style.color = '#888';
+      msg.innerText = '追加中...';
+
+      gasCall({ action: 'addArtworks', ex: currentEx, addCount: addCount })
+        .then(res => {
+          if (res.success) {
+            msg.style.color = '#1a73e8';
+            msg.innerText = `✅ ${addCount}件の作品枠を追加しました。`;
+            document.getElementById('addArtworkCount').value = '';
+          } else {
+            msg.style.color = '#d93025';
+            msg.innerText = 'Error: ' + res.error;
+          }
+        })
+        .catch(err => {
+          msg.style.color = '#d93025';
+          msg.innerText = '通信エラー: ' + err.message;
+        });
+    }
 
   </script>
 </body>
