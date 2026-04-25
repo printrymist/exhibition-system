@@ -1059,7 +1059,7 @@
           if (!res.success) { document.getElementById('pwError').innerText = res.error; return; }
           document.getElementById('pwCard').style.display = 'none';
           document.getElementById('mainArea').style.display = 'block';
-          let af = res.activeFields;
+          let af = res.registrationFields;
           if (!af || !Array.isArray(af) || af.length === 0) af = DEFAULT_FIELDS.map(n => ({ name: n, required: false }));
           else if (typeof af[0] === 'string') af = af.map(n => ({ name: n, required: false }));
           activeFields = af;
