@@ -1391,6 +1391,8 @@
 
       gasCall({ action: 'loadAllData', ex: ex })
         .then(data => {
+          console.log('registrationFields:', data.registrationFields);
+          console.log('captionFields:', data.captionFields);
           document.getElementById('btnLoad').disabled = false;
           if (!data.success) {
             document.getElementById('exName').innerText = '';
