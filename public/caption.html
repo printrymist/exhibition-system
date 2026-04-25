@@ -2322,6 +2322,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           if (res.success) {
             msg.style.color = '#1a73e8';
             msg.innerText = '✅ 保存しました。';
+            if (artworkData) {
+              artworkData.registrationFields = activeFields;
+            }
           } else {
             msg.style.color = '#d93025';
             msg.innerText = 'Error: ' + res.error;
