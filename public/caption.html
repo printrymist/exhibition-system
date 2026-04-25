@@ -1376,21 +1376,9 @@
 
     function customizeTemplate() {
       buildFieldsGridFromPreset(currentTemplate);
-      // captionFieldsのチェック状態を反映
-      if (artworkData && artworkData.captionFields) {
-        const captionFieldNames = artworkData.captionFields.map(f => f.name);
-        document.querySelectorAll('#fieldsGrid [data-type="field"]').forEach(el => {
-          const name = el.dataset.field;
-          const chk = el.querySelector('input[type="checkbox"]');
-          if (chk) {
-            const inCaption = captionFieldNames.includes(name);
-            chk.checked = inCaption;
-          }
-        });
-      }
       switchTab('custom');
     }
-
+    
     function loadExhibition() {
       const ex = document.getElementById('exCodeInput').value.trim();
       if (!ex) return;
@@ -1692,12 +1680,25 @@
       groupCount = 0;
       const preset = PRESETS[name];
       const usedFields = [];
+
+      // caption_fields と registration_fields の名前リストを取得
+      const capFieldNames = artworkData && artworkData.captionFields
+        ? artworkData.captionFields.map(f => f.name)
+        : null;
+      const regFieldNames = artworkData && artworkData.registrationFields
+        ? artworkData.registrationFields.map(f => f.name)
+        : null;
+
       preset.items.forEach(item => {
         if (item.type === 'field') {
           if (artworkData && !artworkData.headers.includes(item.name)) return;
+          // registration_fields にない項目はスキップ
+          if (regFieldNames && !regFieldNames.includes(item.name)) return;
           usedFields.push(item.name);
+          // caption_fields に含まれていればchecked=true
+          const checked = capFieldNames ? capFieldNames.includes(item.name) : false;
           grid.appendChild(makeFieldEl(
-            item.name, item.size, item.bold, item.italic, item.align, true,
+            item.name, item.size, item.bold, item.italic, item.align, checked,
             item.maxLines, item.minSize, item.currency || '', item.comma || false,
             item.prefix || '', item.suffix || ''
           ));
@@ -1712,21 +1713,20 @@
           ));
         }
       });
-      if (artworkData) {
-        // registration_fields がある場合はその項目のみ、なければ全ヘッダーを使用
-        const regFieldNames = artworkData.registrationFields
-          ? artworkData.registrationFields.map(f => f.name)
-          : artworkData.headers;
 
+      if (artworkData) {
         artworkData.headers.forEach(h => {
-          if (!usedFields.includes(h) && regFieldNames.includes(h))
-            grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
+          if (!usedFields.includes(h)) {
+            // registration_fields にない項目はスキップ
+            if (regFieldNames && !regFieldNames.includes(h)) return;
+            // caption_fields に含まれていればchecked=true
+            const checked = capFieldNames ? capFieldNames.includes(h) : false;
+            grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
+          }
         });
       }
-
       normalizeInsertBars();
     }
-
     function collectItems() {
       const items = [];
       document.querySelectorAll('#fieldsGrid [data-row]').forEach(item => {
