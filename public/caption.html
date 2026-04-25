@@ -1376,6 +1376,18 @@
 
     function customizeTemplate() {
       buildFieldsGridFromPreset(currentTemplate);
+      // captionFieldsのチェック状態を反映
+      if (artworkData && artworkData.registrationFields) {
+        const captionFieldNames = artworkData.registrationFields.map(f => f.name);
+        document.querySelectorAll('#fieldsGrid [data-type="field"]').forEach(el => {
+          const name = el.dataset.field;
+          const chk = el.querySelector('input[type="checkbox"]');
+          if (chk) {
+            const inCaption = captionFieldNames.includes(name);
+            chk.checked = inCaption;
+          }
+        });
+      }
       switchTab('custom');
     }
 
