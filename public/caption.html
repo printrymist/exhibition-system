@@ -1402,7 +1402,7 @@
           document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
           document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
-          buildFieldSettingGrid(data.activeFields);
+          buildFieldSettingGrid(data.captionFields, data.registrationFields);
           selectTemplate('standard');
           loadSavedTemplates();
           document.getElementById('mainTabs').style.display = 'block';
@@ -2256,25 +2256,35 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     let qrAllData = null; // 全作品QRデータ（status=0含む）
 
-    function buildFieldSettingGrid(activeFields) {
+    function buildFieldSettingGrid(activeFields, registrationFields) {
       const grid = document.getElementById('fieldSettingGrid');
       grid.innerHTML = '';
+
+      // registrationFields の名前一覧を取得
+      const regFieldNames = registrationFields ? registrationFields.map(f => f.name) : null;
+
       FORM_FIELD_DEFS.forEach(def => {
+        // registrationFields に含まれているか
+        const inRegistration = regFieldNames ? regFieldNames.includes(def.name) : true;
+
         const active = activeFields ? activeFields.find(f => f.name === def.name) : null;
         const checked = active ? true : false;
         const required = active ? active.required : def.required;
+
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;';
+        row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;'
+          + (inRegistration ? '' : 'opacity:0.35; pointer-events:none;');
+
         row.innerHTML = `
-        <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''}
-          style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
-        <span style="flex:1; font-size:0.88em; color:#333;">${def.label}</span>
-        <span style="font-size:0.78em; color:#aaa; font-family:monospace;">${def.name}</span>
-        <select id="freq_${def.name}"
-          style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
-          <option value="false" ${!required ? 'selected' : ''}>任意</option>
-          <option value="true"  ${required ? 'selected' : ''}>必須</option>
-        </select>`;
+      <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''} ${!inRegistration ? 'disabled' : ''}
+        style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
+      <span style="flex:1; font-size:0.88em; color:#333;">${def.label}</span>
+      <span style="font-size:0.78em; color:#aaa; font-family:monospace;">${def.name}</span>
+      <select id="freq_${def.name}" ${!inRegistration ? 'disabled' : ''}
+        style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+        <option value="false" ${!required ? 'selected' : ''}>任意</option>
+        <option value="true"  ${required ? 'selected' : ''}>必須</option>
+      </select>`;
         grid.appendChild(row);
       });
     }
