@@ -1701,11 +1701,17 @@
         }
       });
       if (artworkData) {
+        // registration_fields がある場合はその項目のみ、なければ全ヘッダーを使用
+        const regFieldNames = artworkData.registrationFields
+          ? artworkData.registrationFields.map(f => f.name)
+          : artworkData.headers;
+
         artworkData.headers.forEach(h => {
-          if (!usedFields.includes(h))
+          if (!usedFields.includes(h) && regFieldNames.includes(h))
             grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
         });
       }
+
       normalizeInsertBars();
     }
 
