@@ -1208,7 +1208,8 @@
       </p>
       <div id="fieldSettingGrid"></div>
       <div style="margin-top:16px;">
-        <button id="btnSaveFormSettings" class="btn-print" onclick="saveFormSettings()" style="width:100%; padding:13px;">
+        <button id="btnSaveFormSettings" class="btn-print" onclick="saveFormSettings()"
+          style="width:100%; padding:13px;">
           💾 設定を保存
         </button>
         <div id="formSettingMsg" style="font-size:0.85em; margin-top:8px; min-height:16px;"></div>
@@ -1626,8 +1627,8 @@
           <option value="0" ${maxLines === 0 ? 'selected' : ''}>∞</option>
         </select>
         <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:46px;">
-        <span>↓</span>
-        <div class="price-fmt" title="Price format">
+        <span style="font-size:10px;color:#aaa;">min:</span> + <span>pt</span>
+        <div class="price-fmt" title="Price format" style="${['price', 'price_framed'].includes(name) ? '' : 'display:none;'}">
           <select id="currency_${name}">${curOptions}</select>
           <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
           <label for="comma_${name}">&#44;</label>
