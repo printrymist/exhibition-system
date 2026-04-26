@@ -1907,9 +1907,6 @@
     }
 
     function generatePreview() {
-      const settings = getSettings();
-
-      // 作品データがない場合はダミーデータを使用
       const useData = (artworkData && artworkData.artworks.length > 0)
         ? artworkData
         : {
@@ -1932,7 +1929,8 @@
         };
 
       const tempData = artworkData;
-
+      artworkData = useData;        // ← これが抜けていた
+      const settings = getSettings(); // ← useData設定後に呼ぶ
 
       if (!settings.items.some(i => i.type === 'field' || i.type === 'group')) {
         alert('Please select at least one field.');
