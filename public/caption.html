@@ -1626,8 +1626,8 @@
           <option value="3" ${maxLines === 3 ? 'selected' : ''}>3L</option>
           <option value="0" ${maxLines === 0 ? 'selected' : ''}>∞</option>
         </select>
-        <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:46px;">
-        <span style="font-size:10px;color:#aaa;">min:</span> + <span>pt</span>
+        <span style="font-size:10px;color:#aaa;">min:</span>
+        <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:46px;">     
         <div class="price-fmt" title="Price format" style="${['price', 'price_framed'].includes(name) ? '' : 'display:none;'}">
           <select id="currency_${name}">${curOptions}</select>
           <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
