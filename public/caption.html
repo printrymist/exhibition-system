@@ -1886,10 +1886,41 @@
 
     function generatePreview() {
       const settings = getSettings();
+
+      // 作品データがない場合はダミーデータを使用
+      const useData = (artworkData && artworkData.artworks.length > 0)
+        ? artworkData
+        : {
+          artworks: [{
+            title: '作品タイトル',
+            title_en: 'Artwork Title',
+            artist: '作家名',
+            artist_en: 'Artist Name',
+            year: '2024',
+            technique: '油彩・キャンバス',
+            material: 'キャンバス',
+            size: '530×455mm',
+            price: '100000',
+            price_framed: '120000',
+            qr_url: 'https://rohei-printer-system.web.app/'
+          }],
+          headers: ['title', 'title_en', 'artist', 'artist_en', 'year', 'technique', 'material', 'size', 'price', 'price_framed'],
+          exName: 'テスト展覧会',
+          exCode: 'TEST'
+        };
+
+      const tempData = artworkData;
+      artworkData = useData;
+
       if (!settings.items.some(i => i.type === 'field' || i.type === 'group')) {
-        alert('Please select at least one field.'); return;
+        alert('Please select at least one field.');
+        artworkData = tempData;
+        return;
       }
+
       printHtml = buildPrintHtml(settings);
+      artworkData = tempData;
+
       const frame = document.getElementById('previewFrame');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
