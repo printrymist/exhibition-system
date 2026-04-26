@@ -137,8 +137,12 @@
       font-size: 13px;
     }
 
-    .layout-item input[type="range"] {
-      width: 90px;
+    .layout-item input[type="number"] {
+      width: 60px;
+      padding: 4px 6px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
     }
 
     .layout-item span {
@@ -176,14 +180,18 @@
       white-space: nowrap;
     }
 
-    .margin-row input[type="range"] {
-      width: 80px;
+    .margin-row input[type="number"] {
+      width: 55px;
+      padding: 3px 5px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
     }
 
     .margin-row span {
       font-size: 11px;
       color: #1a73e8;
-      min-width: 28px;
+      min-width: 20px;
     }
 
     .fixed-text-row {
@@ -209,6 +217,14 @@
       border-color: #f9a825;
     }
 
+    .fixed-text-row input[type="number"] {
+      width: 55px;
+      padding: 4px 6px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
     .fixed-text-row select {
       padding: 4px 6px;
       border: 1px solid #ddd;
@@ -216,14 +232,10 @@
       font-size: 12px;
     }
 
-    .fixed-text-row input[type="range"] {
-      width: 70px;
-    }
-
     .fixed-text-row span {
       font-size: 11px;
       color: #1a73e8;
-      min-width: 26px;
+      min-width: 20px;
     }
 
     .btn-exname {
@@ -506,16 +518,19 @@
       flex-shrink: 0;
     }
 
-    .field-controls input[type="range"] {
-      flex: 1;
-      min-width: 50px;
-      max-width: 120px;
+    .field-controls input[type="number"] {
+      width: 46px;
+      padding: 2px 3px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
     }
 
     .field-controls span {
       font-size: 11px;
       color: #1a73e8;
-      width: 30px;
+      width: 22px;
       flex-shrink: 0;
       text-align: right;
     }
@@ -660,16 +675,19 @@
       flex-shrink: 0;
     }
 
-    .group-controls input[type="range"] {
-      flex: 1;
-      min-width: 40px;
-      max-width: 100px;
+    .group-controls input[type="number"] {
+      width: 46px;
+      padding: 2px 3px;
+      border: 1px solid #c5d9f7;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
     }
 
     .group-controls span {
       font-size: 11px;
       color: #1a73e8;
-      width: 28px;
+      width: 22px;
       flex-shrink: 0;
       text-align: right;
     }
@@ -795,7 +813,6 @@
     <div class="card-title">Exhibition</div>
     <div class="ex-row">
       <input type="text" id="exCodeInput" placeholder="Enter exhibition code (e.g. IT26)" value="">
-
       <button class="btn-load" id="btnLoad" onclick="loadExhibition()">Load</button>
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
@@ -895,15 +912,13 @@
         </div>
         <div class="layout-item" id="qrOffsetItem">
           <label>QR vertical offset</label>
-          <input type="range" id="qrOffset" min="0" max="50" value="0"
-            oninput="document.getElementById('qrOffsetVal').innerText=this.value+'mm'">
-          <span id="qrOffsetVal">0mm</span>
+          <input type="number" id="qrOffset" min="0" max="50" value="0" style="width:60px;">
+          <span>mm</span>
         </div>
         <div class="layout-item">
           <label>QR size</label>
-          <input type="range" id="qrSize" min="10" max="50" value="20"
-            oninput="document.getElementById('qrSizeVal').innerText=this.value+'mm'">
-          <span id="qrSizeVal">20mm</span>
+          <input type="number" id="qrSize" min="10" max="50" value="20" style="width:60px;">
+          <span>mm</span>
         </div>
         <div class="layout-item">
           <label>QR logo</label>
@@ -927,13 +942,11 @@
         <div class="sub-section-title">QR margin</div>
         <div class="margin-row">
           <label>Horizontal</label>
-          <input type="range" id="qrMarginH" min="0" max="15" value="3"
-            oninput="document.getElementById('qrMarginHVal').innerText=this.value+'mm'">
-          <span id="qrMarginHVal">3mm</span>
+          <input type="number" id="qrMarginH" min="0" max="15" value="3" style="width:55px;">
+          <span>mm</span>
           <label style="margin-left:10px;">Vertical</label>
-          <input type="range" id="qrMarginV" min="0" max="15" value="3"
-            oninput="document.getElementById('qrMarginVVal').innerText=this.value+'mm'">
-          <span id="qrMarginVVal">3mm</span>
+          <input type="number" id="qrMarginV" min="0" max="15" value="3" style="width:55px;">
+          <span>mm</span>
         </div>
       </div>
 
@@ -941,13 +954,11 @@
         <div class="sub-section-title">Text margin</div>
         <div class="margin-row">
           <label>Left</label>
-          <input type="range" id="textMarginLeft" min="0" max="20" value="5"
-            oninput="document.getElementById('textMarginLeftVal').innerText=this.value+'mm'">
-          <span id="textMarginLeftVal">5mm</span>
+          <input type="number" id="textMarginLeft" min="0" max="20" value="5" style="width:55px;">
+          <span>mm</span>
           <label style="margin-left:10px;">Right</label>
-          <input type="range" id="textMarginRight" min="0" max="20" value="5"
-            oninput="document.getElementById('textMarginRightVal').innerText=this.value+'mm'">
-          <span id="textMarginRightVal">5mm</span>
+          <input type="number" id="textMarginRight" min="0" max="20" value="5" style="width:55px;">
+          <span>mm</span>
         </div>
       </div>
 
@@ -966,21 +977,18 @@
             <option value="bottom-center">Bottom center</option>
             <option value="bottom-right">Bottom right</option>
           </select>
-          <input type="range" id="fixedTextSize" min="6" max="20" value="9"
-            oninput="document.getElementById('fixedTextSizeVal').innerText=this.value+'pt'">
-          <span id="fixedTextSizeVal">9pt</span>
+          <input type="number" id="fixedTextSize" min="6" max="20" value="9" style="width:55px;">
+          <span>pt</span>
           <button class="ftoggle-btn" id="fixedTextBold" onclick="this.classList.toggle('active')">B</button>
           <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
         </div>
         <div class="margin-row">
           <label>H margin</label>
-          <input type="range" id="fixedTextMarginH" min="0" max="15" value="3"
-            oninput="document.getElementById('fixedTextMarginHVal').innerText=this.value+'mm'">
-          <span id="fixedTextMarginHVal">3mm</span>
+          <input type="number" id="fixedTextMarginH" min="0" max="15" value="3" style="width:55px;">
+          <span>mm</span>
           <label style="margin-left:10px;">V margin</label>
-          <input type="range" id="fixedTextMarginV" min="0" max="15" value="3"
-            oninput="document.getElementById('fixedTextMarginVVal').innerText=this.value+'mm'">
-          <span id="fixedTextMarginVVal">3mm</span>
+          <input type="number" id="fixedTextMarginV" min="0" max="15" value="3" style="width:55px;">
+          <span>mm</span>
         </div>
       </div>
     </div>
@@ -1200,7 +1208,7 @@
       </p>
       <div id="fieldSettingGrid"></div>
       <div style="margin-top:16px;">
-        <button class="btn-print" onclick="saveFormSettings()" style="width:100%; padding:13px;">
+        <button id="btnSaveFormSettings" class="btn-print" onclick="saveFormSettings()" style="width:100%; padding:13px;">
           💾 設定を保存
         </button>
         <div id="formSettingMsg" style="font-size:0.85em; margin-top:8px; min-height:16px;"></div>
@@ -1233,6 +1241,7 @@
           return { success: false, error: err.message };
         });
     }
+
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
@@ -1374,9 +1383,6 @@
       }
     });
 
-    // =========================================================
-    // メインタブ切り替え（Caption / QR）
-    // =========================================================
     function switchMainTab(tab) {
       document.getElementById('mainTabCaption').classList.toggle('active', tab === 'caption');
       document.getElementById('mainTabQr').classList.toggle('active', tab === 'qr');
@@ -1406,7 +1412,6 @@
       const p = PRESETS[name];
       document.getElementById('qrPosition').value = p.qrPosition;
       document.getElementById('qrOffset').value = p.qrOffset || 0;
-      document.getElementById('qrOffsetVal').innerText = (p.qrOffset || 0) + 'mm';
       document.getElementById('textAlign').value = p.textAlign;
       onQrPositionChange();
     }
@@ -1425,7 +1430,7 @@
       document.getElementById('mainTabs').style.display = 'none';
       document.getElementById('settingsArea').style.display = 'none';
       document.getElementById('qrPrintArea').style.display = 'none';
-      document.getElementById('pwCard').style.display = 'none'; // 追加
+      document.getElementById('pwCard').style.display = 'none';
 
       gasCall({ action: 'verifyExCode', ex: ex })
         .then(data => {
@@ -1436,7 +1441,6 @@
             return;
           }
           document.getElementById('exName').innerText = '✅ ' + data.exName;
-          // パスワード認証カードを表示
           document.getElementById('pwCard').style.display = 'block';
           document.getElementById('pwInput').value = '';
           document.getElementById('pwError').innerText = '';
@@ -1459,8 +1463,6 @@
             return;
           }
           document.getElementById('pwCard').style.display = 'none';
-
-          // 認証後にloadAllDataを呼ぶ
           document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
           gasCall({ action: 'loadAllData', ex: ex })
             .then(data => {
@@ -1499,27 +1501,17 @@
       const newName = document.getElementById('exNameInput').value.trim();
       if (!newName) return alert('展覧会名を入力してください。');
       const ex = document.getElementById('exCodeInput').value.trim();
-
-      // 二重送信防止
       const saveBtn = document.querySelector('#exNameEditArea button');
       saveBtn.disabled = true;
-
       gasCall({ action: 'updateExName', ex: ex, newName: newName })
         .then(res => {
-          if (!res.success) {
-            alert('Error: ' + res.error);
-            return;
-          }
+          if (!res.success) { alert('Error: ' + res.error); return; }
           artworkData.exName = newName;
           document.getElementById('exName').innerText = '✅ ' + newName + ' (' + artworkData.artworks.length + ' artworks)';
           cancelEditExName();
         })
-        .catch(err => {
-          alert('通信エラー: ' + err.message);
-        })
-        .finally(() => {
-          saveBtn.disabled = false;
-        });
+        .catch(err => { alert('通信エラー: ' + err.message); })
+        .finally(() => { saveBtn.disabled = false; });
     }
 
     function normalizeInsertBars() {
@@ -1623,9 +1615,8 @@
           <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
           <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
         </select>
-        <input type="range" id="size_${name}" min="6" max="28" value="${size}"
-          oninput="document.getElementById('sizeVal_${name}').innerText=this.value+'pt'">
-        <span id="sizeVal_${name}">${size}pt</span>
+        <input type="number" id="size_${name}" min="6" max="28" value="${size}" style="width:46px;">
+        <span>pt</span>
         <button class="toggle-btn ${bold ? 'active' : ''}" id="bold_${name}"   onclick="this.classList.toggle('active')">B</button>
         <button class="toggle-btn ${italic ? 'active' : ''}" id="italic_${name}" onclick="this.classList.toggle('active')"><i>I</i></button>
         <select id="maxLines_${name}" title="Max lines">
@@ -1634,9 +1625,8 @@
           <option value="3" ${maxLines === 3 ? 'selected' : ''}>3L</option>
           <option value="0" ${maxLines === 0 ? 'selected' : ''}>∞</option>
         </select>
-        <input type="range" id="minSize_${name}" min="5" max="14" value="${minSize}"
-          oninput="document.getElementById('minSizeVal_${name}').innerText=this.value+'↓'">
-        <span id="minSizeVal_${name}">${minSize}↓</span>
+        <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:46px;">
+        <span>↓</span>
         <div class="price-fmt" title="Price format">
           <select id="currency_${name}">${curOptions}</select>
           <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
@@ -1724,9 +1714,8 @@
           <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
           <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
         </select>
-        <input type="range" id="gsize_${gid}" min="6" max="28" value="${size}"
-          oninput="document.getElementById('gsizeVal_${gid}').innerText=this.value+'pt'">
-        <span id="gsizeVal_${gid}">${size}pt</span>
+        <input type="number" id="gsize_${gid}" min="6" max="28" value="${size}" style="width:46px;">
+        <span>pt</span>
         <button class="toggle-btn ${bold ? 'active' : ''}" id="gbold_${gid}"   onclick="this.classList.toggle('active')">B</button>
         <button class="toggle-btn ${italic ? 'active' : ''}" id="gitalic_${gid}" onclick="this.classList.toggle('active')"><i>I</i></button>
         <div class="price-fmt" title="Price format">
@@ -1752,7 +1741,6 @@
       const preset = PRESETS[name];
       const usedFields = [];
 
-      // caption_fields と registration_fields の名前リストを取得
       const capFieldNames = artworkData && artworkData.captionFields
         ? artworkData.captionFields.map(f => f.name)
         : null;
@@ -1763,10 +1751,8 @@
       preset.items.forEach(item => {
         if (item.type === 'field') {
           if (artworkData && !artworkData.headers.includes(item.name)) return;
-          // registration_fields にない項目はスキップ
           if (regFieldNames && !regFieldNames.includes(item.name)) return;
           usedFields.push(item.name);
-          // caption_fields に含まれていればchecked=true
           const checked = capFieldNames ? capFieldNames.includes(item.name) : false;
           grid.appendChild(makeFieldEl(
             item.name, item.size, item.bold, item.italic, item.align, checked,
@@ -1788,9 +1774,7 @@
       if (artworkData) {
         artworkData.headers.forEach(h => {
           if (!usedFields.includes(h)) {
-            // registration_fields にない項目はスキップ
             if (regFieldNames && !regFieldNames.includes(h)) return;
-            // caption_fields に含まれていればchecked=true
             const checked = capFieldNames ? capFieldNames.includes(h) : false;
             grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
           }
@@ -1798,6 +1782,7 @@
       }
       normalizeInsertBars();
     }
+
     function collectItems() {
       const items = [];
       document.querySelectorAll('#fieldsGrid [data-row]').forEach(item => {
@@ -2042,7 +2027,6 @@
           const mTop = offset > 0 ? `calc(${offset}mm + ${qrMV})` : qrMV;
           return `<div style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
-  
   <div style="float:${floatDir};margin:${mTop} ${qrMH} ${qrMV} ${qrMH};line-height:0;">${qrImg}</div>
   ${textDiv}
   <div style="clear:both;"></div>
@@ -2126,10 +2110,6 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       }, 100);
     }
 
-    // =========================================================
-    // テンプレート保存・読み込み
-    // =========================================================
-
     function loadSavedTemplates() {
       gasCall({ action: 'getCaptionTemplates' })
         .then(res => {
@@ -2141,7 +2121,6 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             const card = document.createElement('div');
             card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
 
-            // テンプレート名（XSS対策でtextContentを使用）
             const nameDiv = document.createElement('div');
             nameDiv.style.cssText = 'font-size:0.85em;font-weight:bold;color:#1a73e8;margin-bottom:6px;padding-right:20px;';
             nameDiv.textContent = tpl.name;
@@ -2150,7 +2129,6 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             dateDiv.style.cssText = 'font-size:0.72em;color:#aaa;margin-bottom:8px;';
             dateDiv.textContent = tpl.createdAt;
 
-            // datasetでJSON文字列を安全に保持
             const loadBtn = document.createElement('button');
             loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
             loadBtn.textContent = 'Load';
@@ -2182,39 +2160,18 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         if (settings.rows) document.getElementById('rows').value = settings.rows;
         if (settings.textAlign) document.getElementById('textAlign').value = settings.textAlign;
         if (settings.qrPosition) document.getElementById('qrPosition').value = settings.qrPosition;
-        if (settings.qrSize !== undefined) {
-          document.getElementById('qrSize').value = settings.qrSize;
-          document.getElementById('qrSizeVal').innerText = settings.qrSize + 'mm';
-        }
-        if (settings.qrOffset !== undefined) {
-          document.getElementById('qrOffset').value = settings.qrOffset;
-          document.getElementById('qrOffsetVal').innerText = settings.qrOffset + 'mm';
-        }
-        if (settings.qrMarginH !== undefined) {
-          document.getElementById('qrMarginH').value = settings.qrMarginH;
-          document.getElementById('qrMarginHVal').innerText = settings.qrMarginH + 'mm';
-        }
-        if (settings.qrMarginV !== undefined) {
-          document.getElementById('qrMarginV').value = settings.qrMarginV;
-          document.getElementById('qrMarginVVal').innerText = settings.qrMarginV + 'mm';
-        }
-        if (settings.textMarginLeft !== undefined) {
-          document.getElementById('textMarginLeft').value = settings.textMarginLeft;
-          document.getElementById('textMarginLeftVal').innerText = settings.textMarginLeft + 'mm';
-        }
-        if (settings.textMarginRight !== undefined) {
-          document.getElementById('textMarginRight').value = settings.textMarginRight;
-          document.getElementById('textMarginRightVal').innerText = settings.textMarginRight + 'mm';
-        }
+        if (settings.qrSize !== undefined) document.getElementById('qrSize').value = settings.qrSize;
+        if (settings.qrOffset !== undefined) document.getElementById('qrOffset').value = settings.qrOffset;
+        if (settings.qrMarginH !== undefined) document.getElementById('qrMarginH').value = settings.qrMarginH;
+        if (settings.qrMarginV !== undefined) document.getElementById('qrMarginV').value = settings.qrMarginV;
+        if (settings.textMarginLeft !== undefined) document.getElementById('textMarginLeft').value = settings.textMarginLeft;
+        if (settings.textMarginRight !== undefined) document.getElementById('textMarginRight').value = settings.textMarginRight;
         if (settings.fixedText) {
           document.getElementById('fixedTextValue').value = settings.fixedText.value || '';
           document.getElementById('fixedTextPos').value = settings.fixedText.pos || 'none';
           document.getElementById('fixedTextSize').value = settings.fixedText.size || 9;
-          document.getElementById('fixedTextSizeVal').innerText = (settings.fixedText.size || 9) + 'pt';
           document.getElementById('fixedTextMarginH').value = settings.fixedText.marginH || 3;
-          document.getElementById('fixedTextMarginHVal').innerText = (settings.fixedText.marginH || 3) + 'mm';
           document.getElementById('fixedTextMarginV').value = settings.fixedText.marginV || 3;
-          document.getElementById('fixedTextMarginVVal').innerText = (settings.fixedText.marginV || 3) + 'mm';
           document.getElementById('fixedTextBold').classList.toggle('active', !!settings.fixedText.bold);
           document.getElementById('fixedTextItalic').classList.toggle('active', !!settings.fixedText.italic);
         } else {
@@ -2267,11 +2224,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const settings = getSettings();
       const json = JSON.stringify(settings);
       showSaveMsg('Saving...', '#888');
-
-      // idで確実に取得
       const saveBtn = document.getElementById('btnSaveTemplate');
       if (saveBtn) saveBtn.disabled = true;
-
       gasCall({ action: 'saveCaptionTemplate', name: name, settingsJson: json })
         .then(res => {
           if (res.success) {
@@ -2283,29 +2237,18 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           }
         })
         .catch(err => showSaveMsg('Error: ' + err.message, '#d93025'))
-        .finally(() => {
-          if (saveBtn) saveBtn.disabled = false;
-        });
+        .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
     function deleteSavedTemplate(name, btn) {
       if (!confirm(`Delete "${name}"?`)) return;
-
       if (btn) btn.disabled = true;
-
       gasCall({ action: 'deleteCaptionTemplate', name: name })
         .then(res => {
-          if (res.success) {
-            loadSavedTemplates();
-          } else {
-            alert('Error: ' + res.error);
-            if (btn) btn.disabled = false;
-          }
+          if (res.success) { loadSavedTemplates(); }
+          else { alert('Error: ' + res.error); if (btn) btn.disabled = false; }
         })
-        .catch(err => {
-          alert('通信エラー: ' + err.message);
-          if (btn) btn.disabled = false;
-        });
+        .catch(err => { alert('通信エラー: ' + err.message); if (btn) btn.disabled = false; });
     }
 
     function showSaveMsg(msg, color) {
@@ -2314,20 +2257,17 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       el.style.color = color || '#333';
     }
 
-    // =========================================================
-    // QRコード一覧印刷
-    // =========================================================
     const LIKE_PATH1 = new Path2D('M 819.363281 444.765625 C 828.230469 440.285156 834.960938 429.640625 830.355469 419.574219 C 828.964844 416.523438 826.480469 413.871094 823.691406 411.714844 C 827.027344 408.5 829.164062 404.019531 829.800781 399.296875 C 830.671875 392.785156 828.707031 385.941406 823.648438 381.558594 C 821.269531 379.511719 818.308594 378.269531 815.113281 377.585938 C 811.023438 376.710938 806.527344 376.753906 802.761719 376.703125 C 788.328125 376.503906 773.847656 377.34375 759.429688 378.058594 C 754.40625 378.308594 749.425781 378.746094 744.445312 379.40625 C 746.15625 374.992188 747.683594 370.511719 748.96875 365.949219 C 753.261719 350.726562 755.917969 332.398438 750.316406 317.105469 C 748.667969 312.601562 745.136719 307.503906 740.695312 304.113281 C 737.460938 301.644531 733.753906 300.078125 729.953125 299.980469 C 724.816406 299.847656 721.425781 302.441406 719.140625 306.320312 C 716.582031 310.671875 715.679688 316.941406 714.707031 320.984375 C 714.261719 322.828125 713.777344 324.652344 713.269531 326.476562 C 712.695312 328.554688 712.015625 330.605469 711.21875 332.617188 C 709.507812 336.953125 707.558594 341.191406 705.714844 345.46875 C 701.617188 354.976562 696.261719 365.855469 689.042969 374.722656 C 682.578125 382.667969 674.589844 388.953125 664.566406 390.792969 L 664.566406 494.488281 C 678.109375 499.101562 689.910156 504.277344 704.492188 506.675781 C 710.042969 507.589844 716.003906 507.046875 721.613281 507.277344 C 735.460938 507.855469 749.320312 508.066406 763.140625 509.109375 C 769.820312 509.609375 783.554688 509.839844 793.621094 506.78125 C 801.765625 504.308594 807.480469 499.578125 807.8125 492.382812 C 808.074219 486.722656 806.332031 483.03125 803.617188 480.488281 C 807.210938 480.035156 810.722656 479.222656 813.976562 477.679688 C 823.109375 473.363281 830.1875 462.453125 825.492188 452.1875 C 824.1875 449.335938 821.929688 446.839844 819.371094 444.761719 Z');
     const LIKE_PATH2 = new Path2D('M 604.878906 390.714844 L 604.878906 494.863281 C 604.878906 498.5625 606.34375 502.101562 608.960938 504.714844 C 611.574219 507.328125 615.117188 508.792969 618.816406 508.792969 L 650.625 508.792969 C 654.320312 508.792969 657.871094 507.328125 660.484375 504.714844 C 663.101562 502.101562 664.566406 498.5625 664.566406 494.863281 L 664.566406 390.714844 C 664.566406 387.019531 663.101562 383.476562 660.484375 380.863281 C 657.871094 378.25 654.328125 376.785156 650.625 376.785156 L 618.816406 376.785156 C 615.117188 376.785156 611.574219 378.25 608.960938 380.863281 C 606.34375 383.476562 604.878906 387.019531 604.878906 390.714844 Z');
     const LIKE_PCX = 718, LIKE_PCY = 404.5, LIKE_SIZE = 228;
-    const QR_CELL_SIZE = 10; // 1モジュールのピクセルサイズ
-    const QR_MARGIN = 4;  // QRコード周囲の余白（モジュール数）
+    const QR_CELL_SIZE = 10;
+    const QR_MARGIN = 4;
 
     const FORM_FIELD_DEFS = [
       { name: 'title', label: 'タイトル（日本語）', required: true },
       { name: 'title_en', label: 'タイトル（英語）', required: false },
-      { name: 'artist', label: '作家名（日本語）', required: false },  // ← 追加
-      { name: 'artist_en', label: '作家名（英語）', required: false },  // ← 追加
+      { name: 'artist', label: '作家名（日本語）', required: false },
+      { name: 'artist_en', label: '作家名（英語）', required: false },
       { name: 'year', label: '制作年', required: false },
       { name: 'series', label: 'シリーズ名', required: false },
       { name: 'technique', label: '技法', required: false },
@@ -2341,33 +2281,25 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       { name: 'courtesy', label: 'クレジット', required: false },
       { name: 'note', label: '備考', required: false },
       { name: 'artist_note', label: '作家コメント', required: false },
-      { name: 'artist_en', label: '作家名（英語）', required: false },
       { name: 'birth_year', label: '生年', required: false },
       { name: 'death_year', label: '没年', required: false },
       { name: 'birthplace', label: '出身地', required: false },
     ];
 
-    let qrAllData = null; // 全作品QRデータ（status=0含む）
+    let qrAllData = null;
 
     function buildFieldSettingGrid(activeFields, registrationFields) {
       const grid = document.getElementById('fieldSettingGrid');
       grid.innerHTML = '';
-
-      // registrationFields の名前一覧を取得
       const regFieldNames = registrationFields ? registrationFields.map(f => f.name) : null;
-
       FORM_FIELD_DEFS.forEach(def => {
-        // registrationFields に含まれているか
         const inRegistration = regFieldNames ? regFieldNames.includes(def.name) : true;
-
         const active = activeFields ? activeFields.find(f => f.name === def.name) : null;
         const checked = active ? true : false;
         const required = active ? active.required : def.required;
-
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;'
           + (inRegistration ? '' : 'opacity:0.35; pointer-events:none;');
-
         row.innerHTML = `
       <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''} ${!inRegistration ? 'disabled' : ''}
         style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
@@ -2387,139 +2319,82 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       FORM_FIELD_DEFS.forEach(def => {
         const checkEl = document.getElementById('fcheck_' + def.name);
         const reqEl = document.getElementById('freq_' + def.name);
-        if (!checkEl || !reqEl) return; // 要素が存在しない場合はスキップ
+        if (!checkEl || !reqEl) return;
         if (!checkEl.checked) return;
         const required = reqEl.value === 'true';
         activeFields.push({ name: def.name, required: required });
       });
-
       const msg = document.getElementById('formSettingMsg');
       msg.style.color = '#888';
       msg.innerText = '保存中...';
-
       const ex = document.getElementById('exCodeInput').value.trim();
-
       const saveBtn = document.getElementById('btnSaveFormSettings');
       if (saveBtn) saveBtn.disabled = true;
-
       gasCall({ action: 'saveCaptionFields', ex: ex, fieldsJson: JSON.stringify(activeFields) })
         .then(res => {
           if (res.success) {
             msg.style.color = '#1a73e8';
             msg.innerText = '✅ 保存しました。';
-            if (artworkData) {
-              artworkData.captionFields = activeFields;
-            }
+            if (artworkData) { artworkData.captionFields = activeFields; }
           } else {
             msg.style.color = '#d93025';
             msg.innerText = 'Error: ' + res.error;
           }
         })
-        .catch(err => {
-          msg.style.color = '#d93025';
-          msg.innerText = '通信エラー: ' + err.message;
-        })
-        .finally(() => {
-          if (saveBtn) saveBtn.disabled = false;
-        });
-    }
-
-    function loadQrData(ex) {
-      google.script.run
-        .withSuccessHandler(res => {
-          if (!res.success) return;
-          qrAllData = res;
-        })
-        .withFailureHandler(err => console.log('loadQrData error:', err.message))
-        .getQrData(ex);
+        .catch(err => { msg.style.color = '#d93025'; msg.innerText = '通信エラー: ' + err.message; })
+        .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
     function openQrPrint() {
       if (!qrAllData) { alert('QRデータが読み込まれていません。'); return; }
-
       const size = parseInt(document.getElementById('qrPrintSize').value);
       const logo = document.getElementById('qrPrintLogo').value;
       const target = document.getElementById('qrPrintTarget').value;
       const paper = document.getElementById('qrPrintPaper').value;
-
-      // 対象でフィルタ
       let artworks = qrAllData.artworks;
-      if (target !== 'all') {
-        artworks = artworks.filter(a => a.status === target);
-      }
-
+      if (target !== 'all') { artworks = artworks.filter(a => a.status === target); }
       if (artworks.length === 0) { alert('対象の作品がありません。'); return; }
-
-      // サイズに応じたレイアウト
-      const layouts = {
-        15: { cols: 6, rows: 8 },
-        20: { cols: 5, rows: 7 },
-        25: { cols: 4, rows: 6 },
-        30: { cols: 4, rows: 5 },
-        45: { cols: 3, rows: 4 },
-        60: { cols: 2, rows: 3 }
-      };
+      const layouts = { 15: { cols: 6, rows: 8 }, 20: { cols: 5, rows: 7 }, 25: { cols: 4, rows: 6 }, 30: { cols: 4, rows: 5 }, 45: { cols: 3, rows: 4 }, 60: { cols: 2, rows: 3 } };
       const { cols, rows } = layouts[size] || layouts[25];
-
       buildQrPrintHtml(artworks, size, cols, rows, logo);
     }
 
     function buildQrPrintHtml(artworks, sizeMm, cols, rows, logo, paper) {
-      // 用紙サイズ（mm）
       const paperW = { A4: 210, Letter: 216 }[paper] || 210;
       const paperH = { A4: 297, Letter: 279 }[paper] || 297;
       const paperSize = { A4: 'A4', Letter: 'Letter' }[paper] || 'A4';
-      const padding = 8; // 用紙余白(mm)
-      const gap = 2; // セル間隔(mm)
-
+      const padding = 8;
+      const gap = 2;
       const perPage = cols * rows;
       const pages = [];
-      for (let i = 0; i < artworks.length; i += perPage) {
-        pages.push(artworks.slice(i, i + perPage));
-      }
-
-      // Canvasを使ってQRコードをBase64生成
+      for (let i = 0; i < artworks.length; i += perPage) { pages.push(artworks.slice(i, i + perPage)); }
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const qrImages = {};
-
       artworks.forEach(art => {
         const qr = qrcode(0, 'H');
         qr.addData(art.qr_url);
         qr.make();
-
         const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
-        const headerHeight = Math.round(size * 0.15); // ← 動的計算
-        const fontSize = Math.round(size * 0.08); // ← 動的計算
+        const headerHeight = Math.round(size * 0.15);
+        const fontSize = Math.round(size * 0.08);
         canvas.width = size;
         canvas.height = size + headerHeight;
-
-        // 背景
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // ヘッダー（展覧会コード / 作品ID）
         ctx.fillStyle = '#888888';
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         ctx.fillText(`${qrAllData.exCode} / ${art.artwork_id}`, size / 2, fontSize + 36);
-
-        // QRモジュール描画
         ctx.fillStyle = '#333333';
         for (let row = 0; row < qr.getModuleCount(); row++) {
           for (let col = 0; col < qr.getModuleCount(); col++) {
             if (qr.isDark(row, col)) {
-              ctx.fillRect(
-                (col + QR_MARGIN) * QR_CELL_SIZE,
-                (row + QR_MARGIN) * QR_CELL_SIZE + headerHeight,
-                QR_CELL_SIZE, QR_CELL_SIZE
-              );
+              ctx.fillRect((col + QR_MARGIN) * QR_CELL_SIZE, (row + QR_MARGIN) * QR_CELL_SIZE + headerHeight, QR_CELL_SIZE, QR_CELL_SIZE);
             }
           }
         }
-
-        // ロゴ描画
         const cx = size / 2;
         const cy = (size / 2) + headerHeight;
         const hs = size * 0.18;
@@ -2530,7 +2405,6 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           ctx.bezierCurveTo(cx - hs, cy - hs * 0.5, cx - hs * 0.5, cy - hs, cx, cy - hs * 0.4);
           ctx.bezierCurveTo(cx + hs * 0.5, cy - hs, cx + hs, cy - hs * 0.5, cx, cy + hs * 0.5);
           ctx.fill();
-          // 輪郭線を追加
           ctx.strokeStyle = '#333333';
           ctx.lineWidth = 4;
           ctx.stroke();
@@ -2549,14 +2423,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           ctx.stroke(LIKE_PATH2);
           ctx.restore();
         }
-
         qrImages[art.artwork_id] = canvas.toDataURL('image/png');
       });
-
-      // 印刷HTML生成（セルサイズを自動計算）
       const cellW = (paperW - padding * 2 - gap * (cols - 1)) / cols;
       const cellH = (paperH - padding * 2 - gap * (rows - 1)) / rows;
-
       const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
@@ -2571,10 +2441,7 @@ body { font-family:sans-serif; background:white; }
   gap:${gap}mm; overflow:hidden;
   page-break-after:always; break-after:page;
 }
-.qr-cell {
-  display:flex; align-items:center; justify-content:center;
-  border:1px solid #eee; border-radius:2mm; overflow:hidden;
-}
+.qr-cell { display:flex; align-items:center; justify-content:center; border:1px solid #eee; border-radius:2mm; overflow:hidden; }
 .qr-cell img { width:100%; height:100%; object-fit:contain; }
 @media print {
   @page { size:${paperSize} portrait; margin:0; }
@@ -2582,13 +2449,8 @@ body { font-family:sans-serif; background:white; }
   .page { page-break-after:always; break-after:page; }
 }
 </style></head><body>
-${pages.map(page =>
-        `<div class="page">${page.map(art =>
-          `<div class="qr-cell"><img src="${qrImages[art.artwork_id]}"></div>`
-        ).join('')}</div>`
-      ).join('')}
+${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><img src="${qrImages[art.artwork_id]}"></div>`).join('')}</div>`).join('')}
 </body></html>`;
-
       const win = window.open('', '_blank');
       win.document.write(html);
       win.document.close();
