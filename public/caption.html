@@ -42,6 +42,33 @@
       align-items: center;
     }
 
+    .pw-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .pw-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+
+    .pw-row input:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    .msg-error {
+      font-size: 0.85em;
+      color: #d93025;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+
     .ex-row input {
       flex: 1;
       padding: 10px 14px;
@@ -788,6 +815,16 @@
     <div id="exError"></div>
   </div>
 
+  <!-- パスワード認証カード -->
+  <div class="card" id="pwCard" style="display:none;">
+    <div class="card-title">管理者認証</div>
+    <div class="pw-row">
+      <input type="password" id="pwInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') verifyPassword()">
+      <button class="btn-load" id="btnPw" onclick="verifyPassword()">認証</button>
+    </div>
+    <div class="msg-error" id="pwError"></div>
+  </div>
+
   <!-- メインタブ -->
   <div class="main-tab-bar" id="mainTabs">
     <div class="main-tab-bar-inner">
@@ -1388,8 +1425,9 @@
       document.getElementById('mainTabs').style.display = 'none';
       document.getElementById('settingsArea').style.display = 'none';
       document.getElementById('qrPrintArea').style.display = 'none';
+      document.getElementById('pwCard').style.display = 'none'; // 追加
 
-      gasCall({ action: 'loadAllData', ex: ex })
+      gasCall({ action: 'verifyExCode', ex: ex })
         .then(data => {
           document.getElementById('btnLoad').disabled = false;
           if (!data.success) {
@@ -1397,16 +1435,51 @@
             document.getElementById('exError').innerText = data.error;
             return;
           }
-          artworkData = data;
-          qrAllData = { artworks: data.qrList, exCode: ex };
-          document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
-          document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
-          document.getElementById('btnEditExName').style.display = 'inline-block';
-          buildFieldSettingGrid(data.captionFields, data.registrationFields);
-          selectTemplate('standard');
-          loadSavedTemplates();
-          document.getElementById('mainTabs').style.display = 'block';
-          switchMainTab('caption');
+          document.getElementById('exName').innerText = '✅ ' + data.exName;
+          // パスワード認証カードを表示
+          document.getElementById('pwCard').style.display = 'block';
+          document.getElementById('pwInput').value = '';
+          document.getElementById('pwError').innerText = '';
+          setTimeout(() => document.getElementById('pwInput').focus(), 100);
+        });
+    }
+
+    function verifyPassword() {
+      const ex = document.getElementById('exCodeInput').value.trim();
+      const pw = document.getElementById('pwInput').value;
+      if (!pw) return;
+      document.getElementById('btnPw').disabled = true;
+      document.getElementById('pwError').innerText = '';
+
+      gasCall({ action: 'verifyPassword', ex: ex, password: pw })
+        .then(res => {
+          document.getElementById('btnPw').disabled = false;
+          if (!res.success) {
+            document.getElementById('pwError').innerText = res.error;
+            return;
+          }
+          document.getElementById('pwCard').style.display = 'none';
+
+          // 認証後にloadAllDataを呼ぶ
+          document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+          gasCall({ action: 'loadAllData', ex: ex })
+            .then(data => {
+              if (!data.success) {
+                document.getElementById('exName').innerText = '';
+                document.getElementById('exError').innerText = data.error;
+                return;
+              }
+              artworkData = data;
+              qrAllData = { artworks: data.qrList, exCode: ex };
+              document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
+              document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
+              document.getElementById('btnEditExName').style.display = 'inline-block';
+              buildFieldSettingGrid(data.captionFields, data.registrationFields);
+              selectTemplate('standard');
+              loadSavedTemplates();
+              document.getElementById('mainTabs').style.display = 'block';
+              switchMainTab('caption');
+            });
         });
     }
 
