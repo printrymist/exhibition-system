@@ -936,6 +936,13 @@
             <option value="right">Right</option>
           </select>
         </div>
+        <div class="layout-item">
+          <label>Font</label>
+          <select id="fontFamily">
+            <option value="sans-serif">ゴシック</option>
+            <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
+          </select>
+        </div>
       </div>
 
       <div class="sub-section">
@@ -1863,6 +1870,7 @@
         qrSize: parseInt(document.getElementById('qrSize').value),
         qrMarginH: parseInt(document.getElementById('qrMarginH').value),
         qrMarginV: parseInt(document.getElementById('qrMarginV').value),
+        fontFamily: document.getElementById('fontFamily').value,
         fixedText: getFixedText(),
         items: items
       };
@@ -2057,7 +2065,7 @@
 <html><head><meta charset="UTF-8">
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { font-family:sans-serif; background:white; }
+body { font-family:${s.fontFamily}; background:white; }
 .page {
   width:${pageW}; height:${pageH}; padding:8mm;
   display:grid;
