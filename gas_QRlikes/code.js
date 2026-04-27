@@ -60,6 +60,7 @@ function doPost(e) {
 
   try {
     const action = e.parameter.action;
+
     const ex = e.parameter.ex;
     const id = e.parameter.id;
     const key = e.parameter.key;
@@ -550,3 +551,4 @@ function testDoPost() {
   const result = doPost(e);
   Logger.log(result.getContent());
 }
+
