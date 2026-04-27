@@ -20,6 +20,36 @@ function colIndex(headers, name) {
   return idx;
 }
 
+// Drive 操作は一時不調が多いので、最大 maxAttempts 回リトライする
+// 成功時は戻り値を返す。最後まで失敗したら最後の例外を投げる
+function withDriveRetry(label, fn, maxAttempts) {
+  maxAttempts = maxAttempts || 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return fn();
+    } catch (e) {
+      lastErr = e;
+      console.warn('[' + label + '] attempt ' + attempt + ' failed: ' + e);
+      if (attempt < maxAttempts) Utilities.sleep(500 * attempt);
+    }
+  }
+  throw lastErr;
+}
+
+// setSharing は権限制限で本当に動かないこともあるので、
+// 失敗してもエラーを投げず、警告として蓄積するだけにする
+function safeSetSharing(target, access, permission, label, warnings) {
+  try {
+    withDriveRetry('setSharing:' + label, () => {
+      target.setSharing(access, permission);
+    });
+  } catch (e) {
+    console.warn('safeSetSharing failed for ' + label + ': ' + e);
+    if (warnings) warnings.push(label);
+  }
+}
+
 // =========================================================
 // 🌟 キャッシュ管理
 // =========================================================
@@ -208,20 +238,20 @@ function runSetup(payload) {
     const parentFolder = masterFile.getParents().next();
 
     // --- フォルダ構築 ---
-    const wsFolder = parentFolder.createFolder(exCode + "_WorkSpace");
-    const imagesFolder = wsFolder.createFolder("images");
-    imagesFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const wsFolder = withDriveRetry('createFolder(WorkSpace)', () => parentFolder.createFolder(exCode + "_WorkSpace"));
+    const imagesFolder = withDriveRetry('createFolder(images)', () => wsFolder.createFolder("images"));
+    const shareWarnings = [];
+    safeSetSharing(imagesFolder, DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW, 'images フォルダ', shareWarnings);
     const imagesFolderId = imagesFolder.getId();
 
     // --- 作品台帳SS構築 ---
-    const artworkSS = SpreadsheetApp.create(exCode + "_artworks");
+    const artworkSS = withDriveRetry('create(artworks)', () => SpreadsheetApp.create(exCode + "_artworks"));
     const artworkId = artworkSS.getId();
-    const artworkFile = DriveApp.getFileById(artworkId);
-    wsFolder.addFile(artworkFile);
-    DriveApp.getRootFolder().removeFile(artworkFile);
+    const artworkFile = withDriveRetry('getFileById(artwork)', () => DriveApp.getFileById(artworkId));
+    withDriveRetry('addFile(artwork)', () => wsFolder.addFile(artworkFile));
+    withDriveRetry('removeFile(artwork)', () => DriveApp.getRootFolder().removeFile(artworkFile));
     // 作品台帳：PRIVATE
-    DriveApp.getFileById(artworkId)
-      .setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    safeSetSharing(artworkFile, DriveApp.Access.PRIVATE, DriveApp.Permission.NONE, '作品台帳SS', shareWarnings);
 
     const aSheet = artworkSS.getSheets()[0];
     aSheet.setName(exCode + "_artworks");
@@ -284,14 +314,13 @@ function runSetup(payload) {
     protection.removeEditors(protection.getEditors());
 
     // --- 感想SS構築 ---
-    const commentSS = SpreadsheetApp.create(exCode + "_comments");
+    const commentSS = withDriveRetry('create(comments)', () => SpreadsheetApp.create(exCode + "_comments"));
     const commentId = commentSS.getId();
-    const commentFile = DriveApp.getFileById(commentId);
-    wsFolder.addFile(commentFile);
-    DriveApp.getRootFolder().removeFile(commentFile);
+    const commentFile = withDriveRetry('getFileById(comment)', () => DriveApp.getFileById(commentId));
+    withDriveRetry('addFile(comment)', () => wsFolder.addFile(commentFile));
+    withDriveRetry('removeFile(comment)', () => DriveApp.getRootFolder().removeFile(commentFile));
     // 感想シート：リンクを知っている全員が閲覧可能
-    DriveApp.getFileById(commentId)
-      .setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    safeSetSharing(commentFile, DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW, '感想シートSS', shareWarnings);
 
     const cSheet = commentSS.getSheets()[0];
     cSheet.setName(exCode + "_comments");
@@ -356,7 +385,10 @@ function runSetup(payload) {
       success: true,
       exCode: exCode,
       exName: exName,
-      adminPass: adminPass
+      adminPass: adminPass,
+      warning: shareWarnings.length > 0
+        ? '\n※ 以下のリソースの共有設定が自動でできませんでした。Drive で手動設定してください:\n  - ' + shareWarnings.join('\n  - ')
+        : undefined
     };
 
   } catch (e) {
