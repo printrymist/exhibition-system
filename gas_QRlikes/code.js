@@ -11,6 +11,21 @@ function colIndex(headers, name) {
   return idx;
 }
 
+// Drive 等の一時不調に備えて関数を最大 maxAttempts 回リトライする
+function withRetry(label, maxAttempts, fn) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return fn();
+    } catch (e) {
+      lastError = e;
+      console.warn('[' + label + '] attempt ' + attempt + ' failed: ' + e);
+      if (attempt < maxAttempts) Utilities.sleep(500 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 function doGet(e) {
   const { ex, id, key } = e.parameter;
 
@@ -304,15 +319,20 @@ function regCommitRegistration(payload) {
     boothSheet.getRange(rowIdx, artistCol).setValue(artistName);
 
     if (imageData) {
-      const folder = DriveApp.getFolderById(master.image_folder_id);
-      const oldFiles = folder.getFilesByName(`${ex}_${id}.jpg`);
-      while (oldFiles.hasNext()) {
-        oldFiles.next().setTrashed(true);
-      }
-      const blob = Utilities.newBlob(Utilities.base64Decode(imageData.split(',')[1]), "image/jpeg", `${ex}_${id}.jpg`);
-      const file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      boothSheet.getRange(rowIdx, imageCol).setValue(file.getUrl());
+      const fileUrl = withRetry('uploadArtworkImage', 3, () => {
+        const folder = DriveApp.getFolderById(master.image_folder_id);
+        const oldFiles = folder.getFilesByName(`${ex}_${id}.jpg`);
+        while (oldFiles.hasNext()) oldFiles.next().setTrashed(true);
+        const blob = Utilities.newBlob(Utilities.base64Decode(imageData.split(',')[1]), "image/jpeg", `${ex}_${id}.jpg`);
+        const file = folder.createFile(blob);
+        try {
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (shareErr) {
+          console.warn('[uploadArtworkImage] setSharing skipped: ' + shareErr);
+        }
+        return file.getUrl();
+      });
+      boothSheet.getRange(rowIdx, imageCol).setValue(fileUrl);
     }
 
     boothSheet.getRange(rowIdx, instaCol).setValue(sns.insta);
@@ -320,17 +340,45 @@ function regCommitRegistration(payload) {
     boothSheet.getRange(rowIdx, fbCol).setValue(sns.fb);
     boothSheet.getRange(rowIdx, webCol).setValue(sns.web);
     boothSheet.getRange(rowIdx, statusCol).setValue("1");
-    
-    var cache = CacheService.getScriptCache();
-    var version = getCacheVersion(ex); 
-    cache.remove("artwork_" + ex + "_" + id + "_v" + version);
-    
-    console.log("作品ID:" + id + " の更新に伴い、個別キャッシュをクリアしました。");
 
-    return { success: true };
+    const artistColIdx = colIndex(headers, "artist");
+    const artworkIdColIdx = colIndex(headers, "artwork_id");
+    const targetArtist = artistName.toString().trim();
+    const propagatedIds = [];
+    console.log('[propagate] target artist=' + JSON.stringify(targetArtist) + ' currentRow=' + rowIdx);
+    if (targetArtist) {
+      for (let i = 1; i < data.length; i++) {
+        if (i + 1 === rowIdx) continue;
+        const rowArtist = data[i][artistColIdx].toString().trim();
+        const rowId = data[i][artworkIdColIdx].toString();
+        if (rowArtist !== targetArtist) {
+          console.log('[propagate] skip row ' + (i + 1) + ' id=' + rowId + ' artist=' + JSON.stringify(rowArtist));
+          continue;
+        }
+        boothSheet.getRange(i + 1, instaCol).setValue(sns.insta);
+        boothSheet.getRange(i + 1, xCol).setValue(sns.x);
+        boothSheet.getRange(i + 1, fbCol).setValue(sns.fb);
+        boothSheet.getRange(i + 1, webCol).setValue(sns.web);
+        propagatedIds.push(rowId);
+        console.log('[propagate] updated row ' + (i + 1) + ' id=' + rowId);
+      }
+    }
+    console.log('[propagate] total propagated=' + propagatedIds.length);
+
+    var cache = CacheService.getScriptCache();
+    var version = getCacheVersion(ex);
+    cache.remove("artwork_" + ex + "_" + id + "_v" + version);
+    propagatedIds.forEach(pid => cache.remove("artwork_" + ex + "_" + pid + "_v" + version));
+
+    return {
+      success: true,
+      artworkId: id,
+      updatedArtistCount: propagatedIds.length + 1,
+      propagatedIds: propagatedIds
+    };
   } catch (e) {
     console.error('regCommitRegistration failed:', e.stack || e);
-    return { success: false, error: e.toString() };
+    return { success: false, error: e.toString() + ' | stack: ' + (e.stack || 'no stack') };
   }
 }
 

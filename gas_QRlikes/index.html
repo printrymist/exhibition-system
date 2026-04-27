@@ -859,8 +859,13 @@
     };
     google.script.run.withSuccessHandler(res => {
       document.getElementById('regLoadingOverlay').style.display = 'none';
-      if (res.success) regChangeStep(3);
-      else alert(t('regError') + res.error);
+      if (res.success) {
+        if (res.updatedArtistCount > 1) {
+          const msgEl = document.getElementById('regDoneMsg');
+          if (msgEl) msgEl.textContent = '作品情報が正常に保存されました。（作家情報を' + res.updatedArtistCount + '件の作品に反映）';
+        }
+        regChangeStep(3);
+      } else alert(t('regError') + res.error);
     }).regCommitRegistration(payload);
   }
 

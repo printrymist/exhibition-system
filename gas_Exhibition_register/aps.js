@@ -209,7 +209,9 @@ function runSetup(payload) {
 
     // --- フォルダ構築 ---
     const wsFolder = parentFolder.createFolder(exCode + "_WorkSpace");
-    const imagesFolderId = wsFolder.createFolder("images").getId();
+    const imagesFolder = wsFolder.createFolder("images");
+    imagesFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const imagesFolderId = imagesFolder.getId();
 
     // --- 作品台帳SS構築 ---
     const artworkSS = SpreadsheetApp.create(exCode + "_artworks");

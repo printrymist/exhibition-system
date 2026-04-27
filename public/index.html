@@ -880,10 +880,16 @@
         if (res.success) {
           if (window.fsSetArtwork) {
             const sns = JSON.parse(payload.sns);
-            window.fsSetArtwork(exVal, idVal, {
-              artist: payload.artistName, title: payload.workTitle,
-              insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web
-            }).catch(e => console.error('Firestore:', e));
+            const artistFields = { artist: payload.artistName, insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web };
+            window.fsSetArtwork(exVal, idVal, { ...artistFields, title: payload.workTitle })
+              .catch(e => console.error('Firestore:', e));
+            (res.propagatedIds || []).forEach(pid => {
+              window.fsSetArtwork(exVal, pid, artistFields).catch(e => console.error('Firestore:', e));
+            });
+          }
+          if (res.updatedArtistCount > 1) {
+            const msgEl = document.getElementById('regDoneMsg');
+            if (msgEl) msgEl.textContent = '作品情報が正常に保存されました。（作家情報を' + res.updatedArtistCount + '件の作品に反映）';
           }
           regChangeStep(3);
         } else alert(t('regError') + res.error);
