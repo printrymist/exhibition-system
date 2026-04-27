@@ -700,17 +700,19 @@
       document.getElementById('ansMainContent').style.display = 'none';
       document.getElementById('ansAlreadyLikedMsg').style.display = 'none';
 
-      // GASからステータスを取得（google.script.runの代替）
-      gasCall('checkArtworkStatus').then(status => {
+      // 🟣 Firestore から作品ステータスを取得（フェーズ3）
+      fsGetArtworkData(exVal, idVal).then(data => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
-        if (status.mode === "REG") {
+        if (!data.success) {
+          alert("エラー: " + (data.msg || "データ取得失敗"));
+          return;
+        }
+        if (data.isRegistered) {
+          document.getElementById('ansWrapper').style.display = 'block';
+          ansInit(exVal, idVal, data);
+        } else {
           document.getElementById('regWrapper').style.display = 'block';
           regInit(exVal, idVal);
-        } else if (status.mode === "ANS") {
-          document.getElementById('ansWrapper').style.display = 'block';
-          ansInit(exVal, idVal);
-        } else {
-          alert("エラー: " + status.msg);
         }
       }).catch(err => {
         alert("通信エラー: " + err.message);
@@ -721,17 +723,23 @@
       applyLang();
       document.getElementById('unityGlobalLoading').style.display = 'flex';
 
-      // GASからステータスと作品データを取得
-      gasCall('checkArtworkStatus').then(status => {
+      // 🟣 Firestore から作品データ + 展覧会名を取得（フェーズ3）
+      fsGetArtworkData(exVal, idVal).then(data => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
-        if (status.mode === "REG") {
+        if (!data.success) {
+          alert("エラー: " + (data.msg || "データ取得失敗"));
+          return;
+        }
+        if (data.securityKey !== keyVal) {
+          alert("アクセスエラー: 不正な URL です");
+          return;
+        }
+        if (data.isRegistered) {
+          document.getElementById('ansWrapper').style.display = 'block';
+          ansInit(exVal, idVal, data);
+        } else {
           document.getElementById('regWrapper').style.display = 'block';
           regInit(exVal, idVal);
-        } else if (status.mode === "ANS") {
-          document.getElementById('ansWrapper').style.display = 'block';
-          ansInit(exVal, idVal, status);
-        } else {
-          alert("エラー: " + (status.msg || "モード不明"));
         }
       }).catch(err => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
@@ -924,7 +932,7 @@
         return;
       }
 
-      gasCall('ansGetArtworkData').then(res => {
+      fsGetArtworkData(ex, id).then(res => {
         document.getElementById('ansLoading').style.display = 'none';
         ansRenderData(res, ex, id);
       }).catch(err => {
@@ -1136,6 +1144,34 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    window.fsGetArtworkData = async (exCode, artworkId) => {
+      try {
+        const [aSnap, eSnap] = await Promise.all([
+          fsDb.collection('artworks').doc(exCode + '_' + artworkId).get(),
+          fsDb.collection('exhibitions').doc(exCode).get()
+        ]);
+        if (!aSnap.exists) return { success: false, msg: '作品IDが見つかりません' };
+        const a = aSnap.data();
+        const e = eSnap.exists ? eSnap.data() : { ex_name: '' };
+        return {
+          success: true,
+          securityKey: a.security_key,
+          isRegistered: a.status != null && a.status.toString() === '1',
+          exName: e.ex_name || '',
+          title: a.title || '',
+          artist: a.artist || '',
+          image: a.image_url ? String(a.image_url) : '',
+          sns: {
+            insta: a.insta || '',
+            x: a.x || '',
+            fb: a.facebook || '',
+            web: a.web || ''
+          }
+        };
+      } catch (err) {
+        return { success: false, msg: '取得エラー: ' + err.message };
+      }
+    };
     window.fsAddLike = async (data) => {
       await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
     };

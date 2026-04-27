@@ -289,6 +289,14 @@
         showError('Error: ' + result.error);
         return;
       }
+      // 🟣 Firestore exhibitions コレクションにも書き込み
+      if (window.fsDb && result.exCode) {
+        window.fsDb.collection('exhibitions').doc(result.exCode).set({
+          ex_code: result.exCode,
+          ex_name: result.exName,
+          createdAt: new Date().toISOString()
+        }, { merge: true }).catch(e => console.error('Firestore exhibitions write failed:', e));
+      }
       showDone(result);
     }
 
@@ -331,6 +339,19 @@
       `;
     }
 
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    window.fsDb = firebase.firestore();
   </script>
 </body>
 </html>
