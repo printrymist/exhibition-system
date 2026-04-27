@@ -772,7 +772,7 @@
         }
         if (res.registeredArtists && res.registeredArtists.length > 0) {
           const sel = document.getElementById('regArtistSelect');
-          sel.innerHTML = '<option value="">' + t('regSelectDefault') + '</option>';
+          sel.innerHTML = '<option value="" id="regSelectDefault">' + t('regSelectDefault') + '</option>';
           res.registeredArtists.forEach((a, i) => {
             const opt = document.createElement('option');
             opt.value = i; opt.textContent = a.name; sel.appendChild(opt);
