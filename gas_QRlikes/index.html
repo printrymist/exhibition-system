@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 15px;
+    }
+
+    .unity-container {
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    #unityGlobalLoading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20000;
+    }
+
+    .reg-card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
+      margin: auto;
+    }
+
+    .step {
+      display: none;
+    }
+
+    .step.active {
+      display: block;
+    }
+
+    label {
+      display: block;
+      margin-top: 12px;
+      font-weight: bold;
+      color: #444;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    select {
+      width: 100%;
+      padding: 12px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    .quick-box {
+      background: #eef2f7;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #d1d9e6;
+      margin-bottom: 15px;
+    }
+
+    .sns-group {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 10px;
+      border: 1px solid #eee;
+      margin-top: 15px;
+    }
+
+    .btn-blue {
+      width: 100%;
+      padding: 16px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #1a73e8;
+      color: white;
+      font-size: 16px;
+    }
+
+    .btn-gray {
+      width: 100%;
+      padding: 16px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #eee;
+      color: #333;
+      font-size: 16px;
+    }
+
+    .preview-img {
+      width: 100%;
+      aspect-ratio: 1/1;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-top: 10px;
+      border: 1px solid #ddd;
+    }
+
+    .confirm-val {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 2px;
+    }
+
+    /* カスタムファイル選択ボタン */
+    #regFileBtn {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      border: 2px dashed #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 15px;
+      background: #fafafa;
+      color: #555;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    #regFileBtn:hover {
+      background: #f0f4ff;
+      border-color: #1a73e8;
+      color: #1a73e8;
+    }
+
+    #regFileInput {
+      display: none;
+    }
+
+    #regLoadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      color: white;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-top: 5px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .ans-container {
+      width: 350px;
+      max-width: 92%;
+      background: white;
+      padding: 30px 20px;
+      border-radius: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      text-align: center;
+      margin: auto;
+      position: relative;
+    }
+
+    .ex-header {
+      font-size: 0.85em;
+      color: #888;
+      letter-spacing: 0.05em;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+
+    #ansAlreadyLikedMsg {
+      display: none;
+      color: #e91e63;
+      font-weight: bold;
+      font-size: 1.05em;
+      margin-bottom: 15px;
+    }
+
+    .work-img {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .work-info h2 {
+      margin: 0;
+      font-size: 1.4em;
+      font-weight: bold;
+      overflow-wrap: break-word;
+      line-height: 1.4;
+      padding: 0 10px;
+    }
+
+    .work-info p {
+      margin: 5px 0 25px 0;
+      color: #666;
+      overflow-wrap: break-word;
+      padding: 0 10px;
+    }
+
+    textarea {
+      width: 100%;
+      margin-bottom: 15px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    .btn-black {
+      width: 100%;
+      padding: 18px;
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #000;
+    }
+
+    #ansSnsSection {
+      margin-top: 25px;
+      padding-top: 20px;
+      border-top: 1px dashed #ddd;
+      display: none;
+    }
+
+    .sns-area {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 15px;
+    }
+
+    .sns-btn {
+      text-decoration: none;
+      color: #555;
+      font-size: 10px;
+      width: 60px;
+      font-weight: bold;
+    }
+
+    .sns-icon {
+      font-size: 24px;
+      background: #f0f2f5;
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 5px auto;
+    }
+
+    .fade-in {
+      animation: fadeInAnim 0.6s ease-out forwards;
+    }
+
+    .heart-icon {
+      color: #e91e63;
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    .decoration-footer {
+      margin-top: 40px;
+      color: #ccc;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    #langToggle {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #f0f2f5;
+      border: none;
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #555;
+    }
+
+    #langToggleReg {
+      display: block;
+      margin: 0 auto 15px auto;
+      background: #f0f2f5;
+      border: none;
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #555;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="ansSnsSyncModal"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:30100; align-items:center; justify-content:center;">
+    <div
+      style="background:white; padding:25px; border-radius:12px; width:320px; max-width:85%; box-shadow:0 4px 15px rgba(0,0,0,0.2); text-align:center;">
+      <h3 id="syncModalTitle" style="margin-top:0; font-size:1.1em; color:#1a73e8;">SNS情報を全作品に同期</h3>
+      <p
+        style="font-size:0.85em; color:#666; text-align:left; background:#f9f9f9; padding:10px; border-radius:6px; line-height:1.6;">
+        <span id="syncModalDesc">現在の設定内容：</span><br>
+        <span id="syncPreviewList" style="font-weight:bold; color:#333;"></span>
+      </p>
+      <p id="syncModalConfirm" style="font-size:0.9em; font-weight:bold; color:#d93025; margin:15px 0;">
+        この内容をあなたの全作品に一括反映（上書き）させますか？</p>
+      <button id="ansSnsSyncSubmitBtn" class="btn-black" style="margin-bottom:10px; background:#1a73e8;">はい、一括更新する</button>
+      <button id="ansSnsSyncCancelBtn" class="btn-gray" style="margin-top:0;">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="ansPwModal"
+    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:30000; align-items:center; justify-content:center;">
+    <div
+      style="background:white; padding:25px; border-radius:12px; width:300px; max-width:80%; box-shadow:0 4px 15px rgba(0,0,0,0.2); text-align:center;">
+      <h3 id="pwModalTitle" style="margin-top:0; font-size:1.2em; color:#333;">管理者ログイン</h3>
+      <p id="pwModalDesc" style="font-size:0.9em; color:#666;">パスワードを入力してください</p>
+      <input type="password" id="ansPwInput" style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ccc; border-radius:6px; font-size:16px; box-sizing:border-box;">
+      <button id="ansPwSubmitBtn" class="btn-black" style="margin-bottom:10px;">認証する</button>
+      <button id="ansPwCancelBtn" class="btn-gray" style="margin-top:0;">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="unityGlobalLoading">
+    <div class="spinner" style="border-top-color: #1a73e8;"></div>
+    <div id="globalLoadingMsg" style="font-weight:bold; color:#666;">作品ステータスを確認中...</div>
+  </div>
+
+  <div class="unity-container">
+    <div id="regWrapper" style="display:none; width: 100%;">
+      <div id="regLoadingOverlay">
+        <div class="spinner"></div>
+        <div id="regSavingMsg" style="font-weight:bold; font-size:18px;">保存しています...</div>
+      </div>
+      <div class="reg-card" id="regMainCard">
+        <button id="langToggleReg" onclick="toggleLang()">EN</button>
+        <h3 id="regExName" style="color:#1a73e8; margin:0 0 15px 0;">接続中...</h3>
+        <div id="regStep0" class="step">
+          <p id="regPwPrompt">管理パスワードを入力してください</p>
+          <input type="password" id="regPassInput">
+          <button class="btn-blue" onclick="regCheckLogin()" id="regLoginBtn">ログイン</button>
+        </div>
+        <div id="regStep1" class="step">
+          <div id="regQuickSelectArea" class="quick-box" style="display:none;">
+            <small id="regQuickSelectLabel" style="color:#1a73e8; font-weight:bold;">以前の登録情報から選ぶ</small>
+            <select id="regArtistSelect" onchange="regApplyArtistInfo()">
+              <option value="" id="regSelectDefault">-- 作家名を選択 --</option>
+            </select>
+          </div>
+          <label id="regLabelArtist">作家名</label><input type="text" id="regArtistName">
+          <label id="regLabelTitle">作品名</label><input type="text" id="regWorkTitle">
+          <div class="sns-group">
+            <small id="regSnsLabel" style="font-weight:bold;">📱 SNS ID入力</small>
+            <input type="text" id="regSnsInsta" placeholder="Instagram ID">
+            <input type="text" id="regSnsX" placeholder="X (Twitter) ID">
+            <input type="text" id="regSnsFb" placeholder="Facebook ID">
+            <input type="text" id="regSnsWeb" placeholder="HPまたはYouTubeのURL">
+          </div>
+          <label id="regLabelPhoto">作品写真</label>
+          <!-- 🌟 カスタムファイル選択ボタン（日英切り替え対応） -->
+          <input type="file" id="regFileInput" accept="image/*">
+          <button type="button" id="regFileBtn" onclick="document.getElementById('regFileInput').click()">📷 写真を選択する</button>
+          <img id="regLocalPreview" class="preview-img" style="display:none;">
+          <button class="btn-blue" onclick="regToConfirm()" id="regConfirmBtn">内容を確認する</button>
+        </div>
+        <div id="regStep2" class="step">
+          <h4 id="regConfirmTitle">登録内容の最終確認</h4>
+          <img id="regFinalPreview" class="preview-img">
+          <div style="margin-top:15px; background:#f0f7ff; padding:15px; border-radius:8px;">
+            <small id="regConfirmArtistLabel">作家名:</small><span id="regVArtist" class="confirm-val"></span>
+            <small id="regConfirmTitleLabel">作品名:</small><span id="regVTitle" class="confirm-val"></span>
+            <div id="regVSnsSummary" style="font-size:12px; color:#555;"></div>
+          </div>
+          <button class="btn-blue" onclick="regFinalSubmit()" id="regSubmitBtn">この内容で確定・登録</button>
+          <button class="btn-gray" onclick="regChangeStep(1)" id="regEditBtn">修正する</button>
+        </div>
+        <div id="regStep3" class="step">
+          <div style="text-align:center; padding:30px 10px;">
+            <div style="font-size: 50px; margin-bottom: 10px;">✅</div>
+            <h2 id="regDoneTitle" style="color:green; margin-top:0;">登録完了！</h2>
+            <p id="regDoneMsg" style="color:#666; line-height:1.5;">作品情報が正常に保存されました。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ansWrapper" style="display:none; width: 100%;">
+      <div class="ans-container">
+        <button id="langToggle" onclick="toggleLang()">EN</button>
+        <div id="ansLoading">読み込み中...</div>
+        <div id="ansMainContent" style="display:none;">
+          <div class="ex-header" id="ansDisplayExName"></div>
+          <div id="ansAlreadyLikedMsg">いいね受付済みです、追加コメントを受け付けます。</div>
+          <div id="ansThankYou" style="display:none;">
+            <div class="heart-icon">♥</div>
+            <div id="ansCountMsg" style="font-size:1.1em; font-weight:bold; margin-bottom:15px;"></div>
+            <div id="ansSnsSection">
+              <p id="ansSnsLabel" style="color:#666; font-size:0.85em;">作家の活動をチェック</p>
+              <div id="ansSnsButtons" class="sns-area"></div>
+            </div>
+          </div>
+          <div id="ansInputView">
+            <img id="ansMainImg" class="work-img" src="">
+            <div class="work-info">
+              <h2 id="ansDisplayTitle"></h2>
+              <p id="ansDisplayArtist"></p>
+            </div>
+            <div id="ansFormContainer">
+              <form id="ansLikeForm">
+                <input type="hidden" name="sessionId" id="ansSessionIdInput">
+                <input type="hidden" name="workID" value="<?= id ?>">
+                <input type="hidden" name="ex" value="<?= ex ?>">
+                <input type="hidden" name="workTitle" id="ansWorkTitleInput">
+                <input type="hidden" name="workArtist" id="ansWorkArtistInput">
+                <input type="hidden" name="isLike" id="ansIsLikeInput" value="1">
+                <input type="text" name="nickname" id="ansNicknameInput" placeholder="ニックネーム（任意）">
+                <textarea name="comment" id="ansCommentInput" rows="4" placeholder="作品の感想をどうぞ！" required></textarea>
+                <button type="submit" id="ansSubmitBtn" class="btn-black">感想を送って「いいね」</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="decoration-footer" onclick="ansResetForm()">＊ ♡ ＊ ♥ ＊ ♡ ＊</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================
+  // 🌟 多言語辞書
+  // =========================================================
+  const i18n = {
+    ja: {
+      globalLoading:        "作品ステータスを確認中...",
+      langBtn:              "EN",
+      ansLoading:           "読み込み中...",
+      ansAlreadyLiked:      "いいね受付済みです、追加コメントを受け付けます。",
+      ansSnsLabel:          "作家の活動をチェック",
+      ansNickname:          "ニックネーム（任意）",
+      ansComment:           "作品の感想をどうぞ！",
+      ansSubmitBtn:         "感想を送って「いいね」",
+      ansSubmitBtnAdded:    "追加の感想を送る",
+      ansSubmitBtnSending:  "通信中...",
+      ansSubmitBtnSyncing:  "同期中...",
+      ansCountMsg:          "有難うございました！ 応援数: ",
+      ansCountMsgAdded:     "追加のコメント有難うございました！ 応援数: ",
+      ansResetConfirm:      "応援記録をリセットしてテストし直しますか？",
+      pwModalTitle:         "管理者ログイン",
+      pwModalDesc:          "パスワードを入力してください",
+      pwSubmitBtn:          "認証する",
+      pwCancelBtn:          "キャンセル",
+      pwSuccess:            "ログインに成功しました。",
+      pwFail:               "パスワードが違います",
+      syncModalTitle:       "SNS情報を全作品に同期",
+      syncModalDesc:        "現在の設定内容：",
+      syncModalConfirm:     "この内容をあなたの全作品に一括反映（上書き）させますか？",
+      syncSubmitBtn:        "はい、一括更新する",
+      syncCancelBtn:        "キャンセル",
+      syncNotSet:           "未設定",
+      syncWebSet:           "設定あり",
+      syncDone:             "同期完了！",
+      alertLogout:          "ログアウトしました。",
+      alertUnlock:          "作品の登録を解除しました。再登録が可能です。",
+      regSaving:            "保存しています...",
+      regPwPrompt:          "管理パスワードを入力してください",
+      regLoginBtn:          "ログイン",
+      regPwFail:            "パスワードが違います",
+      regQuickSelectLabel:  "以前の登録情報から選ぶ",
+      regSelectDefault:     "-- 作家名を選択 --",
+      regLabelArtist:       "作家名",
+      regLabelTitle:        "作品名",
+      regSnsLabel:          "📱 SNS ID入力",
+      regSnsWebPlaceholder: "HPまたはYouTubeのURL",
+      regLabelPhoto:        "作品写真",
+      regFileBtn:           "📷 写真を選択する",
+      regConfirmBtn:        "内容を確認する",
+      regPhotoRequired:     "写真を選択してください",
+      regSnsWebSet:         "登録あり",
+      regSnsSummaryLabel:   "📱 SNS連携: ",
+      regSnsNone:           "📱 SNS連携: なし",
+      regConfirmTitle:      "登録内容の最終確認",
+      regConfirmArtistLabel:"作家名:",
+      regConfirmTitleLabel: "作品名:",
+      regSubmitBtn:         "この内容で確定・登録",
+      regEditBtn:           "修正する",
+      regDoneTitle:         "登録完了！",
+      regDoneMsg:           "作品情報が正常に保存されました。",
+      regError:             "登録エラー: ",
+    },
+    en: {
+      globalLoading:        "Checking artwork status...",
+      langBtn:              "JP",
+      ansLoading:           "Loading...",
+      ansAlreadyLiked:      "You've already liked this. You can still leave a comment.",
+      ansSnsLabel:          "Follow the artist",
+      ansNickname:          "Nickname (optional)",
+      ansComment:           "Share your thoughts on this artwork!",
+      ansSubmitBtn:         "Send & Like ♡",
+      ansSubmitBtnAdded:    "Send another comment",
+      ansSubmitBtnSending:  "Sending...",
+      ansSubmitBtnSyncing:  "Syncing...",
+      ansCountMsg:          "Thank you! Likes: ",
+      ansCountMsgAdded:     "Thank you for your comment! Likes: ",
+      ansResetConfirm:      "Reset like record and test again?",
+      pwModalTitle:         "Admin Login",
+      pwModalDesc:          "Please enter the password",
+      pwSubmitBtn:          "Login",
+      pwCancelBtn:          "Cancel",
+      pwSuccess:            "Login successful.",
+      pwFail:               "Incorrect password",
+      syncModalTitle:       "Sync SNS to all artworks",
+      syncModalDesc:        "Current settings:",
+      syncModalConfirm:     "Apply these settings to all your artworks?",
+      syncSubmitBtn:        "Yes, update all",
+      syncCancelBtn:        "Cancel",
+      syncNotSet:           "Not set",
+      syncWebSet:           "Set",
+      syncDone:             "Sync complete!",
+      alertLogout:          "Logged out.",
+      alertUnlock:          "Artwork unlocked. You can register again.",
+      regSaving:            "Saving...",
+      regPwPrompt:          "Please enter the admin password",
+      regLoginBtn:          "Login",
+      regPwFail:            "Incorrect password",
+      regQuickSelectLabel:  "Select from previous entries",
+      regSelectDefault:     "-- Select artist --",
+      regLabelArtist:       "Artist name",
+      regLabelTitle:        "Artwork title",
+      regSnsLabel:          "📱 SNS ID",
+      regSnsWebPlaceholder: "Website or YouTube URL",
+      regLabelPhoto:        "Artwork photo",
+      regFileBtn:           "📷 Select photo",
+      regConfirmBtn:        "Review before submitting",
+      regPhotoRequired:     "Please select a photo",
+      regSnsWebSet:         "Set",
+      regSnsSummaryLabel:   "📱 SNS: ",
+      regSnsNone:           "📱 SNS: None",
+      regConfirmTitle:      "Confirm registration",
+      regConfirmArtistLabel:"Artist:",
+      regConfirmTitleLabel: "Title:",
+      regSubmitBtn:         "Confirm & Register",
+      regEditBtn:           "Edit",
+      regDoneTitle:         "Registered!",
+      regDoneMsg:           "Artwork information saved successfully.",
+      regError:             "Registration error: ",
+    }
+  };
+
+  const browserLang = (navigator.language || "ja").startsWith("ja") ? "ja" : "en";
+  let currentLang = localStorage.getItem("rohei_lang") || browserLang;
+
+  function t(key) {
+    return (i18n[currentLang] && i18n[currentLang][key]) || i18n["ja"][key] || key;
+  }
+
+  // =========================================================
+  // 🌟 applyLang：画面のテキストを現在の言語で書き換える
+  // reloadApp()を呼ばず直接書き換えるので確実に動く
+  // =========================================================
+  function applyLang() {
+    // 言語ボタン
+    document.getElementById('langToggle').innerText = t('langBtn');
+    document.getElementById('langToggleReg').innerText = t('langBtn');
+    // グローバルローディング
+    document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
+    // ANSモード
+    document.getElementById('ansLoading').innerText = t('ansLoading');
+    document.getElementById('ansAlreadyLikedMsg').innerText = t('ansAlreadyLiked');
+    document.getElementById('ansSnsLabel').innerText = t('ansSnsLabel');
+    document.getElementById('ansNicknameInput').placeholder = t('ansNickname');
+    document.getElementById('ansCommentInput').placeholder = t('ansComment');
+    var submitBtn = document.getElementById('ansSubmitBtn');
+    if (submitBtn && !submitBtn.disabled) {
+      var isAdditional = document.getElementById('ansIsLikeInput').value === "0";
+      submitBtn.innerText = isAdditional ? t('ansSubmitBtnAdded') : t('ansSubmitBtn');
+    }
+    // モーダル類
+    document.getElementById('pwModalTitle').innerText = t('pwModalTitle');
+    document.getElementById('pwModalDesc').innerText = t('pwModalDesc');
+    document.getElementById('ansPwSubmitBtn').innerText = t('pwSubmitBtn');
+    document.getElementById('ansPwCancelBtn').innerText = t('pwCancelBtn');
+    document.getElementById('syncModalTitle').innerText = t('syncModalTitle');
+    document.getElementById('syncModalDesc').innerText = t('syncModalDesc');
+    document.getElementById('syncModalConfirm').innerText = t('syncModalConfirm');
+    document.getElementById('ansSnsSyncSubmitBtn').innerText = t('syncSubmitBtn');
+    document.getElementById('ansSnsSyncCancelBtn').innerText = t('syncCancelBtn');
+    // REGモード
+    document.getElementById('regSavingMsg').innerText = t('regSaving');
+    document.getElementById('regPwPrompt').innerText = t('regPwPrompt');
+    document.getElementById('regLoginBtn').innerText = t('regLoginBtn');
+    document.getElementById('regQuickSelectLabel').innerText = t('regQuickSelectLabel');
+    document.getElementById('regSelectDefault').innerText = t('regSelectDefault');
+    document.getElementById('regLabelArtist').innerText = t('regLabelArtist');
+    document.getElementById('regLabelTitle').innerText = t('regLabelTitle');
+    document.getElementById('regSnsLabel').innerText = t('regSnsLabel');
+    document.getElementById('regSnsWeb').placeholder = t('regSnsWebPlaceholder');
+    document.getElementById('regLabelPhoto').innerText = t('regLabelPhoto');
+    document.getElementById('regFileBtn').innerText = t('regFileBtn');
+    document.getElementById('regConfirmBtn').innerText = t('regConfirmBtn');
+    document.getElementById('regConfirmTitle').innerText = t('regConfirmTitle');
+    document.getElementById('regConfirmArtistLabel').innerText = t('regConfirmArtistLabel');
+    document.getElementById('regConfirmTitleLabel').innerText = t('regConfirmTitleLabel');
+    document.getElementById('regSubmitBtn').innerText = t('regSubmitBtn');
+    document.getElementById('regEditBtn').innerText = t('regEditBtn');
+    document.getElementById('regDoneTitle').innerText = t('regDoneTitle');
+    document.getElementById('regDoneMsg').innerText = t('regDoneMsg');
+  }
+
+  // 🌟 言語切り替え：reloadApp()で画面ごと作り直す（確実）
+  function toggleLang() {
+    currentLang = (currentLang === "ja") ? "en" : "ja";
+    localStorage.setItem("rohei_lang", currentLang);
+    reloadApp();
+  }
+
+  // =========================================================
+  // 🌟 アプリ共通処理
+  // =========================================================
+  function reloadApp() {
+    document.getElementById('unityGlobalLoading').style.display = 'flex';
+    document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
+    document.getElementById('regWrapper').style.display = 'none';
+    document.getElementById('ansWrapper').style.display = 'none';
+    var btn = document.getElementById('ansSubmitBtn');
+    if (btn) { btn.innerText = t('ansSubmitBtn'); btn.disabled = false; }
+    document.getElementById('ansThankYou').style.display = 'none';
+    document.getElementById('ansInputView').style.display = 'block';
+    document.getElementById('ansLoading').style.display = 'block';
+    document.getElementById('ansMainContent').style.display = 'none';
+    document.getElementById('ansAlreadyLikedMsg').style.display = 'none';
+
+    const exVal = "<?= ex ?>";
+    const idVal = "<?= id ?>";
+    google.script.run.withSuccessHandler(status => {
+      document.getElementById('unityGlobalLoading').style.display = 'none';
+      if (status.mode === "REG") {
+        document.getElementById('regWrapper').style.display = 'block';
+        regInit(exVal, idVal);
+      } else if (status.mode === "ANS") {
+        document.getElementById('ansWrapper').style.display = 'block';
+        ansInit(exVal, idVal);
+      } else {
+        alert("エラー: " + status.msg);
+      }
+    }).checkArtworkStatus(exVal, idVal);
+  }
+
+  window.onload = () => {
+    applyLang();
+    const exVal = "<?= ex ?>";
+    const idVal = "<?= id ?>";
+    const modeVal = "<?= mode ?>";
+    const embeddedData = <?= artworkData ?>;
+
+    document.getElementById('unityGlobalLoading').style.display = 'none';
+
+    if (modeVal === "REG") {
+      document.getElementById('regWrapper').style.display = 'block';
+      regInit(exVal, idVal);
+    } else if (modeVal === "ANS") {
+      document.getElementById('ansWrapper').style.display = 'block';
+      ansInit(exVal, idVal, embeddedData);
+    } else {
+      alert("エラー: モード不明");
+    }
+  };
+
+  // =========================================================
+  // 🔵 登録用ロジック
+  // =========================================================
+  let regConfig = {};
+  let regRawImgData = null;
+  const regStorageKey = "rohei_auth_<?= ex ?>";
+
+  async function hashText(text) {
+    const msgBuffer = new TextEncoder().encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function regInit(ex, id) {
+    regRawImgData = null;
+    applyLang(); // 🌟 GAS通信前に即時言語適用
+    google.script.run.withSuccessHandler(async res => {
+      if (!res.success) return alert("エラー: " + res.error);
+      regConfig = res;
+      document.getElementById('regExName').innerText = res.exName;
+      document.getElementById('regArtistName').value = res.artistName;
+      document.getElementById('regWorkTitle').value = res.workTitle;
+      document.getElementById('regSnsInsta').value = res.sns.insta || "";
+      document.getElementById('regSnsX').value = res.sns.x || "";
+      document.getElementById('regSnsFb').value = res.sns.fb || "";
+      document.getElementById('regSnsWeb').value = res.sns.web || "";
+      if (res.imageUrl) {
+        document.getElementById('regLocalPreview').src = res.imageUrl;
+        document.getElementById('regLocalPreview').style.display = 'block';
+      }
+      if (res.registeredArtists && res.registeredArtists.length > 0) {
+        const sel = document.getElementById('regArtistSelect');
+        sel.innerHTML = '<option value="">' + t('regSelectDefault') + '</option>';
+        res.registeredArtists.forEach((a, i) => {
+          const opt = document.createElement('option');
+          opt.value = i; opt.textContent = a.name; sel.appendChild(opt);
+        });
+        document.getElementById('regQuickSelectArea').style.display = 'block';
+      }
+      const savedHash = localStorage.getItem(regStorageKey);
+      const currentHash = await hashText(res.masterPass);
+      if (savedHash === currentHash) regChangeStep(1);
+      else regChangeStep(0);
+    }).regGetSetupData(ex, id);
+  }
+
+  function regCleanSnsId(val) {
+    if (!val) return "";
+    val = val.toString().trim();
+    if (val.includes('http')) {
+      val = val.split('/').filter(Boolean).pop();
+      if (val.includes('?')) val = val.split('?')[0];
+    }
+    val = val.replace(/^[＠@]+/, "").trim();
+    return val;
+  }
+
+  function regApplyArtistInfo() {
+    const idx = document.getElementById('regArtistSelect').value;
+    if (idx === "") return;
+    const a = regConfig.registeredArtists[idx];
+    document.getElementById('regArtistName').value = a.name;
+    document.getElementById('regSnsInsta').value = a.insta;
+    document.getElementById('regSnsX').value = a.x;
+    document.getElementById('regSnsFb').value = a.fb;
+    document.getElementById('regSnsWeb').value = a.web;
+  }
+
+  async function regCheckLogin() {
+    if (document.getElementById('regPassInput').value === regConfig.masterPass) {
+      const hash = await hashText(regConfig.masterPass);
+      localStorage.setItem(regStorageKey, hash);
+      regChangeStep(1);
+    } else alert(t('regPwFail'));
+  }
+
+  // 🌟 カスタムファイルボタン：選択後にファイル名を表示
+  document.getElementById('regFileInput').onchange = (e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const imgUrl = URL.createObjectURL(e.target.files[0]);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(imgUrl);
+      const canvas = document.createElement('canvas');
+      const size = 800; canvas.width = size; canvas.height = size;
+      const min = Math.min(img.width, img.height);
+      canvas.getContext('2d').drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size);
+      regRawImgData = canvas.toDataURL('image/jpeg', 0.8);
+      document.getElementById('regLocalPreview').src = regRawImgData;
+      document.getElementById('regLocalPreview').style.display = 'block';
+      // ファイル名をボタンに表示
+      document.getElementById('regFileBtn').innerText = '✅ ' + e.target.files[0].name;
+    };
+    img.src = imgUrl;
+  };
+
+  function regToConfirm() {
+    if (!regRawImgData && !regConfig.imageUrl) return alert(t('regPhotoRequired'));
+    const insta = regCleanSnsId(document.getElementById('regSnsInsta').value);
+    const x = regCleanSnsId(document.getElementById('regSnsX').value);
+    const fb = regCleanSnsId(document.getElementById('regSnsFb').value);
+    const web = document.getElementById('regSnsWeb').value.trim();
+    document.getElementById('regVArtist').innerText = document.getElementById('regArtistName').value || "-";
+    document.getElementById('regVTitle').innerText = document.getElementById('regWorkTitle').value || "-";
+    document.getElementById('regFinalPreview').src = regRawImgData || regConfig.imageUrl;
+    let snsList = [];
+    if (insta) snsList.push("Insta: " + insta);
+    if (x) snsList.push("X: " + x);
+    if (fb) snsList.push("FB: " + fb);
+    if (web) snsList.push("Web: " + t('regSnsWebSet'));
+    const snsDiv = document.getElementById('regVSnsSummary');
+    snsDiv.innerText = snsList.length > 0 ? t('regSnsSummaryLabel') + snsList.join(" / ") : t('regSnsNone');
+    snsDiv.style.marginTop = "10px";
+    snsDiv.style.paddingTop = "10px";
+    snsDiv.style.borderTop = "1px dashed #ccc";
+    regChangeStep(2);
+  }
+
+  function regChangeStep(n) {
+    document.querySelectorAll('#regWrapper .step').forEach((s, i) => s.classList.toggle('active', i === n));
+    applyLang(); // 🌟 ステップ切り替え後に必ず言語適用
+    window.scrollTo(0, 0);
+  }
+
+  function regFinalSubmit() {
+    document.getElementById('regLoadingOverlay').style.display = 'flex';
+    const payload = {
+      ex: "<?= ex ?>", id: "<?= id ?>",
+      artistName: document.getElementById('regArtistName').value,
+      workTitle: document.getElementById('regWorkTitle').value,
+      sns: {
+        insta: regCleanSnsId(document.getElementById('regSnsInsta').value),
+        x: regCleanSnsId(document.getElementById('regSnsX').value),
+        fb: regCleanSnsId(document.getElementById('regSnsFb').value),
+        web: document.getElementById('regSnsWeb').value
+      },
+      imageData: regRawImgData
+    };
+    google.script.run.withSuccessHandler(res => {
+      document.getElementById('regLoadingOverlay').style.display = 'none';
+      if (res.success) regChangeStep(3);
+      else alert(t('regError') + res.error);
+    }).regCommitRegistration(payload);
+  }
+
+  // window.onload または ansInit の冒頭に追加
+  function getOrCreateSessionId() {
+    let sid = sessionStorage.getItem("rohei_session_id");
+    if (!sid) {
+      sid = "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem("rohei_session_id", sid);
+    }
+  return sid;
+  }
+
+  // =========================================================
+  // 🟡 回答用ロジック
+  // =========================================================
+  function ansInit(ex, id, embeddedData) {
+    document.getElementById('ansIsLikeInput').value = "1";
+    document.getElementById('ansSessionIdInput').value = getOrCreateSessionId();
+    applyLang(); // 🌟 GAS通信前に即時言語適用s
+    if (embeddedData) {
+      document.getElementById('ansLoading').style.display = 'none';
+      ansRenderData(JSON.parse(embeddedData), ex, id);
+      return;
+    }
+    
+    google.script.run.withSuccessHandler(res => {
+      document.getElementById('ansLoading').style.display = 'none';
+      ansRenderData(res, ex, id);
+    }).ansGetArtworkData(ex, id);
+  }
+
+  function ansRenderData(res, ex, id) {
+    if (!res || !res.success) {
+      document.getElementById('ansLoading').innerHTML = '<div style="color:red">Error: ' + (res ? res.msg : "No data") + '</div>';
+      return;
+    }
+    document.getElementById('ansDisplayExName').innerText = res.exName;
+    document.getElementById('ansDisplayTitle').innerText = res.title;
+    document.getElementById('ansDisplayArtist').innerText = res.artist;
+    document.getElementById('ansWorkTitleInput').value = res.title;
+    document.getElementById('ansWorkArtistInput').value = res.artist;
+    if (res.image) {
+      var match = res.image.match(/[-\w]{25,}/);
+      if (match) {
+        document.getElementById('ansMainImg').src = "https://drive.google.com/thumbnail?id=" + match[0] + "&sz=w400";
+        document.getElementById('ansMainImg').style.display = 'block';
+      }
+    }
+    ansShowSnsButtons(res.sns);
+    if (localStorage.getItem("voted_" + ex + "_" + id)) {
+      document.getElementById('ansIsLikeInput').value = "0";
+      document.getElementById('ansSubmitBtn').innerText = t('ansSubmitBtnAdded');
+      document.getElementById('ansAlreadyLikedMsg').style.display = 'block';
+    }
+    var savedNickname = localStorage.getItem("nickname_" + ex);
+    if (savedNickname) {
+      document.getElementById('ansNicknameInput').value = savedNickname;
+    }
+    document.getElementById('ansMainContent').style.display = 'block';
+  }
+
+  function ansShowSnsButtons(snsData) {
+    var snsArea = document.getElementById('ansSnsButtons');
+    snsArea.innerHTML = "";
+    var hasSns = false;
+    const icons = { insta: "📷", x: "𝕏", fb: "📘", web: "🌐" };
+    const urls = { insta: "https://www.instagram.com/", x: "https://x.com/", fb: "https://www.facebook.com/", web: "https://" };
+    ["insta", "x", "fb", "web"].forEach(key => {
+      if (snsData[key] && snsData[key].trim() !== "") {
+        hasSns = true;
+        var val = snsData[key].trim();
+        var link = val.startsWith("http") ? val : urls[key] + val.replace(/^@/, "");
+        var a = document.createElement("a");
+        a.href = link; a.target = "_blank"; a.className = "sns-btn";
+        a.innerHTML = '<div class="sns-icon">' + icons[key] + '</div>' + key.charAt(0).toUpperCase() + key.slice(1);
+        snsArea.appendChild(a);
+      }
+    });
+    if (hasSns) document.getElementById('ansSnsSection').style.display = "block";
+  }
+
+  function ansResetForm() {
+    var adminKey = "isAdmin_" + "<?= ex ?>";
+    if (localStorage.getItem(adminKey) === "true") {
+      if (confirm(t('ansResetConfirm'))) {
+        localStorage.removeItem("voted_" + "<?= ex ?>" + "_" + "<?= id ?>");
+        reloadApp();
+      }
+    }
+  }
+
+  document.getElementById('ansLikeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('ansSubmitBtn');
+    var originalText = btn.innerText;
+    btn.innerText = t('ansSubmitBtnSending');
+    btn.disabled = true;
+
+    google.script.run.withSuccessHandler(function(result) {
+
+      if (result.action === "SNS_SYNC_REQUEST") {
+        google.script.run.withSuccessHandler(res => {
+          document.getElementById('syncPreviewList').innerHTML =
+            "Instagram: " + (res.sns.insta || t('syncNotSet')) + "<br>" +
+            "X: " + (res.sns.x || t('syncNotSet')) + "<br>" +
+            "Web: " + (res.sns.web ? t('syncWebSet') : t('syncNotSet'));
+          document.getElementById('ansSnsSyncModal').style.display = 'flex';
+          document.getElementById('ansSnsSyncSubmitBtn').onclick = () => {
+            document.getElementById('ansSnsSyncModal').style.display = 'none';
+            btn.innerText = t('ansSubmitBtnSyncing');
+            google.script.run.withSuccessHandler(() => {
+              alert(t('syncDone'));
+              reloadApp();
+            }).ansSyncSnsToAll("<?= ex ?>", res.artist, res.sns);
+          };
+        }).ansGetArtworkData("<?= ex ?>", "<?= id ?>");
+        document.getElementById('ansSnsSyncCancelBtn').onclick = () => {
+          document.getElementById('ansSnsSyncModal').style.display = 'none';
+          btn.innerText = originalText; btn.disabled = false;
+        };
+        return;
+      }
+
+      if (result.action === "PROMPT_PASSWORD") {
+        if (localStorage.getItem("isAdmin_" + "<?= ex ?>") === "true") {
+          alert(t('pwSuccess'));
+          reloadApp();
+          return;
+        }
+        document.getElementById('ansPwModal').style.display = 'flex';
+        document.getElementById('ansPwInput').value = '';
+        document.getElementById('ansPwInput').focus();
+        document.getElementById('ansPwSubmitBtn').onclick = function() {
+          var pw = document.getElementById('ansPwInput').value;
+          if (!pw) return;
+          document.getElementById('ansPwModal').style.display = 'none';
+          google.script.run.withSuccessHandler(auth => {
+            if (auth.success) {
+              localStorage.setItem("isAdmin_" + "<?= ex ?>", "true");
+              alert(t('pwSuccess'));
+              reloadApp();
+            } else {
+              alert(t('pwFail'));
+              btn.innerText = originalText;
+              btn.disabled = false;
+            }
+          }).verifyAdmin("<?= ex ?>", pw);
+        };
+        document.getElementById('ansPwCancelBtn').onclick = function() {
+          document.getElementById('ansPwModal').style.display = 'none';
+          btn.innerText = originalText;
+          btn.disabled = false;
+        };
+        return;
+      }
+
+      if (result.action === "LOGOUT_SUCCESS") {
+        localStorage.removeItem("isAdmin_" + "<?= ex ?>");
+        alert(t('alertLogout'));
+        reloadApp();
+        return;
+      }
+
+      if (result.action === "UNLOCK_SUCCESS") {
+        alert(t('alertUnlock'));
+        reloadApp();
+        return;
+      }
+
+      if (result.action === "ERROR") {
+        alert(result.msg);
+        if (result.msg.includes("リセット") || result.msg.includes("reset")) {
+          reloadApp();
+        } else {
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+        return;
+      }
+
+      if (result.action === "COUNT") {
+        document.getElementById('ansInputView').style.display = 'none';
+        var alreadyMsg = document.getElementById('ansAlreadyLikedMsg');
+        if (alreadyMsg) alreadyMsg.style.display = 'none';
+        document.getElementById('ansThankYou').style.display = 'block';
+        document.getElementById('ansThankYou').classList.add('fade-in');
+        var isAdditional = (document.getElementById('ansIsLikeInput').value === "0");
+        document.getElementById('ansCountMsg').innerText = isAdditional
+          ? t('ansCountMsgAdded') + result.count
+          : t('ansCountMsg') + result.count;
+        localStorage.setItem("voted_" + "<?= ex ?>" + "_" + "<?= id ?>", "true");
+        // 🌟 ニックネームを展覧会単位で保存
+        var nickname = document.getElementById('ansNicknameInput').value.trim();
+        if (nickname) localStorage.setItem("nickname_" + "<?= ex ?>", nickname);
+      }
+
+    }).ansProcessForm(this);
+  });
+
+  </script>
+</body>
+
+</html>

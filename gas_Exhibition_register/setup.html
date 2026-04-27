@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: sans-serif; background: #f4f4f9; color: #333;
+      margin: 0; padding: 20px; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      background: white; border-radius: 16px; padding: 40px 32px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 480px;
+    }
+    .logo { text-align: center; margin-bottom: 30px; }
+    .logo h1 { font-size: 1.5em; color: #1a73e8; margin: 0 0 4px 0; }
+    .logo p { font-size: 0.85em; color: #888; margin: 0; }
+    label { display: block; margin-top: 16px; font-weight: bold; color: #444; font-size: 0.9em; }
+    input {
+      width: 100%; padding: 12px; margin-top: 6px;
+      border: 1px solid #ddd; border-radius: 8px;
+      font-size: 15px; transition: border-color 0.2s;
+    }
+    input:focus { outline: none; border-color: #1a73e8; }
+    .hint { font-size: 0.78em; color: #999; margin-top: 4px; }
+    .btn-submit {
+      width: 100%; padding: 16px; margin-top: 28px;
+      background: #1a73e8; color: white; border: none;
+      border-radius: 8px; font-size: 16px; font-weight: bold;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-submit:hover { background: #1557b0; }
+    .btn-submit:disabled { background: #aaa; cursor: not-allowed; }
+    #loadingView { display: none; text-align: center; padding: 20px 0; }
+    .spinner {
+      width: 48px; height: 48px; border: 5px solid #e0e0e0;
+      border-top: 5px solid #1a73e8; border-radius: 50%;
+      animation: spin 1s linear infinite; margin: 0 auto 16px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loadingMsg { color: #666; font-size: 0.95em; }
+    #doneView { display: none; text-align: center; }
+    .check { font-size: 56px; margin-bottom: 12px; }
+    #doneView h2 { color: #1a73e8; margin: 0 0 8px 0; }
+    #doneView p { color: #666; font-size: 0.9em; line-height: 1.6; }
+    .info-box {
+      background: #f0f7ff; border-radius: 10px; padding: 16px;
+      margin: 20px 0; text-align: left; font-size: 0.88em;
+    }
+    .info-box .row { display: flex; justify-content: space-between; padding: 4px 0; }
+    .info-box .key { color: #888; }
+    .info-box .val { font-weight: bold; color: #333; }
+    .btn-sheet {
+      display: block; width: 100%; padding: 14px; margin-top: 8px;
+      background: #1a73e8; color: white; border: none;
+      border-radius: 8px; font-size: 15px; font-weight: bold;
+      cursor: pointer; text-decoration: none; text-align: center;
+    }
+    #errorMsg {
+      display: none; background: #fff0f0; border: 1px solid #f5c0c0;
+      border-radius: 8px; padding: 12px 16px; margin-top: 16px;
+      color: #c0392b; font-size: 0.88em;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">   
+
+    <!-- 申請フォーム -->
+    <div class="logo">
+      <h1>🎨 Exhibition Setup</h1>
+      <p>Rohei Printer System</p>
+    </div>
+    <div id="applyView" style="display:none;">
+      <label>展覧会名
+        <input type="text" id="applyExName" placeholder="e.g. Independent Tokyo 2026">
+      </label>
+      <label>開催場所
+        <input type="text" id="applyVenue" placeholder="e.g. Gallery XX, Tokyo">
+      </label>
+      <label>開催予定日
+        <input type="date" id="applyStartDate">
+      </label>
+      <label>主催者名
+        <input type="text" id="applyOrganizer" placeholder="e.g. 宮川良平">
+      </label>
+      <label>メールアドレス
+        <input type="email" id="applyEmail" placeholder="your@email.com">
+      </label>
+      <div class="hint">確認メールが届きます。</div>
+      <div id="applyError" style="display:none; background:#fff0f0; border:1px solid #f5c0c0; border-radius:8px; padding:12px 16px; margin-top:16px; color:#c0392b; font-size:0.88em;"></div>
+      <button class="btn-submit" onclick="submitApplication()">申請する</button>
+    </div>
+
+    <!-- 申請完了画面 -->
+    <div id="appliedView" style="display:none;">
+      <div style="text-align:center; padding:20px 0;">
+        <div style="font-size:56px; margin-bottom:12px;">📧</div>
+        <h2 style="color:#1a73e8; margin:0 0 8px 0;">申請を受け付けました</h2>
+        <p style="color:#666; font-size:0.9em; line-height:1.6;">
+          入力いただいたメールアドレスに確認メールを送信しました。<br>
+          メール内のリンクをクリックしてセットアップを開始してください。
+        </p>
+        <p style="color:#aaa; font-size:0.8em; margin-top:16px;">メールが届かない場合は迷惑メールフォルダをご確認ください。</p>
+      </div>
+    </div>
+
+    <!-- 認証エラー画面 -->
+    <div id="confirmErrorView" style="display:none;">
+     <div style="text-align:center; padding:20px 0;">
+        <div style="font-size:56px; margin-bottom:12px;">🚫</div>
+        <h2 style="color:#d93025; margin:0 0 8px 0;">認証エラー</h2>
+        <p style="color:#666; font-size:0.9em;" id="confirmErrorMsg"></p>
+      </div>
+    </div>
+    
+    <!-- 入力フォーム -->
+    <div id="formView" style="display:none;">
+      <label>Exhibition code
+        <input type="text" id="exCode" placeholder="e.g. IT26" maxlength="10">
+      </label>
+      <div class="hint">A short unique code for this exhibition.</div>
+
+      <label>Exhibition name
+      <input type="text" id="exName" value="<?= exName ?>" readonly style="background:#f0f0f0; color:#555;">
+      </label>
+
+      <label>Number of artworks
+        <input type="number" id="workCount" placeholder="e.g. 30" min="1" max="100" value="30">
+      </label>
+      <div class="hint">Maximum number of artworks. You can add more later if needed.</div>
+
+      <label>Your email
+        <input type="email" id="email" value="<?= email ?>" readonly style="background:#f0f0f0; color:#555;">
+      </label>
+      <div class="hint">Setup details and artwork sheet URL will be sent here.</div>
+
+      <div id="errorMsg"></div>
+      <button class="btn-submit" onclick="submitForm()">Set up exhibition</button>
+    </div>
+
+    <!-- ローディング -->
+    <div id="loadingView">
+      <div class="spinner"></div>
+      <div id="loadingMsg">Creating folders and sheets...</div>
+    </div>
+
+    <!-- 完了画面 -->
+    <div id="doneView">
+      <div class="check">✅</div>
+      <h2>Setup complete!</h2>
+      <p>Check your email for details.</p>
+      <div class="info-box" id="infoBox"></div>
+
+      <!-- 作品追加セクション -->
+      <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+        <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">Need more artworks?</p>
+        <div style="display:flex; gap:10px;">
+          <input type="number" id="addCount" placeholder="e.g. 10" min="1" max="100"
+            style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
+          <button onclick="submitAdd()"
+            style="padding:10px 16px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8;
+            border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+            Add
+          </button>
+        </div>
+        <div id="addMsg" style="display:none; margin-top:8px; font-size:0.85em; color:#1a73e8;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================
+    // テンプレート変数の受け取り
+    // =========================================================
+    const confirmedToken = '<?= confirmedToken ?>';
+    const confirmError   = '<?= confirmError ?>';
+    const applyExName    = '<?= exName ?>';
+    const applyOrganizer = '<?= organizer ?>';
+
+    // =========================================================
+    // 初期表示
+    // =========================================================
+    window.onload = function() {
+      if (confirmError) {
+        // 認証エラー
+        document.getElementById('confirmErrorMsg').innerText = confirmError;
+        document.getElementById('confirmErrorView').style.display = 'block';
+      } else if (confirmedToken) {
+        // 認証済み → セットアップフォームを表示
+        document.getElementById('formView').style.display = 'block';
+        // 認証済みメッセージを表示
+        const msg = document.createElement('div');
+        msg.style.cssText = 'background:#e6f4ea;border:1px solid #a8d5b5;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#2e7d32;font-size:0.88em;';
+        msg.innerText = '✅ メールアドレスが確認されました。セットアップを開始してください。';
+        document.getElementById('formView').insertBefore(msg, document.getElementById('formView').firstChild);
+      } else {
+        // 通常アクセス → 申請フォームを表示
+        document.getElementById('applyView').style.display = 'block';
+      }
+    };
+
+    // =========================================================
+    // 申請処理
+    // =========================================================
+    function submitApplication() {
+      const exName    = document.getElementById('applyExName').value.trim();
+      const venue     = document.getElementById('applyVenue').value.trim();
+      const startDate = document.getElementById('applyStartDate').value;
+      const organizer = document.getElementById('applyOrganizer').value.trim();
+      const email     = document.getElementById('applyEmail').value.trim();
+
+      const errEl = document.getElementById('applyError');
+      errEl.style.display = 'none';
+
+      if (!exName)    { errEl.innerText = '展覧会名を入力してください。'; errEl.style.display = 'block'; return; }
+      if (!venue)     { errEl.innerText = '開催場所を入力してください。'; errEl.style.display = 'block'; return; }
+      if (!startDate) { errEl.innerText = '開催予定日を入力してください。'; errEl.style.display = 'block'; return; }
+      if (!organizer) { errEl.innerText = '主催者名を入力してください。'; errEl.style.display = 'block'; return; }
+      if (!email)     { errEl.innerText = 'メールアドレスを入力してください。'; errEl.style.display = 'block'; return; }
+
+      document.querySelector('.btn-submit').disabled = true;
+      document.querySelector('.btn-submit').innerText = '送信中...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (!res.success) {
+            errEl.innerText = 'Error: ' + res.error;
+            errEl.style.display = 'block';
+            document.querySelector('.btn-submit').disabled = false;
+            document.querySelector('.btn-submit').innerText = '申請する';
+            return;
+          }
+          document.getElementById('applyView').style.display   = 'none';
+          document.getElementById('appliedView').style.display = 'block';
+        })
+        .withFailureHandler(err => {
+          errEl.innerText = 'Error: ' + err.message;
+          errEl.style.display = 'block';
+          document.querySelector('.btn-submit').disabled = false;
+          document.querySelector('.btn-submit').innerText = '申請する';
+        })
+        .submitApplication({ exName, venue, startDate, organizer, email });
+    }
+
+    // =========================================================
+    // エラー表示
+    // =========================================================
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.innerText = msg;
+      el.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorMsg').style.display = 'none';
+    }
+
+    // =========================================================
+    // フォーム送信
+    // =========================================================
+    function submitForm() {
+      
+      hideError();
+      const exCode    = document.getElementById('exCode').value.trim();
+      const exName    = document.getElementById('exName').value.trim();
+      const workCount = parseInt(document.getElementById('workCount').value) || 30;
+      const email     = document.getElementById('email').value.trim();
+
+      if (!exCode)   return showError('Please enter an exhibition code.');
+      if (!exName)   return showError('Please enter an exhibition name.');
+      if (!email)    return showError('Please enter your email address.');
+      if (workCount < 1 || workCount > 100) return showError('Number of artworks must be between 1 and 100.');
+
+      document.getElementById('formView').style.display    = 'none';
+      document.getElementById('loadingView').style.display = 'block';
+
+      google.script.run
+        .withSuccessHandler(onSetupComplete)
+        .withFailureHandler(onSetupError)
+        .runSetup({ exCode, exName, workCount, email, token: confirmedToken });
+    }
+
+    function onSetupComplete(result) {
+      if (!result.success) {
+        document.getElementById('loadingView').style.display = 'none';
+        document.getElementById('formView').style.display   = 'block';
+        showError('Error: ' + result.error);
+        return;
+      }
+      showDone(result);
+    }
+
+    function onSetupError(err) {
+      document.getElementById('loadingView').style.display = 'none';
+      document.getElementById('formView').style.display   = 'block';
+      showError('Error: ' + err.message);
+    }
+
+    // =========================================================
+    // 作品追加処理（1枚ずつ生成・保存）
+    // =========================================================
+    function submitAdd() {
+      const addCount = parseInt(document.getElementById('addCount').value);
+      if (!addCount || addCount < 1) return;
+      const exCode = document.getElementById('exCode').value.trim();
+      const addMsg = document.getElementById('addMsg');
+      addMsg.innerText     = 'Adding artworks...';
+      addMsg.style.display = 'block';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (!res.success) { addMsg.innerText = 'Error: ' + res.error; return; }
+          addMsg.innerText = `✅ ${addCount} artworks added successfully.`;
+          document.getElementById('addCount').value = '';
+        })
+        .withFailureHandler(err => { addMsg.innerText = 'Error: ' + err.message; })
+        .addArtworks({ exCode: exCode, addCount: addCount });
+    }
+
+    // =========================================================
+    // 完了画面表示
+    // =========================================================
+    function showDone(result) {
+      document.getElementById('loadingView').style.display = 'none';
+      document.getElementById('doneView').style.display   = 'block';
+      document.getElementById('infoBox').innerHTML = `
+        <div class="row"><span class="key">Exhibition code</span><span class="val">${result.exCode}</span></div>
+        <div class="row"><span class="key">Exhibition name</span><span class="val">${result.exName}</span></div>
+        <div class="row"><span class="key">Admin password</span><span class="val">${result.adminPass}</span></div>
+      `;
+    }
+
+  </script>
+</body>
+</html>

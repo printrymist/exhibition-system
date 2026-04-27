@@ -1449,10 +1449,37 @@
             return;
           }
           document.getElementById('exName').innerText = '✅ ' + data.exName;
+          if (sessionStorage.getItem('auth_' + ex)) {
+            document.getElementById('pwCard').style.display = 'none';
+            loadAllData(ex);
+            return;
+          }
           document.getElementById('pwCard').style.display = 'block';
           document.getElementById('pwInput').value = '';
           document.getElementById('pwError').innerText = '';
           setTimeout(() => document.getElementById('pwInput').focus(), 100);
+        });
+    }
+
+    function loadAllData(ex) {
+      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+      gasCall({ action: 'loadAllData', ex: ex })
+        .then(data => {
+          if (!data.success) {
+            document.getElementById('exName').innerText = '';
+            document.getElementById('exError').innerText = data.error;
+            return;
+          }
+          artworkData = data;
+          qrAllData = { artworks: data.qrList, exCode: ex };
+          document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
+          document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
+          document.getElementById('btnEditExName').style.display = 'inline-block';
+          buildFieldSettingGrid(data.captionFields, data.registrationFields);
+          selectTemplate('standard');
+          loadSavedTemplates();
+          document.getElementById('mainTabs').style.display = 'block';
+          switchMainTab('caption');
         });
     }
 
@@ -1470,26 +1497,9 @@
             document.getElementById('pwError').innerText = res.error;
             return;
           }
+          sessionStorage.setItem('auth_' + ex, '1');
           document.getElementById('pwCard').style.display = 'none';
-          document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
-          gasCall({ action: 'loadAllData', ex: ex })
-            .then(data => {
-              if (!data.success) {
-                document.getElementById('exName').innerText = '';
-                document.getElementById('exError').innerText = data.error;
-                return;
-              }
-              artworkData = data;
-              qrAllData = { artworks: data.qrList, exCode: ex };
-              document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
-              document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
-              document.getElementById('btnEditExName').style.display = 'inline-block';
-              buildFieldSettingGrid(data.captionFields, data.registrationFields);
-              selectTemplate('standard');
-              loadSavedTemplates();
-              document.getElementById('mainTabs').style.display = 'block';
-              switchMainTab('caption');
-            });
+          loadAllData(ex);
         });
     }
 

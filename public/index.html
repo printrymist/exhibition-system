@@ -1030,6 +1030,11 @@
         }
 
         if (result.action === "PROMPT_PASSWORD") {
+          if (localStorage.getItem("isAdmin_" + exVal) === "true") {
+            alert(t('pwSuccess'));
+            reloadApp();
+            return;
+          }
           document.getElementById('ansPwModal').style.display = 'flex';
           document.getElementById('ansPwInput').value = '';
           document.getElementById('ansPwInput').focus();

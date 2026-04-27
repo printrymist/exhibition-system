@@ -1,0 +1,2387 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: #f4f4f9;
+      color: #333;
+      padding: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      max-width: 700px;
+      margin: 0 auto 14px auto;
+    }
+
+    .card-title {
+      font-size: 0.95em;
+      font-weight: bold;
+      color: #1a73e8;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .ex-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .ex-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+
+    .ex-row input:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    .btn-load {
+      padding: 10px 20px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-load:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+
+    #exName {
+      font-size: 0.88em;
+      color: #1a73e8;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+
+    #exError {
+      font-size: 0.85em;
+      color: #d93025;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+
+    .layout-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .layout-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .layout-item label {
+      font-size: 0.78em;
+      color: #888;
+    }
+
+    .layout-item select {
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .layout-item input[type="range"] {
+      width: 90px;
+    }
+
+    .layout-item span {
+      font-size: 11px;
+      color: #1a73e8;
+      text-align: center;
+    }
+
+    #qrOffsetItem {
+      display: none;
+    }
+
+    .sub-section {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #f0f0f0;
+    }
+
+    .sub-section-title {
+      font-size: 0.78em;
+      color: #888;
+      margin-bottom: 6px;
+    }
+
+    .margin-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .margin-row label {
+      font-size: 0.78em;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .margin-row input[type="range"] {
+      width: 80px;
+    }
+
+    .margin-row span {
+      font-size: 11px;
+      color: #1a73e8;
+      min-width: 28px;
+    }
+
+    .fixed-text-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+
+    .fixed-text-row input[type="text"] {
+      flex: 1;
+      min-width: 120px;
+      padding: 4px 8px;
+      border: 1px solid #ffe082;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff8e1;
+    }
+
+    .fixed-text-row input[type="text"]:focus {
+      outline: none;
+      border-color: #f9a825;
+    }
+
+    .fixed-text-row select {
+      padding: 4px 6px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .fixed-text-row input[type="range"] {
+      width: 70px;
+    }
+
+    .fixed-text-row span {
+      font-size: 11px;
+      color: #1a73e8;
+      min-width: 26px;
+    }
+
+    .btn-exname {
+      padding: 4px 8px;
+      border: 1px solid #ffe082;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      background: white;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .btn-exname:hover {
+      background: #fff8e1;
+    }
+
+    .ftoggle-btn {
+      padding: 3px 7px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: white;
+      color: #555;
+    }
+
+    .ftoggle-btn.active {
+      background: #1a73e8;
+      color: white;
+      border-color: #1a73e8;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #eee;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: bold;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+    }
+
+    .tab:hover {
+      color: #1a73e8;
+    }
+
+    .tab.active {
+      color: #1a73e8;
+      border-bottom-color: #1a73e8;
+    }
+
+    .template-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .template-card {
+      border: 2px solid #eee;
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: white;
+    }
+
+    .template-card:hover {
+      border-color: #1a73e8;
+      background: #f0f7ff;
+    }
+
+    .template-card.selected {
+      border-color: #1a73e8;
+      background: #f0f7ff;
+    }
+
+    .template-card h4 {
+      font-size: 0.9em;
+      color: #1a73e8;
+      margin-bottom: 8px;
+    }
+
+    .template-preview {
+      font-size: 10px;
+      color: #555;
+      line-height: 1.8;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      padding: 8px;
+      background: #fafafa;
+      font-family: monospace;
+    }
+
+    .tpl-divider {
+      border-top: 1px solid #bbb;
+      margin: 3px 0;
+    }
+
+    .tpl-spacer {
+      height: 6px;
+    }
+
+    .tpl-qr {
+      text-align: right;
+      color: #1a73e8;
+      font-size: 9px;
+      margin-top: 4px;
+    }
+
+    .btn-customize {
+      width: 100%;
+      padding: 12px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    .btn-customize:hover {
+      background: #1557b0;
+    }
+
+    .fields-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .field-item,
+    .divider-item,
+    .spacer-item,
+    .group-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #eee;
+    }
+
+    .field-item {
+      background: #f9f9f9;
+    }
+
+    .divider-item {
+      background: #fafafa;
+      border-style: dashed;
+      color: #aaa;
+      font-size: 11px;
+    }
+
+    .spacer-item {
+      background: #fafafa;
+      border-style: dashed;
+      color: #aaa;
+      font-size: 11px;
+    }
+
+    .group-item {
+      background: #f0f7ff;
+      border-color: #c5d9f7;
+      flex-wrap: nowrap;
+    }
+
+    .insert-bar {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 20px;
+      padding: 0 4px;
+      opacity: 0.3;
+      transition: opacity 0.15s;
+    }
+
+    .insert-bar:hover {
+      opacity: 1;
+    }
+
+    .insert-bar-line {
+      flex: 1;
+      border-top: 1px dashed #1a73e8;
+    }
+
+    .insert-btn {
+      padding: 1px 8px;
+      border: 1px solid #1a73e8;
+      border-radius: 10px;
+      font-size: 10px;
+      color: #1a73e8;
+      background: white;
+      cursor: pointer;
+      margin: 0 4px;
+      white-space: nowrap;
+      line-height: 16px;
+    }
+
+    .insert-btn:hover {
+      background: #e8f0fe;
+    }
+
+    .move-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .move-btn {
+      width: 20px;
+      height: 18px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      background: white;
+      color: #555;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .move-btn:hover:not(:disabled) {
+      background: #e8f0fe;
+      border-color: #1a73e8;
+      color: #1a73e8;
+    }
+
+    .move-btn:disabled {
+      color: #ccc;
+      cursor: default;
+      border-color: #eee;
+    }
+
+    .field-item input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .field-name {
+      font-size: 0.82em;
+      color: #444;
+      width: 80px;
+      flex-shrink: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .field-controls {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex: 1;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+
+    .field-controls select {
+      padding: 2px 4px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .field-controls input[type="range"] {
+      flex: 1;
+      min-width: 50px;
+      max-width: 120px;
+    }
+
+    .field-controls span {
+      font-size: 11px;
+      color: #1a73e8;
+      width: 30px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .toggle-btn {
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: white;
+      color: #555;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn.active {
+      background: #1a73e8;
+      color: white;
+      border-color: #1a73e8;
+    }
+
+    .del-btn {
+      padding: 2px 6px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: white;
+      color: #ccc;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+
+    .del-btn:hover {
+      color: #d93025;
+      border-color: #d93025;
+    }
+
+    .divider-item hr {
+      flex: 1;
+      border: none;
+      border-top: 1px solid #ccc;
+    }
+
+    .spacer-item select {
+      padding: 2px 4px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .price-fmt {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      flex-shrink: 0;
+      border-left: 1px solid #eee;
+      padding-left: 4px;
+      margin-left: 2px;
+    }
+
+    .price-fmt select {
+      padding: 2px 3px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #888;
+    }
+
+    .price-fmt input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      cursor: pointer;
+    }
+
+    .price-fmt label {
+      font-size: 10px;
+      color: #888;
+      cursor: pointer;
+    }
+
+    .affix-wrap {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      flex-shrink: 0;
+      border-left: 1px solid #eee;
+      padding-left: 3px;
+      margin-left: 1px;
+    }
+
+    .affix-wrap input[type="text"] {
+      width: 48px;
+      padding: 2px 3px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    .affix-wrap input[type="text"]:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    .affix-label {
+      font-size: 9px;
+      color: #aaa;
+      flex-shrink: 0;
+      display: none;
+    }
+
+    .group-controls {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex: 1;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+
+    .group-controls select {
+      padding: 2px 4px;
+      border: 1px solid #c5d9f7;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
+      max-width: 85px;
+    }
+
+    .group-sep-input {
+      width: 44px;
+      padding: 2px 4px;
+      border: 1px solid #c5d9f7;
+      border-radius: 4px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .group-sep-label {
+      font-size: 10px;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    .group-controls input[type="range"] {
+      flex: 1;
+      min-width: 40px;
+      max-width: 100px;
+    }
+
+    .group-controls span {
+      font-size: 11px;
+      color: #1a73e8;
+      width: 28px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-preview {
+      flex: 1;
+      padding: 13px;
+      background: #f0f7ff;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-print {
+      flex: 1;
+      padding: 13px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-print:disabled {
+      background: #ddd;
+      color: #aaa;
+      cursor: not-allowed;
+    }
+
+    #previewArea {
+      display: none;
+    }
+
+    #previewFrame {
+      width: 100%;
+      height: 440px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+    }
+
+    .spinner-sm {
+      width: 18px;
+      height: 18px;
+      border: 3px solid #e0e0e0;
+      border-top: 3px solid #1a73e8;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* メインタブ */
+    .main-tab-bar {
+      display: none;
+      max-width: 700px;
+      margin: 0 auto 0 auto;
+    }
+
+    .main-tab-bar-inner {
+      display: flex;
+      border-bottom: 2px solid #eee;
+      background: white;
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+    }
+
+    .main-tab-btn {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      background: none;
+      font-size: 0.9em;
+      font-weight: bold;
+      cursor: pointer;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .main-tab-btn.active {
+      color: #1a73e8;
+      border-bottom-color: #1a73e8;
+      background: #f0f7ff;
+    }
+
+    .main-tab-btn:hover {
+      background: #f8f9ff;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div style="text-align:center; margin-bottom:20px;">
+    <h1 style="font-size:1.3em; color:#1a73e8;">🖨️ Exhibition Caption Manager</h1>
+    <p style="font-size:0.85em; color:#888; margin-top:4px;">Rohei Printer System</p>
+    <a id="linkToRegister" href="<?= appUrl ?>?page=register"
+      style="display:inline-block;margin-top:8px;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      ⚙️ 作品登録フォームへ
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Exhibition</div>
+    <div class="ex-row">
+      <input type="text" id="exCodeInput" placeholder="Enter exhibition code (e.g. IT26)" value="<?= ex ?>">
+      <button class="btn-load" id="btnLoad" onclick="loadExhibition()">Load</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div id="exName"></div>
+      <button id="btnEditExName" onclick="startEditExName()" style="display:none; padding:4px 10px; font-size:0.8em; border:1px solid #ccc; border-radius:6px; cursor:pointer; background:#f5f5f5;">✏️ 展覧会名を編集</button>
+    </div>
+    <div id="exNameEditArea" style="display:none; margin-top:8px;">
+      <input type="text" id="exNameInput" style="padding:8px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:70%;">
+      <button onclick="saveExName()" style="padding:8px 14px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; margin-left:6px;">Save</button>
+      <button onclick="cancelEditExName()" style="padding:8px 14px; background:#eee; color:#333; border:none; border-radius:6px; cursor:pointer; margin-left:4px;">Cancel</button>
+    </div>
+    <div id="exError"></div>
+  </div>
+
+  <!-- メインタブ -->
+  <div class="main-tab-bar" id="mainTabs">
+    <div class="main-tab-bar-inner">
+      <button class="main-tab-btn active" id="mainTabCaption" onclick="switchMainTab('caption')">
+        🖨️ Caption Print
+      </button>
+      <button class="main-tab-btn" id="mainTabQr" onclick="switchMainTab('qr')">
+        🔲 QR Print
+      </button>
+      <button class="main-tab-btn" id="mainTabForm" onclick="switchMainTab('form')">
+        📝 フォーム設定
+      </button>
+    </div>
+  </div>
+
+  <!-- キャプション印刷エリア -->
+  <div id="settingsArea" style="display:none;">
+
+    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
+      <div class="card-title">Page layout</div>
+      <div class="layout-row">
+        <div class="layout-item">
+          <label>Paper</label>
+          <select id="paperSize"><option value="A4">A4</option><option value="Letter">Letter</option></select>
+        </div>
+        <div class="layout-item">
+          <label>Orientation</label>
+          <select id="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+        </div>
+        <div class="layout-item">
+          <label>Columns</label>
+          <select id="cols"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select>
+        </div>
+        <div class="layout-item">
+          <label>Rows</label>
+          <select id="rows"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select>
+        </div>
+        <div class="layout-item">
+          <label>QR position</label>
+          <select id="qrPosition" onchange="onQrPositionChange()">
+            <optgroup label="Fixed">
+              <option value="top-left">Top left</option>
+              <option value="top-right">Top right</option>
+              <option value="bottom-left">Bottom left</option>
+              <option value="bottom-right" selected>Bottom right</option>
+              <option value="bottom-center">Bottom center</option>
+            </optgroup>
+            <optgroup label="Wrap (text flows around QR)">
+              <option value="wrap-left">Wrap left</option>
+              <option value="wrap-right">Wrap right</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="layout-item" id="qrOffsetItem">
+          <label>QR vertical offset</label>
+          <input type="range" id="qrOffset" min="0" max="50" value="0"
+            oninput="document.getElementById('qrOffsetVal').innerText=this.value+'mm'">
+          <span id="qrOffsetVal">0mm</span>
+        </div>
+        <div class="layout-item">
+          <label>QR size</label>
+          <input type="range" id="qrSize" min="10" max="50" value="20"
+            oninput="document.getElementById('qrSizeVal').innerText=this.value+'mm'">
+          <span id="qrSizeVal">20mm</span>
+        </div>
+        <div class="layout-item">
+          <label>QR logo</label>
+          <select id="qrLogo">
+            <option value="heart" selected>❤️ Heart</option>
+            <option value="like">👍 Like</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="layout-item">
+          <label>Text align</label>
+          <select id="textAlign"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+        </div>
+      </div>
+
+      <div class="sub-section">
+        <div class="sub-section-title">QR margin</div>
+        <div class="margin-row">
+          <label>Horizontal</label>
+          <input type="range" id="qrMarginH" min="0" max="15" value="3"
+            oninput="document.getElementById('qrMarginHVal').innerText=this.value+'mm'">
+          <span id="qrMarginHVal">3mm</span>
+          <label style="margin-left:10px;">Vertical</label>
+          <input type="range" id="qrMarginV" min="0" max="15" value="3"
+            oninput="document.getElementById('qrMarginVVal').innerText=this.value+'mm'">
+          <span id="qrMarginVVal">3mm</span>
+        </div>
+      </div>
+
+      <div class="sub-section">
+        <div class="sub-section-title">Text margin</div>
+        <div class="margin-row">
+          <label>Left</label>
+          <input type="range" id="textMarginLeft" min="0" max="20" value="5"
+            oninput="document.getElementById('textMarginLeftVal').innerText=this.value+'mm'">
+          <span id="textMarginLeftVal">5mm</span>
+          <label style="margin-left:10px;">Right</label>
+          <input type="range" id="textMarginRight" min="0" max="20" value="5"
+            oninput="document.getElementById('textMarginRightVal').innerText=this.value+'mm'">
+          <span id="textMarginRightVal">5mm</span>
+        </div>
+      </div>
+
+      <div class="sub-section">
+        <div class="sub-section-title">Fixed text (absolute position)</div>
+        <div class="fixed-text-row">
+          <input type="text" id="fixedTextValue" placeholder="e.g. GALLERY NAME">
+          <button class="btn-exname" onclick="document.getElementById('fixedTextValue').value=artworkData?artworkData.exName:''">exName</button>
+          <select id="fixedTextPos">
+            <option value="none" selected>None (off)</option>
+            <option value="top-left">Top left</option>
+            <option value="top-center">Top center</option>
+            <option value="top-right">Top right</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="bottom-center">Bottom center</option>
+            <option value="bottom-right">Bottom right</option>
+          </select>
+          <input type="range" id="fixedTextSize" min="6" max="20" value="9"
+            oninput="document.getElementById('fixedTextSizeVal').innerText=this.value+'pt'">
+          <span id="fixedTextSizeVal">9pt</span>
+          <button class="ftoggle-btn" id="fixedTextBold"   onclick="this.classList.toggle('active')">B</button>
+          <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
+        </div>
+        <div class="margin-row">
+          <label>H margin</label>
+          <input type="range" id="fixedTextMarginH" min="0" max="15" value="3"
+            oninput="document.getElementById('fixedTextMarginHVal').innerText=this.value+'mm'">
+          <span id="fixedTextMarginHVal">3mm</span>
+          <label style="margin-left:10px;">V margin</label>
+          <input type="range" id="fixedTextMarginV" min="0" max="15" value="3"
+            oninput="document.getElementById('fixedTextMarginVVal').innerText=this.value+'mm'">
+          <span id="fixedTextMarginVVal">3mm</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Caption style</div>
+      <div class="tabs">
+        <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 Templates</div>
+        <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ Custom</div>
+      </div>
+
+      <div id="templateTab">
+        <div class="template-grid">
+          <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')">
+            <h4>📋 Standard</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;">Artwork title</div>
+              <div class="tpl-divider"></div>
+              <div>Artist name</div>
+              <div style="color:#888;">Year · Technique</div>
+              <div style="color:#888;">¥ 000,000</div>
+              <div class="tpl-qr">[QR] ↘</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')">
+            <h4>✂️ Minimal</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;">Artwork title</div>
+              <div>Artist name</div>
+              <div class="tpl-qr">[QR] ↘</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_gallery" onclick="selectTemplate('gallery')">
+            <h4>🖼️ Gallery</h4>
+            <div class="template-preview">
+              <div style="color:#1a73e8; font-size:9px;">↖ [QR]</div>
+              <div class="tpl-divider"></div>
+              <div style="font-weight:bold;">Artwork title</div>
+              <div>Artist name</div>
+              <div class="tpl-spacer"></div>
+              <div style="color:#888;">Year · Technique</div>
+              <div style="color:#888;">¥ 000,000</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_bilingual" onclick="selectTemplate('bilingual')">
+            <h4>🌐 Bilingual</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;text-align:center;">作品タイトル</div>
+              <div style="text-align:center;color:#888;">Title in English</div>
+              <div class="tpl-divider"></div>
+              <div>作家名　Artist Name</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_print" onclick="selectTemplate('print')">
+            <h4>🎨 Print</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;">Artwork title</div>
+              <div>Artist name</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;">Technique · Edition · Size</div>
+              <div class="tpl-spacer"></div>
+              <div style="color:#888;">¥ 000,000</div>
+              <div style="color:#888;">framed: ¥ 000,000</div>
+              <div class="tpl-qr">[QR] ↘</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_jp_standard_l" onclick="selectTemplate('jp_standard_l')">
+            <h4>🇯🇵 作品名先・左</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;">作品名</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;">作家名</div>
+              <div style="color:#888;">制作年</div>
+              <div style="color:#888;">サイズ・技法・素材</div>
+              <div class="tpl-qr">価格 →</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_jp_standard_r" onclick="selectTemplate('jp_standard_r')">
+            <h4>🇯🇵 作品名先・右</h4>
+            <div class="template-preview">
+              <div style="font-weight:bold;text-align:right;">作品名</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;text-align:right;">作家名</div>
+              <div style="color:#888;text-align:right;">制作年</div>
+              <div style="color:#888;text-align:right;">サイズ・技法・素材</div>
+              <div style="color:#888;text-align:right;">価格</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_jp_artist_first_l" onclick="selectTemplate('jp_artist_first_l')">
+            <h4>🇯🇵 作家名先・左</h4>
+            <div class="template-preview">
+              <div style="color:#888;">作家名</div>
+              <div class="tpl-spacer"></div>
+              <div style="font-weight:bold;">作品名</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;">制作年・サイズ・技法</div>
+              <div style="color:#888;">価格</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_jp_artist_first_c" onclick="selectTemplate('jp_artist_first_c')">
+            <h4>🇯🇵 作家名先・中央</h4>
+            <div class="template-preview">
+              <div style="color:#888;text-align:center;">作家名</div>
+              <div style="font-weight:bold;text-align:center;">作品名</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;text-align:center;">制作年・サイズ・技法</div>
+              <div style="color:#888;">価格</div>
+            </div>
+          </div>
+          <div class="template-card" id="tpl_jp_artist_first_r" onclick="selectTemplate('jp_artist_first_r')">
+            <h4>🇯🇵 作家名先・右</h4>
+            <div class="template-preview">
+              <div style="color:#888;text-align:right;">作家名</div>
+              <div style="font-weight:bold;text-align:right;">作品名</div>
+              <div class="tpl-divider"></div>
+              <div style="color:#888;text-align:right;">制作年・サイズ・技法</div>
+              <div style="color:#888;text-align:right;">価格</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-customize" onclick="customizeTemplate()">⚙️ Customize this template →</button>
+
+        <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
+          <div style="font-size:0.78em;color:#888;margin-bottom:8px;padding-top:10px;border-top:1px solid #eee;">💾
+            Saved templates</div>
+          <div id="savedTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+        </div>
+      </div>
+
+      <div id="customTab" style="display:none;">
+        <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
+          ↑↓ to reorder · check to show · click ＋ between rows to insert
+        </p>
+        <div class="fields-list" id="fieldsGrid"></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="saveTemplateName" placeholder="Template name..."
+              style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+            <button onclick="saveTemplate()"
+              style="padding:8px 16px;background:#1a73e8;color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;white-space:nowrap;">
+              💾 Save
+            </button>
+          </div>
+          <div id="saveMsg" style="font-size:0.82em;margin-top:6px;min-height:16px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="btn-row">
+        <button class="btn-preview" onclick="generatePreview()">Preview</button>
+        <button class="btn-print" id="btnPrint" onclick="openPrint()" disabled>Print</button>
+      </div>
+    </div>
+
+    <div id="previewArea" class="card">
+      <div class="card-title">Preview</div>
+      <iframe id="previewFrame" scrolling="auto"></iframe>
+    </div>
+
+  </div>
+
+  <!-- QR Print エリア -->
+  <div id="qrPrintArea" style="display:none;">
+    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
+      <div class="card-title">🔲 QR Code Print</div>
+      <div class="layout-row">
+        <div class="layout-item">
+          <label>Paper</label>
+          <select id="qrPrintPaper">
+          <option value="A4" selected>A4</option>
+          <option value="Letter">Letter</option>
+        </select>
+        </div>
+        <div class="layout-item">
+          <label>QR size</label>
+          <select id="qrPrintSize">
+            <option value="15">極小 (15mm) - 6列×8行</option>
+            <option value="20">小 (20mm) - 5列×7行</option>
+            <option value="25" selected>中 (25mm) - 4列×6行</option>
+            <option value="30">大 (30mm) - 4列×5行</option>
+            <option value="45">特大 (45mm) - 3列×4行</option>
+            <option value="60">最大 (60mm) - 2列×3行</option>
+          </select>
+        </div>
+        <div class="layout-item">
+          <label>Logo</label>
+          <select id="qrPrintLogo">
+          <option value="heart" selected>❤️ Heart</option>
+          <option value="like">👍 Like</option>
+          <option value="none">None</option>
+        </select>
+        </div>
+        <div class="layout-item">
+          <label>対象</label>
+          <select id="qrPrintTarget">
+          <option value="0" selected>未登録のみ (status=0)</option>
+          <option value="1">登録済みのみ (status=1)</option>
+          <option value="all">全作品</option>
+        </select>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn-print" onclick="openQrPrint()" style="width:100%;padding:13px;">
+        🔲 Print QR Codes
+      </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- フォーム設定エリア -->
+  <div id="formSettingArea" style="display:none;">
+    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
+      <div class="card-title">📝 作品入力フォーム 項目設定</div>
+      <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
+        作家が inputUI から入力できる項目を設定します。チェックした項目が表示されます。
+      </p>
+      <div id="fieldSettingGrid"></div>
+      <div style="margin-top:16px;">
+        <button class="btn-print" onclick="saveFormSettings()" style="width:100%; padding:13px;">
+          💾 設定を保存
+        </button>
+        <div id="formSettingMsg" style="font-size:0.85em; margin-top:8px; min-height:16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script>
+    let artworkData     = null;
+  let printHtml       = '';
+  let currentTemplate = 'standard';
+  let spacerCount     = 0;
+  let groupCount      = 0;
+
+  const PRESETS = {
+    standard: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'field', name:'title',     size:14, bold:true,  italic:false, align:'inherit', maxLines:2, minSize:8,  currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'artist',    size:12, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7,  currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7,  currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7,  currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:11, bold:true,  italic:false, align:'inherit', maxLines:1, minSize:7,  currency:'¥', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    minimal: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'field', name:'title',  size:14, bold:true,  italic:false, align:'inherit', maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'artist', size:12, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+      ]
+    },
+    gallery: {
+      qrPosition:'top-left', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'divider' },
+        { type:'field', name:'title',     size:14, bold:true,  italic:false, align:'inherit', maxLines:2, minSize:8, currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'artist',    size:12, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'spacer', size:'4mm' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:11, bold:true,  italic:false, align:'inherit', maxLines:1, minSize:7, currency:'¥', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    bilingual: {
+      qrPosition:"bottom-left", qrOffset:0, textAlign:"center",
+      items:[
+        { type:"field", name:"title",    size:16, bold:true,  italic:false, align:"center", maxLines:2, minSize:8, currency:"", comma:false, prefix:"", suffix:"" },
+        { type:"field", name:"title_en", size:11, bold:false, italic:false, align:"center", maxLines:2, minSize:7, currency:"", comma:false, prefix:"", suffix:"" },
+        { type:"divider" },
+        { type:"spacer", size:"4mm" },
+        { type:"group", field1:"artist", field2:"artist_en", sep:"　　", size:12, bold:false, italic:false, align:"left", currency:"", comma:false },
+      ]
+    },
+    print: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'field', name:'title',        size:14, bold:true,  italic:false, align:'inherit', maxLines:2, minSize:8, currency:'',  comma:false, prefix:'',        suffix:'' },
+        { type:'field', name:'artist',       size:12, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'',        suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'technique',    size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'',        suffix:'' },
+        { type:'field', name:'edition',      size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'',        suffix:'' },
+        { type:'field', name:'size',         size:10, bold:false, italic:false, align:'inherit', maxLines:1, minSize:7, currency:'',  comma:false, prefix:'',        suffix:'' },
+        { type:'spacer', size:'3mm' },
+        { type:'field', name:'price',        size:11, bold:true,  italic:false, align:'inherit', maxLines:1, minSize:7, currency:'¥', comma:true,  prefix:'',        suffix:'' },
+        { type:'field', name:'price_framed', size:11, bold:true,  italic:false, align:'inherit', maxLines:1, minSize:7, currency:'¥', comma:true,  prefix:'framed: ', suffix:'' },
+      ]
+    },
+    jp_standard_l: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'field', name:'title',     size:16, bold:true,  italic:false, align:'left',  maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'artist',    size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'size',      size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'material',  size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    jp_standard_r: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'right',
+      items:[
+        { type:'field', name:'title',     size:16, bold:true,  italic:false, align:'right', maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'artist',    size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'size',      size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'material',  size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    jp_artist_first_l: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'left',
+      items:[
+        { type:'field', name:'artist',    size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'spacer', size:'4mm' },
+        { type:'field', name:'title',     size:16, bold:true,  italic:false, align:'left', maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'size',      size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'material',  size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:10, bold:false, italic:false, align:'left', maxLines:1, minSize:7, currency:'', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    jp_artist_first_c: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'center',
+      items:[
+        { type:'field', name:'artist',    size:10, bold:false, italic:false, align:'center', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'title',     size:16, bold:true,  italic:false, align:'center', maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'center', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'size',      size:10, bold:false, italic:false, align:'center', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'center', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'material',  size:10, bold:false, italic:false, align:'center', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:10, bold:false, italic:false, align:'left',   maxLines:1, minSize:7, currency:'', comma:true,  prefix:'', suffix:'' },
+      ]
+    },
+    jp_artist_first_r: {
+      qrPosition:'bottom-right', qrOffset:0, textAlign:'right',
+      items:[
+        { type:'field', name:'artist',    size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'title',     size:16, bold:true,  italic:false, align:'right', maxLines:2, minSize:8, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'divider' },
+        { type:'field', name:'year',      size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'size',      size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'technique', size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'material',  size:10, bold:false, italic:false, align:'right', maxLines:1, minSize:7, currency:'', comma:false, prefix:'', suffix:'' },
+        { type:'field', name:'price',     size:10, bold:false, italic:false, align:'left',  maxLines:1, minSize:7, currency:'', comma:true,  prefix:'', suffix:'' },
+      ]
+    }
+  };
+
+  window.onload = () => {
+    const ex = document.getElementById('exCodeInput').value.trim();
+    if (ex) loadExhibition();
+  };
+
+  // =========================================================
+  // メインタブ切り替え（Caption / QR）
+  // =========================================================
+  function switchMainTab(tab) {
+  document.getElementById('mainTabCaption').classList.toggle('active', tab === 'caption');
+  document.getElementById('mainTabQr').classList.toggle('active', tab === 'qr');
+  document.getElementById('mainTabForm').classList.toggle('active', tab === 'form');
+  document.getElementById('settingsArea').style.display  = tab === 'caption' ? 'block' : 'none';
+  document.getElementById('qrPrintArea').style.display   = tab === 'qr'      ? 'block' : 'none';
+  document.getElementById('formSettingArea').style.display = tab === 'form'  ? 'block' : 'none';
+}
+
+  function onQrPositionChange() {
+    const pos = document.getElementById('qrPosition').value;
+    document.getElementById('qrOffsetItem').style.display =
+      (pos.startsWith('top') || pos.startsWith('wrap')) ? 'flex' : 'none';
+  }
+
+  function switchTab(tab) {
+    document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
+    document.getElementById('tabCustom').classList.toggle('active', tab === 'custom');
+    document.getElementById('templateTab').style.display = tab === 'template' ? 'block' : 'none';
+    document.getElementById('customTab').style.display   = tab === 'custom'   ? 'block' : 'none';
+  }
+
+  function selectTemplate(name) {
+    currentTemplate = name;
+    document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('tpl_' + name).classList.add('selected');
+    const p = PRESETS[name];
+    document.getElementById('qrPosition').value      = p.qrPosition;
+    document.getElementById('qrOffset').value        = p.qrOffset || 0;
+    document.getElementById('qrOffsetVal').innerText = (p.qrOffset || 0) + 'mm';
+    document.getElementById('textAlign').value       = p.textAlign;
+    onQrPositionChange();
+  }
+
+  function customizeTemplate() {
+    buildFieldsGridFromPreset(currentTemplate);
+    switchTab('custom');
+  }
+
+  function loadExhibition() {
+    const ex = document.getElementById('exCodeInput').value.trim();
+    if (!ex) return;
+    document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+    document.getElementById('exError').innerText = '';
+    document.getElementById('btnLoad').disabled = true;
+    document.getElementById('mainTabs').style.display = 'none';
+    document.getElementById('settingsArea').style.display = 'none';
+    document.getElementById('qrPrintArea').style.display  = 'none';
+
+    google.script.run
+      .withSuccessHandler(data => {
+        document.getElementById('btnLoad').disabled = false;
+        if (!data.success) {
+          document.getElementById('exName').innerText = '';
+          document.getElementById('exError').innerText = data.error;
+          return;
+        }
+        artworkData = data;
+        qrAllData = { artworks: data.qrList, exCode: ex };
+        document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
+        document.getElementById('linkToRegister').href = '<?= appUrl ?>?page=register&ex=' + ex;
+        document.getElementById('btnEditExName').style.display = 'inline-block';
+        buildFieldSettingGrid(data.activeFields);
+        selectTemplate('standard');
+        loadSavedTemplates();
+        document.getElementById('mainTabs').style.display = 'block';
+        switchMainTab('caption');
+      })
+      .withFailureHandler(err => {
+        document.getElementById('btnLoad').disabled = false;
+        document.getElementById('exError').innerText = 'Error: ' + err.message;
+      })
+      .loadAllData(ex);
+  }
+
+  function startEditExName() {
+    const current = artworkData ? artworkData.exName : '';
+    document.getElementById('exNameInput').value = current;
+    document.getElementById('exNameEditArea').style.display = 'block';
+    document.getElementById('btnEditExName').style.display = 'none';
+  }
+
+  function cancelEditExName() {
+    document.getElementById('exNameEditArea').style.display = 'none';
+    document.getElementById('btnEditExName').style.display = 'inline-block';
+  }
+
+  function saveExName() {
+    const newName = document.getElementById('exNameInput').value.trim();
+    if (!newName) return alert('展覧会名を入力してください。');
+      const ex = document.getElementById('exCodeInput').value.trim();
+      google.script.run.withSuccessHandler(res => {
+      if (!res.success) { alert('Error: ' + res.error); return; }
+        artworkData.exName = newName;
+        document.getElementById('exName').innerText = '✅ ' + newName + ' (' + artworkData.artworks.length + ' artworks)';
+        cancelEditExName();
+      }).updateExName(ex, newName);
+  }
+
+  function normalizeInsertBars() {
+    const grid = document.getElementById('fieldsGrid');
+    grid.querySelectorAll('.insert-bar').forEach(b => b.remove());
+    grid.insertBefore(makeInsertBar(), grid.firstChild);
+    grid.querySelectorAll('[data-row]').forEach(row => row.after(makeInsertBar()));
+    const rows = Array.from(grid.querySelectorAll('[data-row]'));
+    rows.forEach((row, idx) => {
+      const up   = row.querySelector('.btn-up');
+      const down = row.querySelector('.btn-down');
+      if (up)   up.disabled   = (idx === 0);
+      if (down) down.disabled = (idx === rows.length - 1);
+    });
+  }
+
+  function moveUp(btn) {
+    const grid = document.getElementById('fieldsGrid');
+    const row  = btn.closest('[data-row]');
+    const rows = Array.from(grid.querySelectorAll('[data-row]'));
+    const idx  = rows.indexOf(row);
+    if (idx <= 0) return;
+    rows[idx - 1].before(row);
+    normalizeInsertBars();
+  }
+
+  function moveDown(btn) {
+    const grid = document.getElementById('fieldsGrid');
+    const row  = btn.closest('[data-row]');
+    const rows = Array.from(grid.querySelectorAll('[data-row]'));
+    const idx  = rows.indexOf(row);
+    if (idx >= rows.length - 1) return;
+    rows[idx + 1].after(row);
+    normalizeInsertBars();
+  }
+
+  function moveBtnsHtml() {
+    return `<div class="move-btns">
+      <button class="move-btn btn-up"   onclick="moveUp(this)"   title="Move up">▲</button>
+      <button class="move-btn btn-down" onclick="moveDown(this)" title="Move down">▼</button>
+    </div>`;
+  }
+
+  function makeInsertBar() {
+    const bar = document.createElement('div');
+    bar.className = 'insert-bar';
+    bar.innerHTML = `
+      <div class="insert-bar-line"></div>
+      <button class="insert-btn" onclick="insertAt(this,'divider')">＋ divider</button>
+      <button class="insert-btn" onclick="insertAt(this,'spacer')">＋ blank</button>
+      <button class="insert-btn" onclick="insertAt(this,'group')">＋ group</button>
+      <div class="insert-bar-line"></div>`;
+    return bar;
+  }
+
+  function insertAt(btn, type) {
+    const bar = btn.closest('.insert-bar');
+    let el;
+    if      (type === 'divider') el = makeDividerEl();
+    else if (type === 'spacer')  el = makeSpacerEl();
+    else if (type === 'group')   el = makeGroupEl();
+    bar.before(el);
+    normalizeInsertBars();
+  }
+
+  function fieldOptionsHtml(selected) {
+    const headers = (artworkData && artworkData.headers) ? artworkData.headers : [];
+    let html = `<option value="">—</option>`;
+    headers.forEach(h => {
+      html += `<option value="${h}" ${h === selected ? 'selected' : ''}>${h}</option>`;
+    });
+    return html;
+  }
+
+  function makeFieldEl(name, size, bold, italic, align, checked, maxLines, minSize, currency, comma, prefix, suffix) {
+    maxLines = maxLines  !== undefined ? maxLines  : 2;
+    minSize  = minSize   !== undefined ? minSize   : (name === 'title' ? 8 : 7);
+    currency = currency  !== undefined ? currency  : '';
+    comma    = comma     !== undefined ? comma     : false;
+    prefix   = prefix    !== undefined ? prefix    : '';
+    suffix   = suffix    !== undefined ? suffix    : '';
+
+    const el = document.createElement('div');
+    el.className     = 'field-item';
+    el.dataset.type  = 'field';
+    el.dataset.field = name;
+    el.setAttribute('data-row', '');
+
+    const curOptions = ['', '¥', '€', '$', '£'].map(c =>
+      `<option value="${c}" ${c === currency ? 'selected' : ''}>${c || '—'}</option>`
+    ).join('');
+
+    el.innerHTML = `
+      ${moveBtnsHtml()}
+      <input type="checkbox" id="field_${name}" ${checked ? 'checked' : ''}>
+      <span class="field-name" title="${name}">${name}</span>
+      <div class="field-controls">
+        <select id="align_${name}" title="Align">
+          <option value="inherit" ${align==='inherit'?'selected':''}>—</option>
+          <option value="left"    ${align==='left'   ?'selected':''}>L</option>
+          <option value="center"  ${align==='center' ?'selected':''}>C</option>
+          <option value="right"   ${align==='right'  ?'selected':''}>R</option>
+        </select>
+        <input type="range" id="size_${name}" min="6" max="28" value="${size}"
+          oninput="document.getElementById('sizeVal_${name}').innerText=this.value+'pt'">
+        <span id="sizeVal_${name}">${size}pt</span>
+        <button class="toggle-btn ${bold  ?'active':''}" id="bold_${name}"   onclick="this.classList.toggle('active')">B</button>
+        <button class="toggle-btn ${italic?'active':''}" id="italic_${name}" onclick="this.classList.toggle('active')"><i>I</i></button>
+        <select id="maxLines_${name}" title="Max lines">
+          <option value="1" ${maxLines===1?'selected':''}>1L</option>
+          <option value="2" ${maxLines===2?'selected':''}>2L</option>
+          <option value="3" ${maxLines===3?'selected':''}>3L</option>
+          <option value="0" ${maxLines===0?'selected':''}>∞</option>
+        </select>
+        <input type="range" id="minSize_${name}" min="5" max="14" value="${minSize}"
+          oninput="document.getElementById('minSizeVal_${name}').innerText=this.value+'↓'">
+        <span id="minSizeVal_${name}">${minSize}↓</span>
+        <div class="price-fmt" title="Price format">
+          <select id="currency_${name}">${curOptions}</select>
+          <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
+          <label for="comma_${name}">&#44;</label>
+        </div>
+        <div class="affix-wrap" title="Prefix / Suffix">
+          <span class="affix-label">pre</span>
+          <input type="text" id="prefix_${name}" value="${prefix.replace(/"/g,'&quot;')}" placeholder="pre">
+          <span class="affix-label">suf</span>
+          <input type="text" id="suffix_${name}" value="${suffix.replace(/"/g,'&quot;')}" placeholder="suf">
+        </div>
+      </div>
+      <button class="del-btn" onclick="removeRow(this)">✕</button>`;
+    return el;
+  }
+
+  function makeDividerEl() {
+    const el = document.createElement('div');
+    el.className    = 'divider-item';
+    el.dataset.type = 'divider';
+    el.setAttribute('data-row', '');
+    el.innerHTML = `
+      ${moveBtnsHtml()}
+      <hr><span style="flex:1;">── divider ──</span>
+      <button class="del-btn" onclick="removeRow(this)">✕</button>`;
+    return el;
+  }
+
+  function makeSpacerEl(size) {
+    spacerCount++;
+    const defSize = size || '4mm';
+    const el = document.createElement('div');
+    el.className    = 'spacer-item';
+    el.dataset.type = 'spacer';
+    el.dataset.id   = spacerCount;
+    el.setAttribute('data-row', '');
+    el.innerHTML = `
+      ${moveBtnsHtml()}
+      <span>↕ blank</span>
+      <select id="spacer_${spacerCount}">
+        <option value="2mm"  ${defSize==='2mm' ?'selected':''}>2mm</option>
+        <option value="4mm"  ${defSize==='4mm' ?'selected':''}>4mm</option>
+        <option value="6mm"  ${defSize==='6mm' ?'selected':''}>6mm</option>
+        <option value="8mm"  ${defSize==='8mm' ?'selected':''}>8mm</option>
+        <option value="10mm" ${defSize==='10mm'?'selected':''}>10mm</option>
+      </select>
+      <button class="del-btn" style="margin-left:auto;" onclick="removeRow(this)">✕</button>`;
+    return el;
+  }
+
+  function makeGroupEl(field1, field2, sep, size, bold, italic, align, currency, comma) {
+    groupCount++;
+    const gid    = groupCount;
+    field1   = field1   !== undefined ? field1   : '';
+    field2   = field2   !== undefined ? field2   : '';
+    sep      = sep      !== undefined ? sep      : '　';
+    size     = size     !== undefined ? size     : 10;
+    bold     = bold     !== undefined ? bold     : false;
+    italic   = italic   !== undefined ? italic   : false;
+    align    = align    !== undefined ? align    : 'inherit';
+    currency = currency !== undefined ? currency : '';
+    comma    = comma    !== undefined ? comma    : false;
+
+    const curOptions = ['', '¥', '€', '$', '£'].map(c =>
+      `<option value="${c}" ${c === currency ? 'selected' : ''}>${c || '—'}</option>`
+    ).join('');
+
+    const el = document.createElement('div');
+    el.className    = 'group-item';
+    el.dataset.type = 'group';
+    el.dataset.id   = gid;
+    el.setAttribute('data-row', '');
+    el.innerHTML = `
+      ${moveBtnsHtml()}
+      <span style="font-size:10px;color:#1a73e8;flex-shrink:0;font-weight:bold;">G</span>
+      <div class="group-controls">
+        <select id="gf1_${gid}">${fieldOptionsHtml(field1)}</select>
+        <span class="group-sep-label">+</span>
+        <input type="text" class="group-sep-input" id="gsep_${gid}" value="${sep}" title="Separator">
+        <span class="group-sep-label">+</span>
+        <select id="gf2_${gid}">${fieldOptionsHtml(field2)}</select>
+        <select id="galign_${gid}" title="Align">
+          <option value="inherit" ${align==='inherit'?'selected':''}>—</option>
+          <option value="left"    ${align==='left'   ?'selected':''}>L</option>
+          <option value="center"  ${align==='center' ?'selected':''}>C</option>
+          <option value="right"   ${align==='right'  ?'selected':''}>R</option>
+        </select>
+        <input type="range" id="gsize_${gid}" min="6" max="28" value="${size}"
+          oninput="document.getElementById('gsizeVal_${gid}').innerText=this.value+'pt'">
+        <span id="gsizeVal_${gid}">${size}pt</span>
+        <button class="toggle-btn ${bold  ?'active':''}" id="gbold_${gid}"   onclick="this.classList.toggle('active')">B</button>
+        <button class="toggle-btn ${italic?'active':''}" id="gitalic_${gid}" onclick="this.classList.toggle('active')"><i>I</i></button>
+        <div class="price-fmt" title="Price format">
+          <select id="gcurrency_${gid}">${curOptions}</select>
+          <input type="checkbox" id="gcomma_${gid}" ${comma ? 'checked' : ''}>
+          <label for="gcomma_${gid}">&#44;</label>
+        </div>
+      </div>
+      <button class="del-btn" onclick="removeRow(this)">✕</button>`;
+    return el;
+  }
+
+  function removeRow(btn) {
+    btn.closest('[data-row]').remove();
+    normalizeInsertBars();
+  }
+
+  function buildFieldsGridFromPreset(name) {
+    const grid = document.getElementById('fieldsGrid');
+    grid.innerHTML = '';
+    spacerCount = 0;
+    groupCount  = 0;
+    const preset     = PRESETS[name];
+    const usedFields = [];
+    preset.items.forEach(item => {
+      if (item.type === 'field') {
+        if (artworkData && !artworkData.headers.includes(item.name)) return;
+        usedFields.push(item.name);
+        grid.appendChild(makeFieldEl(
+          item.name, item.size, item.bold, item.italic, item.align, true,
+          item.maxLines, item.minSize, item.currency || '', item.comma || false,
+          item.prefix || '', item.suffix || ''
+        ));
+      } else if (item.type === 'divider') {
+        grid.appendChild(makeDividerEl());
+      } else if (item.type === 'spacer') {
+        grid.appendChild(makeSpacerEl(item.size || '4mm'));
+      } else if (item.type === 'group') {
+        grid.appendChild(makeGroupEl(
+          item.field1, item.field2, item.sep, item.size,
+          item.bold, item.italic, item.align, item.currency || '', item.comma || false
+        ));
+      }
+    });
+    if (artworkData) {
+      artworkData.headers.forEach(h => {
+        if (!usedFields.includes(h))
+          grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
+      });
+    }
+    normalizeInsertBars();
+  }
+
+  function collectItems() {
+    const items = [];
+    document.querySelectorAll('#fieldsGrid [data-row]').forEach(item => {
+      const type = item.dataset.type;
+      if (type === 'field') {
+        const name = item.dataset.field;
+        if (!item.querySelector('input[type="checkbox"]').checked) return;
+        items.push({
+          type:'field', name,
+          size:     parseInt(document.getElementById('size_'+name).value),
+          bold:     document.getElementById('bold_'+name).classList.contains('active'),
+          italic:   document.getElementById('italic_'+name).classList.contains('active'),
+          align:    document.getElementById('align_'+name).value,
+          maxLines: parseInt(document.getElementById('maxLines_'+name).value),
+          minSize:  parseInt(document.getElementById('minSize_'+name).value),
+          currency: document.getElementById('currency_'+name).value,
+          comma:    document.getElementById('comma_'+name).checked,
+          prefix:   document.getElementById('prefix_'+name).value,
+          suffix:   document.getElementById('suffix_'+name).value
+        });
+      } else if (type === 'divider') {
+        items.push({ type:'divider' });
+      } else if (type === 'spacer') {
+        items.push({ type:'spacer', size:document.getElementById('spacer_'+item.dataset.id).value });
+      } else if (type === 'group') {
+        const gid = item.dataset.id;
+        items.push({
+          type:     'group',
+          field1:   document.getElementById('gf1_'+gid).value,
+          field2:   document.getElementById('gf2_'+gid).value,
+          sep:      document.getElementById('gsep_'+gid).value,
+          size:     parseInt(document.getElementById('gsize_'+gid).value),
+          bold:     document.getElementById('gbold_'+gid).classList.contains('active'),
+          italic:   document.getElementById('gitalic_'+gid).classList.contains('active'),
+          align:    document.getElementById('galign_'+gid).value,
+          currency: document.getElementById('gcurrency_'+gid).value,
+          comma:    document.getElementById('gcomma_'+gid).checked
+        });
+      }
+    });
+    return items;
+  }
+
+  function getFixedText() {
+    const pos = document.getElementById('fixedTextPos').value;
+    if (pos === 'none') return null;
+    const value = document.getElementById('fixedTextValue').value.trim();
+    if (!value) return null;
+    return {
+      value:   value,
+      pos:     pos,
+      size:    parseInt(document.getElementById('fixedTextSize').value),
+      bold:    document.getElementById('fixedTextBold').classList.contains('active'),
+      italic:  document.getElementById('fixedTextItalic').classList.contains('active'),
+      marginH: parseInt(document.getElementById('fixedTextMarginH').value),
+      marginV: parseInt(document.getElementById('fixedTextMarginV').value)
+    };
+  }
+
+  function getSettings() {
+    const isCustom = document.getElementById('tabCustom').classList.contains('active');
+    const items = isCustom
+      ? collectItems()
+      : PRESETS[currentTemplate].items.filter(item =>
+          item.type !== 'field' || (artworkData && artworkData.headers.includes(item.name))
+        );
+    return {
+      paperSize:       document.getElementById('paperSize').value,
+      cols:            parseInt(document.getElementById('cols').value),
+      rows:            parseInt(document.getElementById('rows').value),
+      orientation:     document.getElementById('orientation').value,
+      textAlign:       document.getElementById('textAlign').value,
+      textMarginLeft:  parseInt(document.getElementById('textMarginLeft').value),
+      textMarginRight: parseInt(document.getElementById('textMarginRight').value),
+      qrPosition:      document.getElementById('qrPosition').value,
+      qrOffset:        parseInt(document.getElementById('qrOffset').value),
+      qrSize:          parseInt(document.getElementById('qrSize').value),
+      qrMarginH:       parseInt(document.getElementById('qrMarginH').value),
+      qrMarginV:       parseInt(document.getElementById('qrMarginV').value),
+      fixedText:       getFixedText(),
+      items:           items
+    };
+  }
+
+  function formatValue(val, currency, comma) {
+    if (!currency && !comma) return val;
+    const num = parseFloat(val.toString().replace(/[^0-9.-]/g, ''));
+    if (isNaN(num)) return val;
+    const str = comma ? Math.round(num).toLocaleString('ja-JP') : Math.round(num).toString();
+    return currency ? currency + str : str;
+  }
+
+  function generatePreview() {
+    const settings = getSettings();
+    if (!settings.items.some(i => i.type === 'field' || i.type === 'group')) {
+      alert('Please select at least one field.'); return;
+    }
+    printHtml = buildPrintHtml(settings);
+    const frame = document.getElementById('previewFrame');
+    frame.srcdoc = printHtml;
+    frame.addEventListener('load', function() {
+      autoFitText(frame.contentWindow.document, frame.contentWindow);
+    }, { once:true });
+    document.getElementById('previewArea').style.display = 'block';
+    document.getElementById('btnPrint').disabled = false;
+  }
+
+  function buildPrintHtml(s) {
+    const paperDims = {
+      A4:     { portrait:['210mm','297mm'], landscape:['297mm','210mm'] },
+      Letter: { portrait:['216mm','279mm'], landscape:['279mm','216mm'] }
+    };
+    const [pageW, pageH] = paperDims[s.paperSize][s.orientation];
+    const perPage  = s.cols * s.rows;
+    const qrSizeMm = s.qrSize    + 'mm';
+    const qrMH     = s.qrMarginH + 'mm';
+    const qrMV     = s.qrMarginV + 'mm';
+    const tML      = s.textMarginLeft  + 'mm';
+    const tMR      = s.textMarginRight + 'mm';
+
+    function buildFixedTextStyle(ft) {
+      const mH = ft.marginH + 'mm';
+      const mV = ft.marginV + 'mm';
+      const pos = ft.pos;
+      const isTop    = pos.startsWith('top');
+      const isLeft   = pos.endsWith('left');
+      const isRight  = pos.endsWith('right');
+      const isCenter = pos.endsWith('center');
+      let style = `position:absolute;z-index:2;font-size:${ft.size}pt;line-height:1.3;`;
+      style += ft.bold   ? 'font-weight:bold;'  : 'font-weight:normal;';
+      style += ft.italic ? 'font-style:italic;' : 'font-style:normal;';
+      style += isTop ? `top:${mV};` : `bottom:${mV};`;
+      if (isLeft)   style += `left:${mH};text-align:left;`;
+      if (isRight)  style += `right:${mH};text-align:right;`;
+      if (isCenter) style += `left:${mH};right:${mH};text-align:center;`;
+      return style;
+    }
+
+    function buildContent(art) {
+      let html = '';
+      s.items.forEach(item => {
+        if (item.type === 'field') {
+          let val = (art[item.name] || '').toString().trim();
+          if (!val) return;
+          val = formatValue(val, item.currency || '', item.comma || false);
+          val = (item.prefix || '') + val + (item.suffix || '');
+          const align    = item.align !== 'inherit' ? item.align : s.textAlign;
+          const weight   = item.bold   ? 'bold'   : 'normal';
+          const fstyle   = item.italic ? 'italic' : 'normal';
+          const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
+          const minSize  = item.minSize  !== undefined ? item.minSize  : 7;
+          html += `<div class="auto-fit" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
+                + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
+                + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+                + `${val}</div>`;
+        } else if (item.type === 'group') {
+          const v1 = item.field1 ? (art[item.field1] || '').toString().trim() : '';
+          const v2 = item.field2 ? (art[item.field2] || '').toString().trim() : '';
+          if (!v1 && !v2) return;
+          const fv1 = v1 ? formatValue(v1, item.currency || '', item.comma || false) : '';
+          const fv2 = v2 ? formatValue(v2, item.currency || '', item.comma || false) : '';
+          const combined = (fv1 && fv2) ? fv1 + item.sep + fv2 : (fv1 || fv2);
+          const align  = item.align !== 'inherit' ? item.align : s.textAlign;
+          const weight = item.bold   ? 'bold'   : 'normal';
+          const fstyle = item.italic ? 'italic' : 'normal';
+          html += `<div style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
+                + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+                + `${combined}</div>`;
+        } else if (item.type === 'divider') {
+          html += `<hr style="border:none;border-top:1px solid #ccc;margin:4px 0;">`;
+        } else if (item.type === 'spacer') {
+          html += `<div style="height:${item.size};"></div>`;
+        }
+      });
+      return html;
+    }
+
+    function buildQrImg(art) {
+      const url = art.qr_url;
+      if (!url) return `<div style="width:${qrSizeMm};height:${qrSizeMm};background:#eee;display:flex;align-items:center;`
+          + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
+      const logo = document.getElementById('qrLogo').value;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const qr = qrcode(0, 'H');
+      qr.addData(url);
+      qr.make();
+      const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
+      canvas.width = size;
+      canvas.height = size;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#333333';
+      for (let row = 0; row < qr.getModuleCount(); row++) {
+        for (let col = 0; col < qr.getModuleCount(); col++) {
+          if (qr.isDark(row, col)) {
+            ctx.fillRect((col+QR_MARGIN)*QR_CELL_SIZE, (row+QR_MARGIN)*QR_CELL_SIZE, QR_CELL_SIZE, QR_CELL_SIZE);
+          }
+        }
+      }
+      const cx = size/2, cy = size/2, hs = size*0.18;
+      if (logo === 'heart') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + hs * 0.5);
+        ctx.bezierCurveTo(cx - hs, cy - hs * 0.5, cx - hs * 0.5, cy - hs, cx, cy - hs * 0.4);
+        ctx.bezierCurveTo(cx + hs * 0.5, cy - hs, cx + hs, cy - hs * 0.5, cx, cy + hs * 0.5);
+        ctx.fill();
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+      } else if (logo === 'like') {
+        const sc = hs * 1.3 / LIKE_SIZE;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(sc, sc);
+        ctx.translate(-LIKE_PCX, -LIKE_PCY);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill(LIKE_PATH1);
+        ctx.fill(LIKE_PATH2);
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 8 / sc;
+        ctx.stroke(LIKE_PATH1);
+        ctx.stroke(LIKE_PATH2);
+        ctx.restore();
+      }
+      return `<img src="${canvas.toDataURL('image/png')}" style="width:${qrSizeMm};height:${qrSizeMm};display:block;">`;
+    }
+
+    function buildCard(art) {
+      const pos     = s.qrPosition;
+      const offset  = s.qrOffset;
+      const content = buildContent(art);
+      const qrImg   = buildQrImg(art);
+      const textDiv = `<div style="padding-left:${tML};padding-right:${tMR};">${content}</div>`;
+      const ftHtml  = s.fixedText
+        ? `<div style="${buildFixedTextStyle(s.fixedText)}">${s.fixedText.value}</div>`
+        : '';
+
+      if (pos === 'wrap-left' || pos === 'wrap-right') {
+        const floatDir = pos === 'wrap-left' ? 'left' : 'right';
+        const mTop = offset > 0 ? `calc(${offset}mm + ${qrMV})` : qrMV;
+        return `<div style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
+  ${ftHtml}
+  
+  <div style="float:${floatDir};margin:${mTop} ${qrMH} ${qrMV} ${qrMH};line-height:0;">${qrImg}</div>
+  ${textDiv}
+  <div style="clear:both;"></div>
+</div>`;
+      }
+
+      let qrStyle = 'position:absolute;line-height:0;z-index:1;';
+      switch (pos) {
+        case 'top-left':      qrStyle += `top:calc(${offset}mm + ${qrMV});left:${qrMH};`;       break;
+        case 'top-right':     qrStyle += `top:calc(${offset}mm + ${qrMV});right:${qrMH};`;      break;
+        case 'bottom-left':   qrStyle += `bottom:${qrMV};left:${qrMH};`;                        break;
+        case 'bottom-right':  qrStyle += `bottom:${qrMV};right:${qrMH};`;                       break;
+        case 'bottom-center': qrStyle += `bottom:${qrMV};left:50%;transform:translateX(-50%);`; break;
+      }
+      return `<div style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
+  ${ftHtml}
+  <div style="${qrStyle}">${qrImg}</div>
+  ${textDiv}
+</div>`;
+    }
+
+    const cards = artworkData.artworks.map(art => buildCard(art));
+    const pages = [];
+    for (let i = 0; i < cards.length; i += perPage) pages.push(cards.slice(i, i + perPage));
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:sans-serif; background:white; }
+.page {
+  width:${pageW}; height:${pageH}; padding:8mm;
+  display:grid;
+  grid-template-columns:repeat(${s.cols}, 1fr);
+  grid-template-rows:repeat(${s.rows}, 1fr);
+  gap:3mm; overflow:hidden;
+  page-break-after:always; break-after:page;
+}
+.page > div { min-height:0; min-width:0; }
+@media print {
+  @page { size:${s.paperSize} ${s.orientation}; margin:0; }
+  body  { margin:0; }
+  .page { page-break-after:always; break-after:page; }
+}
+</style></head><body>
+${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
+</body></html>`;
+  }
+
+  function autoFitText(doc, win) {
+    doc.querySelectorAll('.auto-fit').forEach(function(el) {
+      var maxLines = parseInt(el.dataset.maxLines) || 2;
+      var minSize  = parseFloat(el.dataset.minSize) || 7;
+      if (maxLines === 0) return;
+      var size = parseFloat(el.dataset.size);
+      var lh   = parseFloat(win.getComputedStyle(el).lineHeight);
+      if (!lh || isNaN(lh)) lh = size * 1.4;
+      var maxH = lh * maxLines;
+      el.style.overflow = 'hidden';
+      while (el.scrollHeight > maxH + 2 && size > minSize) {
+        size -= 0.5;
+        el.style.fontSize = size + 'pt';
+        lh = parseFloat(win.getComputedStyle(el).lineHeight);
+        if (!isNaN(lh)) maxH = lh * maxLines;
+      }
+      if (el.scrollHeight > maxH + 2) {
+        el.style.display         = '-webkit-box';
+        el.style.webkitLineClamp = maxLines;
+        el.style.webkitBoxOrient = 'vertical';
+      }
+    });
+  }
+
+  function openPrint() {
+    const win = window.open('', '_blank');
+    win.document.write(printHtml);
+    win.document.close();
+    setTimeout(function() {
+      autoFitText(win.document, win);
+      setTimeout(function() { win.focus(); win.print(); }, 300);
+    }, 100);
+  }
+
+  // =========================================================
+  // テンプレート保存・読み込み
+  // =========================================================
+  function loadSavedTemplates() {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res.success || res.templates.length === 0) return;
+        const section = document.getElementById('savedTemplatesSection');
+        const grid    = document.getElementById('savedTemplatesGrid');
+        grid.innerHTML = '';
+        res.templates.forEach(tpl => {
+          const card = document.createElement('div');
+          card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
+          card.innerHTML = `
+            <div style="font-size:0.85em;font-weight:bold;color:#1a73e8;margin-bottom:6px;padding-right:20px;">${tpl.name}</div>
+            <div style="font-size:0.72em;color:#aaa;margin-bottom:8px;">${tpl.createdAt}</div>
+            <button onclick="loadSavedTemplate(this)" data-settings='${tpl.settingsJson}'
+              style="width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;">
+              Load
+            </button>
+            <button onclick="deleteSavedTemplate('${tpl.name.replace(/'/g,'\x27')}')"
+              style="position:absolute;top:6px;right:6px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:2px 5px;">✕</button>`;
+          grid.appendChild(card);
+        });
+        section.style.display = 'block';
+      })
+      .withFailureHandler(err => console.log('loadSavedTemplates error:', err.message))
+      .getCaptionTemplates();
+  }
+
+  function loadSavedTemplate(btn) {
+    try {
+      const settings = JSON.parse(btn.dataset.settings);
+      if (settings.paperSize)   document.getElementById('paperSize').value   = settings.paperSize;
+      if (settings.orientation) document.getElementById('orientation').value = settings.orientation;
+      if (settings.cols)        document.getElementById('cols').value        = settings.cols;
+      if (settings.rows)        document.getElementById('rows').value        = settings.rows;
+      if (settings.textAlign)   document.getElementById('textAlign').value   = settings.textAlign;
+      if (settings.qrPosition)  document.getElementById('qrPosition').value  = settings.qrPosition;
+      if (settings.qrSize !== undefined) {
+        document.getElementById('qrSize').value    = settings.qrSize;
+        document.getElementById('qrSizeVal').innerText = settings.qrSize + 'mm';
+      }
+      if (settings.qrOffset !== undefined) {
+        document.getElementById('qrOffset').value   = settings.qrOffset;
+        document.getElementById('qrOffsetVal').innerText = settings.qrOffset + 'mm';
+      }
+      if (settings.qrMarginH !== undefined) {
+        document.getElementById('qrMarginH').value  = settings.qrMarginH;
+        document.getElementById('qrMarginHVal').innerText = settings.qrMarginH + 'mm';
+      }
+      if (settings.qrMarginV !== undefined) {
+        document.getElementById('qrMarginV').value  = settings.qrMarginV;
+        document.getElementById('qrMarginVVal').innerText = settings.qrMarginV + 'mm';
+      }
+      if (settings.textMarginLeft !== undefined) {
+        document.getElementById('textMarginLeft').value  = settings.textMarginLeft;
+        document.getElementById('textMarginLeftVal').innerText = settings.textMarginLeft + 'mm';
+      }
+      if (settings.textMarginRight !== undefined) {
+        document.getElementById('textMarginRight').value  = settings.textMarginRight;
+        document.getElementById('textMarginRightVal').innerText = settings.textMarginRight + 'mm';
+      }
+      if (settings.fixedText) {
+        document.getElementById('fixedTextValue').value  = settings.fixedText.value  || '';
+        document.getElementById('fixedTextPos').value    = settings.fixedText.pos    || 'none';
+        document.getElementById('fixedTextSize').value   = settings.fixedText.size   || 9;
+        document.getElementById('fixedTextSizeVal').innerText = (settings.fixedText.size || 9) + 'pt';
+        document.getElementById('fixedTextMarginH').value = settings.fixedText.marginH || 3;
+        document.getElementById('fixedTextMarginHVal').innerText = (settings.fixedText.marginH || 3) + 'mm';
+        document.getElementById('fixedTextMarginV').value = settings.fixedText.marginV || 3;
+        document.getElementById('fixedTextMarginVVal').innerText = (settings.fixedText.marginV || 3) + 'mm';
+        document.getElementById('fixedTextBold').classList.toggle('active',   !!settings.fixedText.bold);
+        document.getElementById('fixedTextItalic').classList.toggle('active', !!settings.fixedText.italic);
+      } else {
+        document.getElementById('fixedTextPos').value = 'none';
+      }
+      onQrPositionChange();
+      if (settings.items) {
+        const grid = document.getElementById('fieldsGrid');
+        grid.innerHTML = '';
+        spacerCount = 0;
+        groupCount  = 0;
+        const usedFields = [];
+        settings.items.forEach(item => {
+          if (item.type === 'field') {
+            if (artworkData && !artworkData.headers.includes(item.name)) return;
+            usedFields.push(item.name);
+            grid.appendChild(makeFieldEl(
+              item.name, item.size, item.bold, item.italic, item.align, true,
+              item.maxLines, item.minSize, item.currency || '', item.comma || false,
+              item.prefix || '', item.suffix || ''
+            ));
+          } else if (item.type === 'divider') {
+            grid.appendChild(makeDividerEl());
+          } else if (item.type === 'spacer') {
+            grid.appendChild(makeSpacerEl(item.size || '4mm'));
+          } else if (item.type === 'group') {
+            grid.appendChild(makeGroupEl(
+              item.field1, item.field2, item.sep, item.size,
+              item.bold, item.italic, item.align, item.currency || '', item.comma || false
+            ));
+          }
+        });
+        if (artworkData) {
+          artworkData.headers.forEach(h => {
+            if (!usedFields.includes(h))
+              grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
+          });
+        }
+        normalizeInsertBars();
+      }
+      switchTab('custom');
+    } catch(e) {
+      alert('Load error: ' + e.message);
+    }
+  }
+
+  function saveTemplate() {
+    const name = document.getElementById('saveTemplateName').value.trim();
+    if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
+    const settings = getSettings();
+    const json = JSON.stringify(settings);
+    showSaveMsg('Saving...', '#888');
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res.success) {
+          showSaveMsg(res.overwritten ? `"${name}" updated.` : `"${name}" saved.`, '#1a73e8');
+          document.getElementById('saveTemplateName').value = '';
+          loadSavedTemplates();
+        } else {
+          showSaveMsg('Error: ' + res.error, '#d93025');
+        }
+      })
+      .withFailureHandler(err => showSaveMsg('Error: ' + err.message, '#d93025'))
+      .saveCaptionTemplate(name, json);
+  }
+
+  function deleteSavedTemplate(name) {
+    if (!confirm(`Delete "${name}"?`)) return;
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res.success) loadSavedTemplates();
+        else alert('Error: ' + res.error);
+      })
+      .withFailureHandler(err => alert('Error: ' + err.message))
+      .deleteCaptionTemplate(name);
+  }
+
+  function showSaveMsg(msg, color) {
+    const el = document.getElementById('saveMsg');
+    el.innerText = msg;
+    el.style.color = color || '#333';
+  }
+
+  // =========================================================
+  // QRコード一覧印刷
+  // =========================================================
+  const LIKE_PATH1 = new Path2D('M 819.363281 444.765625 C 828.230469 440.285156 834.960938 429.640625 830.355469 419.574219 C 828.964844 416.523438 826.480469 413.871094 823.691406 411.714844 C 827.027344 408.5 829.164062 404.019531 829.800781 399.296875 C 830.671875 392.785156 828.707031 385.941406 823.648438 381.558594 C 821.269531 379.511719 818.308594 378.269531 815.113281 377.585938 C 811.023438 376.710938 806.527344 376.753906 802.761719 376.703125 C 788.328125 376.503906 773.847656 377.34375 759.429688 378.058594 C 754.40625 378.308594 749.425781 378.746094 744.445312 379.40625 C 746.15625 374.992188 747.683594 370.511719 748.96875 365.949219 C 753.261719 350.726562 755.917969 332.398438 750.316406 317.105469 C 748.667969 312.601562 745.136719 307.503906 740.695312 304.113281 C 737.460938 301.644531 733.753906 300.078125 729.953125 299.980469 C 724.816406 299.847656 721.425781 302.441406 719.140625 306.320312 C 716.582031 310.671875 715.679688 316.941406 714.707031 320.984375 C 714.261719 322.828125 713.777344 324.652344 713.269531 326.476562 C 712.695312 328.554688 712.015625 330.605469 711.21875 332.617188 C 709.507812 336.953125 707.558594 341.191406 705.714844 345.46875 C 701.617188 354.976562 696.261719 365.855469 689.042969 374.722656 C 682.578125 382.667969 674.589844 388.953125 664.566406 390.792969 L 664.566406 494.488281 C 678.109375 499.101562 689.910156 504.277344 704.492188 506.675781 C 710.042969 507.589844 716.003906 507.046875 721.613281 507.277344 C 735.460938 507.855469 749.320312 508.066406 763.140625 509.109375 C 769.820312 509.609375 783.554688 509.839844 793.621094 506.78125 C 801.765625 504.308594 807.480469 499.578125 807.8125 492.382812 C 808.074219 486.722656 806.332031 483.03125 803.617188 480.488281 C 807.210938 480.035156 810.722656 479.222656 813.976562 477.679688 C 823.109375 473.363281 830.1875 462.453125 825.492188 452.1875 C 824.1875 449.335938 821.929688 446.839844 819.371094 444.761719 Z');
+const LIKE_PATH2 = new Path2D('M 604.878906 390.714844 L 604.878906 494.863281 C 604.878906 498.5625 606.34375 502.101562 608.960938 504.714844 C 611.574219 507.328125 615.117188 508.792969 618.816406 508.792969 L 650.625 508.792969 C 654.320312 508.792969 657.871094 507.328125 660.484375 504.714844 C 663.101562 502.101562 664.566406 498.5625 664.566406 494.863281 L 664.566406 390.714844 C 664.566406 387.019531 663.101562 383.476562 660.484375 380.863281 C 657.871094 378.25 654.328125 376.785156 650.625 376.785156 L 618.816406 376.785156 C 615.117188 376.785156 611.574219 378.25 608.960938 380.863281 C 606.34375 383.476562 604.878906 387.019531 604.878906 390.714844 Z');
+const LIKE_PCX = 718, LIKE_PCY = 404.5, LIKE_SIZE = 228;
+  const QR_CELL_SIZE     = 10; // 1モジュールのピクセルサイズ
+  const QR_MARGIN        = 4;  // QRコード周囲の余白（モジュール数）
+
+  const FORM_FIELD_DEFS = [
+    { name:'title',        label:'タイトル（日本語）',  required: true  },
+    { name:'title_en',     label:'タイトル（英語）',    required: false },
+    { name:'year',         label:'制作年',              required: false },
+    { name:'series',       label:'シリーズ名',          required: false },
+    { name:'technique',    label:'技法',                required: false },
+    { name:'material',     label:'素材・支持体',        required: false },
+    { name:'size',         label:'サイズ',              required: false },
+    { name:'edition',      label:'エディション',        required: false },
+    { name:'price',        label:'価格',                required: false },
+    { name:'price_framed', label:'額装価格',            required: false },
+    { name:'certificate',  label:'証明書',              required: false },
+    { name:'collection',   label:'コレクション',        required: false },
+    { name:'courtesy',     label:'クレジット',          required: false },
+    { name:'note',         label:'備考',                required: false },
+    { name:'artist_note',  label:'作家コメント',        required: false },
+    { name:'artist_en',    label:'作家名（英語）',      required: false },
+    { name:'birth_year',   label:'生年',                required: false },
+    { name:'death_year',   label:'没年',                required: false },
+    { name:'birthplace',   label:'出身地',              required: false },
+  ];
+
+  let qrAllData = null; // 全作品QRデータ（status=0含む）
+
+  function buildFieldSettingGrid(activeFields) {
+    const grid = document.getElementById('fieldSettingGrid');
+    grid.innerHTML = '';
+    FORM_FIELD_DEFS.forEach(def => {
+      const active = activeFields ? activeFields.find(f => f.name === def.name) : null;
+      const checked = active ? true : false;
+      const required = active ? active.required : def.required;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;';
+      row.innerHTML = `
+        <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''}
+          style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
+        <span style="flex:1; font-size:0.88em; color:#333;">${def.label}</span>
+        <span style="font-size:0.78em; color:#aaa; font-family:monospace;">${def.name}</span>
+        <select id="freq_${def.name}"
+          style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+          <option value="false" ${!required ? 'selected' : ''}>任意</option>
+          <option value="true"  ${required  ? 'selected' : ''}>必須</option>
+        </select>`;
+      grid.appendChild(row);
+    });
+  }
+
+  function saveFormSettings() {
+    const activeFields = [];
+    FORM_FIELD_DEFS.forEach(def => {
+      const checked = document.getElementById('fcheck_' + def.name).checked;
+      if (!checked) return;
+      const required = document.getElementById('freq_' + def.name).value === 'true';
+      activeFields.push({ name: def.name, required: required });
+    });
+    const msg = document.getElementById('formSettingMsg');
+    msg.style.color = '#888';
+    msg.innerText = '保存中...';
+    const ex = document.getElementById('exCodeInput').value.trim();
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res.success) {
+          msg.style.color = '#1a73e8';
+          msg.innerText = '✅ 保存しました。';
+        } else {
+          msg.style.color = '#d93025';
+          msg.innerText = 'Error: ' + res.error;
+        }
+      })
+      .withFailureHandler(err => {
+        msg.style.color = '#d93025';
+        msg.innerText = 'Error: ' + err.message;
+      })
+      .saveActiveFields(ex, JSON.stringify(activeFields));
+  }
+
+
+  function loadQrData(ex) {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res.success) return;
+        qrAllData = res;
+      })
+      .withFailureHandler(err => console.log('loadQrData error:', err.message))
+      .getQrData(ex);
+  }
+
+  function openQrPrint() {
+    if (!qrAllData) { alert('QRデータが読み込まれていません。'); return; }
+
+    const size   = parseInt(document.getElementById('qrPrintSize').value);
+    const logo   = document.getElementById('qrPrintLogo').value;
+    const target = document.getElementById('qrPrintTarget').value;
+    const paper  = document.getElementById('qrPrintPaper').value;
+
+    // 対象でフィルタ
+    let artworks = qrAllData.artworks;
+    if (target !== 'all') {
+      artworks = artworks.filter(a => a.status === target);
+    }
+
+    if (artworks.length === 0) { alert('対象の作品がありません。'); return; }
+
+    // サイズに応じたレイアウト
+    const layouts = {
+      15: {cols:6, rows:8},
+      20: {cols:5, rows:7},
+      25: {cols:4, rows:6},
+      30: {cols:4, rows:5},
+      45: {cols:3, rows:4},
+      60: {cols:2, rows:3}
+    };
+    const { cols, rows } = layouts[size] || layouts[25];
+
+    buildQrPrintHtml(artworks, size, cols, rows, logo);
+  }
+
+  function buildQrPrintHtml(artworks, sizeMm, cols, rows, logo, paper) {
+  // 用紙サイズ（mm）
+  const paperW = { A4: 210, Letter: 216 }[paper] || 210;
+  const paperH = { A4: 297, Letter: 279 }[paper] || 297;
+  const paperSize = { A4: 'A4', Letter: 'Letter' }[paper] || 'A4';
+  const padding = 8; // 用紙余白(mm)
+  const gap     = 2; // セル間隔(mm)
+
+  const perPage = cols * rows;
+  const pages   = [];
+  for (let i = 0; i < artworks.length; i += perPage) {
+    pages.push(artworks.slice(i, i + perPage));
+  }
+
+  // Canvasを使ってQRコードをBase64生成
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
+  const qrImages = {};
+
+  artworks.forEach(art => {
+    const qr = qrcode(0, 'H');
+    qr.addData(art.qr_url);
+    qr.make();
+
+    const size         = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
+    const headerHeight = Math.round(size * 0.15); // ← 動的計算
+    const fontSize     = Math.round(size * 0.08); // ← 動的計算
+    canvas.width  = size;
+    canvas.height = size + headerHeight;
+
+    // 背景
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // ヘッダー（展覧会コード / 作品ID）
+    ctx.fillStyle    = '#888888';
+    ctx.font         = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`${qrAllData.exCode} / ${art.artwork_id}`, size / 2, fontSize + 36);
+
+    // QRモジュール描画
+    ctx.fillStyle = '#333333';
+    for (let row = 0; row < qr.getModuleCount(); row++) {
+      for (let col = 0; col < qr.getModuleCount(); col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(
+            (col + QR_MARGIN) * QR_CELL_SIZE,
+            (row + QR_MARGIN) * QR_CELL_SIZE + headerHeight,
+            QR_CELL_SIZE, QR_CELL_SIZE
+          );
+        }
+      }
+    }
+
+    // ロゴ描画
+    const cx = size / 2;
+    const cy = (size / 2) + headerHeight;
+    const hs = size * 0.18;
+    if (logo === 'heart') {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + hs * 0.5);
+      ctx.bezierCurveTo(cx - hs, cy - hs * 0.5, cx - hs * 0.5, cy - hs, cx, cy - hs * 0.4);
+      ctx.bezierCurveTo(cx + hs * 0.5, cy - hs, cx + hs, cy - hs * 0.5, cx, cy + hs * 0.5);
+      ctx.fill();
+        // 輪郭線を追加
+      ctx.strokeStyle = '#333333';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else if (logo === 'like') {
+      const sc = hs * 1.3 / LIKE_SIZE;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(sc, sc);
+      ctx.translate(-LIKE_PCX, -LIKE_PCY);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill(LIKE_PATH1);
+      ctx.fill(LIKE_PATH2);
+      ctx.strokeStyle = '#333333';
+      ctx.lineWidth = 8 / sc;
+      ctx.stroke(LIKE_PATH1);
+      ctx.stroke(LIKE_PATH2);
+      ctx.restore();
+    }  
+
+    qrImages[art.artwork_id] = canvas.toDataURL('image/png');
+  });
+
+  // 印刷HTML生成（セルサイズを自動計算）
+  const cellW = (paperW - padding * 2 - gap * (cols - 1)) / cols;
+  const cellH = (paperH - padding * 2 - gap * (rows - 1)) / rows;
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:sans-serif; background:white; }
+.page {
+  width:${paperW}mm; height:${paperH}mm;
+  padding:${padding}mm;
+  display:grid;
+  grid-template-columns:repeat(${cols}, ${cellW.toFixed(2)}mm);
+  grid-template-rows:repeat(${rows}, ${cellH.toFixed(2)}mm);
+  gap:${gap}mm; overflow:hidden;
+  page-break-after:always; break-after:page;
+}
+.qr-cell {
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid #eee; border-radius:2mm; overflow:hidden;
+}
+.qr-cell img { width:100%; height:100%; object-fit:contain; }
+@media print {
+  @page { size:${paperSize} portrait; margin:0; }
+  body  { margin:0; }
+  .page { page-break-after:always; break-after:page; }
+}
+</style></head><body>
+${pages.map(page =>
+  `<div class="page">${page.map(art =>
+    `<div class="qr-cell"><img src="${qrImages[art.artwork_id]}"></div>`
+  ).join('')}</div>`
+).join('')}
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 300);
+}
+
+  </script>
+</body>
+
+</html>
