@@ -329,6 +329,7 @@ function regCommitRegistration(payload) {
 
     return { success: true };
   } catch (e) {
+    console.error('regCommitRegistration failed:', e.stack || e);
     return { success: false, error: e.toString() };
   }
 }

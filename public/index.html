@@ -878,9 +878,9 @@
       gasCall('regCommitRegistration', payload).then(res => {
         document.getElementById('regLoadingOverlay').style.display = 'none';
         if (res.success) {
-          if (window.fsSetArtwork && res.artworkId) {
+          if (window.fsSetArtwork) {
             const sns = JSON.parse(payload.sns);
-            window.fsSetArtwork(exVal, res.artworkId, {
+            window.fsSetArtwork(exVal, idVal, {
               artist: payload.artistName, title: payload.workTitle,
               insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web
             }).catch(e => console.error('Firestore:', e));
