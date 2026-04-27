@@ -877,8 +877,16 @@
       };
       gasCall('regCommitRegistration', payload).then(res => {
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        if (res.success) regChangeStep(3);
-        else alert(t('regError') + res.error);
+        if (res.success) {
+          if (window.fsSetArtwork && res.artworkId) {
+            const sns = JSON.parse(payload.sns);
+            window.fsSetArtwork(exVal, res.artworkId, {
+              artist: payload.artistName, title: payload.workTitle,
+              insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web
+            }).catch(e => console.error('Firestore:', e));
+          }
+          regChangeStep(3);
+        } else alert(t('regError') + res.error);
       }).catch(err => {
         document.getElementById('regLoadingOverlay').style.display = 'none';
         alert("通信エラー: " + err.message);
@@ -1097,6 +1105,7 @@
             ? t('ansCountMsgAdded') + result.count
             : t('ansCountMsg') + result.count;
           localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
+          if (window.fsAddLike) window.fsAddLike({ exCode: exVal, workId: idVal, sessionId: formPayload.sessionId, nickname: formPayload.nickname, comment: formPayload.comment, isLike: formPayload.isLike === "1" }).catch(e => console.error('Firestore:', e));
           var nickname = document.getElementById('ansNicknameInput').value.trim();
           if (nickname) localStorage.setItem("nickname_" + exVal, nickname);
         }
@@ -1108,6 +1117,28 @@
       });
     });
 
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const fsDb = firebase.firestore();
+    window.fsAddLike = async (data) => {
+      await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
+    };
+    window.fsSetArtwork = async (exCode, artworkId, data) => {
+      await fsDb.collection('artworks').doc(exCode + '_' + artworkId).set(
+        { exCode, artworkId, ...data, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+    };
   </script>
 </body>
 

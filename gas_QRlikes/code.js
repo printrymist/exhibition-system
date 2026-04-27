@@ -414,6 +414,8 @@ function ansProcessForm(formData) {
       
       if (rowIndex > 0) {
         targetSheet.getRange(rowIndex, colIndex(headers, "status") + 1).setValue("");
+        var newVersion = new Date().getTime().toString();
+        CacheService.getScriptCache().put("version_" + formData.ex, newVersion, 21600);
         return { action: "UNLOCK_SUCCESS" };
       }
     }
