@@ -1463,7 +1463,7 @@
 
     function loadAllData(ex) {
       document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
-      gasCall({ action: 'loadAllData', ex: ex })
+      window.fsLoadAllData(ex)
         .then(data => {
           if (!data.success) {
             document.getElementById('exName').innerText = '';
@@ -2382,7 +2382,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const ex = document.getElementById('exCodeInput').value.trim();
       const saveBtn = document.getElementById('btnSaveFormSettings');
       if (saveBtn) saveBtn.disabled = true;
-      gasCall({ action: 'saveCaptionFields', ex: ex, fieldsJson: JSON.stringify(activeFields) })
+      window.fsSaveCaptionFields(ex, JSON.stringify(activeFields))
         .then(res => {
           if (res.success) {
             msg.style.color = '#1a73e8';
@@ -2509,6 +2509,66 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
       setTimeout(() => { win.focus(); win.print(); }, 300);
     }
 
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const fsDb = firebase.firestore();
+    window.fsSaveCaptionFields = async (exCode, fieldsJson) => {
+      await fsDb.collection('exhibitions').doc(exCode).set({
+        caption_fields: fieldsJson,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return { success: true };
+    };
+    window.fsLoadAllData = async (exCode) => {
+      try {
+        const [exSnap, artSnap] = await Promise.all([
+          fsDb.collection('exhibitions').doc(exCode).get(),
+          fsDb.collection('artworks').where('exCode', '==', exCode).get()
+        ]);
+        if (!exSnap.exists) return { success: false, error: 'Exhibition code "' + exCode + '" not found.' };
+        const ex = exSnap.data();
+        const artworks = [];
+        const qrList = [];
+        artSnap.forEach(doc => {
+          const d = doc.data();
+          if (!d.artwork_id) return;
+          qrList.push({ artwork_id: d.artwork_id, qr_url: d.qr_url || '', status: (d.status || '').toString() });
+          if ((d.status || '').toString() === '1') artworks.push(d);
+        });
+        const cmp = (a, b) => (a.artwork_id || '').localeCompare(b.artwork_id || '');
+        artworks.sort(cmp);
+        qrList.sort(cmp);
+        const excludedCols = ['exCode','artworkId','artwork_id','security_key','image_url','qr_url','status','insta','x','facebook','web','createdAt','updatedAt','migratedAt','backfilledAt'];
+        const captionHeaders = artworks.length > 0
+          ? Object.keys(artworks[0]).filter(h => h && !excludedCols.includes(h))
+          : [];
+        let registrationFields = null, captionFields = null;
+        try { registrationFields = ex.registration_fields ? JSON.parse(ex.registration_fields) : null; } catch (e) {}
+        try { captionFields = ex.caption_fields ? JSON.parse(ex.caption_fields) : null; } catch (e) {}
+        return {
+          success: true,
+          exCode: exCode,
+          exName: ex.ex_name || '',
+          headers: captionHeaders,
+          artworks: artworks,
+          qrList: qrList,
+          registrationFields: registrationFields,
+          captionFields: captionFields
+        };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    };
   </script>
 </body>
 

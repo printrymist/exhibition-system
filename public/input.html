@@ -576,7 +576,7 @@
         .then(res => {
           if (res.success) document.getElementById('exNameHeader').textContent = res.exName;
         });
-      gasCall({ action: 'getRegistrationFields', ex: ex })
+      window.fsGetRegistrationFields(ex)
         .then(res => {
           activeFields = (res && res.length > 0) ? res
             : ['title', 'artist', 'year', 'technique', 'size', 'price'].map(n => ({ name: n, required: false }));
@@ -688,18 +688,16 @@
     function executeDelete(artworkId) {
       const area = document.getElementById('deleteArea_' + artworkId);
       area.innerHTML = '<span class="spinner-sm"></span> 削除中...';
-      gasCall({ action: 'deleteArtwork', ex: ex, artworkId: artworkId })
-        .then(res => {
-          if (res.success) {
-            const card = document.querySelector('.artwork-card[data-id="' + artworkId + '"]');
-            if (card) card.remove();
-            existingWorks = existingWorks.filter(a => a.artwork_id !== artworkId);
-            if (window.fsDeleteArtwork) window.fsDeleteArtwork(ex, artworkId).catch(e => console.error('Firestore:', e));
-            document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
-            if (existingWorks.length === 0) { document.getElementById('listCard').style.display = 'none'; showNewForm(); }
-          } else {
-            area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">Error: ' + res.error + '</span>';
-          }
+      window.fsDeleteArtwork(ex, artworkId)
+        .then(() => {
+          const card = document.querySelector('.artwork-card[data-id="' + artworkId + '"]');
+          if (card) card.remove();
+          existingWorks = existingWorks.filter(a => a.artwork_id !== artworkId);
+          document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
+          if (existingWorks.length === 0) { document.getElementById('listCard').style.display = 'none'; showNewForm(); }
+        })
+        .catch(err => {
+          area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">Error: ' + err.message + '</span>';
         });
     }
 
@@ -746,23 +744,23 @@
 
       document.getElementById('btnNewSave').disabled = true;
 
-      gasCall({ action: 'saveArtwork', ex: ex, data: JSON.stringify(data) })
+      window.fsSaveArtwork(ex, data)
         .then(async res => {
           document.getElementById('btnNewSave').disabled = false;
           if (res.success) {
             const banner = document.getElementById('saveBanner');
             banner.textContent = '✅ ' + res.artworkId + ' を登録しました。'; banner.style.display = 'block';
             setTimeout(() => { banner.style.display = 'none'; }, 3000);
-            if (window.fsSetArtwork) {
-              try { await window.fsSetArtwork(ex, res.artworkId, { ...data, status: "1" }); }
-              catch (e) { console.error('Firestore:', e); }
-            }
             activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el = document.getElementById('new_' + f.name); if (el) { el.value = ''; el.classList.remove('error'); } });
             window.fsGetArtworksByArtist(ex, currentArtist)
               .then(res2 => { if (res2.success) { existingWorks = res2.artworks; showArtworkList(); } });
           } else {
             document.getElementById('newFormError').innerText = 'Error: ' + res.error;
           }
+        })
+        .catch(err => {
+          document.getElementById('btnNewSave').disabled = false;
+          document.getElementById('newFormError').innerText = 'Error: ' + err.message;
         });
     }
 
@@ -774,33 +772,21 @@
       const msgEl = document.getElementById('editMsg_' + artworkId);
       if (msgEl) { msgEl.innerHTML = '<span class="spinner-sm"></span> 更新中...'; msgEl.style.color = '#888'; }
 
-      gasCall({
-        action: 'updateArtwork',
-        ex: ex,
-        artworkId: artworkId,
-        artworkData: JSON.stringify(artworkData),
-        artistData: JSON.stringify(artistData),
-        originalArtist: originalArtist
-      })
+      window.fsUpdateArtwork(ex, artworkId, artworkData, artistData, originalArtist)
         .then(res => {
           if (btnSave) btnSave.disabled = false;
           if (res.success) {
             const msg = '✅ 更新しました。' + (res.updatedArtistCount > 1 ? '（作家情報を' + res.updatedArtistCount + '件の作品に反映）' : '');
             if (msgEl) { msgEl.textContent = msg; msgEl.style.color = '#1a73e8'; }
-            if (window.fsSetArtwork) {
-              window.fsSetArtwork(ex, artworkId, {...artworkData, ...artistData}).catch(e => console.error('Firestore:', e));
-              if (res.updatedArtistCount > 1) {
-                existingWorks.forEach(a => {
-                  if (a.artwork_id !== artworkId && a.artist === originalArtist)
-                    window.fsSetArtwork(ex, a.artwork_id, artistData).catch(e => console.error('Firestore:', e));
-                });
-              }
-            }
             existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData); if (a.artist === originalArtist) return Object.assign({}, a, artistData); return a; });
             const titleEl = card.querySelector('.artwork-card-title'); if (titleEl) titleEl.textContent = artworkData.title || artworkData.title_en || '（タイトルなし）';
           } else {
             if (msgEl) { msgEl.textContent = 'Error: ' + res.error; msgEl.style.color = '#d93025'; }
           }
+        })
+        .catch(err => {
+          if (btnSave) btnSave.disabled = false;
+          if (msgEl) { msgEl.textContent = 'Error: ' + err.message; msgEl.style.color = '#d93025'; }
         });
     }
 
@@ -845,6 +831,13 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    window.fsGetRegistrationFields = async (exCode) => {
+      const snap = await fsDb.collection('exhibitions').doc(exCode).get();
+      if (!snap.exists) return null;
+      const raw = snap.data().registration_fields;
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch (e) { return null; }
+    };
     window.fsGetArtworksByArtist = async (exCode, artistName) => {
       const snap = await fsDb.collection('artworks')
         .where('exCode', '==', exCode)
@@ -853,6 +846,41 @@
       const artworks = [];
       snap.forEach(doc => artworks.push(doc.data()));
       return { success: true, artworks: artworks };
+    };
+    window.fsSaveArtwork = async (exCode, data) => {
+      const snap = await fsDb.collection('artworks').where('exCode', '==', exCode).get();
+      const candidates = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (!d.artwork_id) return;
+        const status = (d.status || '').toString().trim();
+        if (status === '0' || status === '') candidates.push(d);
+      });
+      candidates.sort((a, b) => (a.artwork_id || '').localeCompare(b.artwork_id || ''));
+      if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
+      const targetId = candidates[0].artwork_id;
+      await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
+      return { success: true, artworkId: targetId };
+    };
+    window.fsUpdateArtwork = async (exCode, artworkId, artworkData, artistData, originalArtist) => {
+      await window.fsSetArtwork(exCode, artworkId, { ...artworkData, ...artistData });
+      let updatedArtistCount = 1;
+      const target = (originalArtist || '').toString().trim();
+      if (target && Object.keys(artistData).length > 0) {
+        const snap = await fsDb.collection('artworks')
+          .where('exCode', '==', exCode)
+          .where('artist', '==', target)
+          .get();
+        const tasks = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          if (!d.artwork_id || d.artwork_id === artworkId) return;
+          tasks.push(window.fsSetArtwork(exCode, d.artwork_id, artistData).catch(e => console.error('Firestore propagation:', e)));
+          updatedArtistCount++;
+        });
+        await Promise.all(tasks);
+      }
+      return { success: true, updatedArtistCount: updatedArtistCount };
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
