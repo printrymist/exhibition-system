@@ -870,41 +870,63 @@
       window.scrollTo(0, 0);
     }
 
-    function regFinalSubmit() {
+    async function regFinalSubmit() {
       document.getElementById('regLoadingOverlay').style.display = 'flex';
-      const payload = {
-        artistName: document.getElementById('regArtistName').value,
-        workTitle: document.getElementById('regWorkTitle').value,
-        sns: JSON.stringify({
-          insta: regCleanSnsId(document.getElementById('regSnsInsta').value),
-          x: regCleanSnsId(document.getElementById('regSnsX').value),
-          fb: regCleanSnsId(document.getElementById('regSnsFb').value),
-          web: document.getElementById('regSnsWeb').value
-        }),
-        imageData: regRawImgData || ''
+      const artistName = document.getElementById('regArtistName').value;
+      const workTitle = document.getElementById('regWorkTitle').value;
+      const sns = {
+        insta: regCleanSnsId(document.getElementById('regSnsInsta').value),
+        x: regCleanSnsId(document.getElementById('regSnsX').value),
+        fb: regCleanSnsId(document.getElementById('regSnsFb').value),
+        web: document.getElementById('regSnsWeb').value
       };
-      gasCall('regCommitRegistration', payload).then(res => {
+
+      let imageUrl = '';
+      try {
+        if (regRawImgData && window.fsUploadArtworkImage) {
+          imageUrl = await window.fsUploadArtworkImage(exVal, idVal, regRawImgData);
+        }
+      } catch (e) {
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        if (res.success) {
-          if (window.fsSetArtwork) {
-            const sns = JSON.parse(payload.sns);
-            const artistFields = { artist: payload.artistName, insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web };
-            window.fsSetArtwork(exVal, idVal, { ...artistFields, title: payload.workTitle, status: "1" })
-              .catch(e => console.error('Firestore:', e));
-            (res.propagatedIds || []).forEach(pid => {
-              window.fsSetArtwork(exVal, pid, artistFields).catch(e => console.error('Firestore:', e));
-            });
-          }
-          if (res.updatedArtistCount > 1) {
-            const msgEl = document.getElementById('regDoneMsg');
-            if (msgEl) msgEl.textContent = '作品情報が正常に保存されました。（作家情報を' + res.updatedArtistCount + '件の作品に反映）';
-          }
-          regChangeStep(3);
-        } else alert(t('regError') + res.error);
-      }).catch(err => {
+        alert('画像アップロードエラー: ' + e.message);
+        return;
+      }
+
+      try {
+        const artistFields = { artist: artistName, insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web };
+        const selfFields = { ...artistFields, title: workTitle, status: "1" };
+        if (imageUrl) selfFields.image_url = imageUrl;
+
+        await window.fsSetArtwork(exVal, idVal, selfFields);
+
+        let updatedArtistCount = 1;
+        const targetArtist = artistName.trim();
+        if (targetArtist) {
+          const snap = await fsDb.collection('artworks')
+            .where('exCode', '==', exVal)
+            .where('artist', '==', targetArtist)
+            .get();
+          const tasks = [];
+          snap.forEach(doc => {
+            if (doc.id === exVal + '_' + idVal) return;
+            const otherId = doc.data().artwork_id;
+            if (!otherId) return;
+            tasks.push(window.fsSetArtwork(exVal, otherId, artistFields).catch(e => console.error('Firestore propagation:', e)));
+            updatedArtistCount++;
+          });
+          await Promise.all(tasks);
+        }
+
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        alert("通信エラー: " + err.message);
-      });
+        regChangeStep(3);
+        if (updatedArtistCount > 1) {
+          const msgEl = document.getElementById('regDoneMsg');
+          if (msgEl) msgEl.textContent = '作品情報が正常に保存されました。（作家情報を' + updatedArtistCount + '件の作品に反映）';
+        }
+      } catch (err) {
+        document.getElementById('regLoadingOverlay').style.display = 'none';
+        alert(t('regError') + err.message);
+      }
     }
 
     function getOrCreateSessionId() {
@@ -953,12 +975,13 @@
       document.getElementById('ansWorkTitleInput').value = res.title;
       document.getElementById('ansWorkArtistInput').value = res.artist;
       if (res.image) {
-        var match = res.image.match(/[-\w]{25,}/);
-        if (match) {
-          document.getElementById('ansMainImg').src =
-            "https://drive.google.com/thumbnail?id=" + match[0] + "&sz=w400";
-          document.getElementById('ansMainImg').style.display = 'block';
+        let imgSrc = res.image;
+        if (imgSrc.indexOf('drive.google.com') !== -1) {
+          var match = imgSrc.match(/[-\w]{25,}/);
+          if (match) imgSrc = "https://drive.google.com/thumbnail?id=" + match[0] + "&sz=w400";
         }
+        document.getElementById('ansMainImg').src = imgSrc;
+        document.getElementById('ansMainImg').style.display = 'block';
       }
       ansShowSnsButtons(res.sns);
       if (localStorage.getItem("voted_" + ex + "_" + id)) {
@@ -1147,6 +1170,7 @@
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
@@ -1157,6 +1181,13 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    const fsStorage = firebase.storage();
+    window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
+      const blob = await (await fetch(dataUrl)).blob();
+      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
+      await ref.put(blob, { contentType: 'image/jpeg' });
+      return await ref.getDownloadURL();
+    };
     window.fsGetArtworkData = async (exCode, artworkId) => {
       try {
         const [aSnap, eSnap] = await Promise.all([

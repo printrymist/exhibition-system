@@ -101,7 +101,7 @@ function doPost(e) {
         artistName: e.parameter.artistName,
         workTitle: e.parameter.workTitle,
         sns: JSON.parse(e.parameter.sns || '{}'),
-        imageData: e.parameter.imageData || ''
+        imageUrl: e.parameter.imageUrl || ''
       };
       const res = regCommitRegistration(payload);
       output.setContent(JSON.stringify(res));
@@ -295,7 +295,7 @@ function regGetSetupData(ex, id) {
 
 function regCommitRegistration(payload) {
   try {
-    const { ex, id, artistName, workTitle, sns, imageData } = payload;
+    const { ex, id, artistName, workTitle, sns, imageUrl } = payload;
     const master = getMasterData(ex);
     if (!master) throw new Error("マスターデータが見つかりません");
 
@@ -319,21 +319,8 @@ function regCommitRegistration(payload) {
     boothSheet.getRange(rowIdx, titleCol).setValue(workTitle);
     boothSheet.getRange(rowIdx, artistCol).setValue(artistName);
 
-    if (imageData) {
-      const fileUrl = withRetry('uploadArtworkImage', 3, () => {
-        const folder = DriveApp.getFolderById(master.image_folder_id);
-        const oldFiles = folder.getFilesByName(`${ex}_${id}.jpg`);
-        while (oldFiles.hasNext()) oldFiles.next().setTrashed(true);
-        const blob = Utilities.newBlob(Utilities.base64Decode(imageData.split(',')[1]), "image/jpeg", `${ex}_${id}.jpg`);
-        const file = folder.createFile(blob);
-        try {
-          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        } catch (shareErr) {
-          console.warn('[uploadArtworkImage] setSharing skipped: ' + shareErr);
-        }
-        return file.getUrl();
-      });
-      boothSheet.getRange(rowIdx, imageCol).setValue(fileUrl);
+    if (imageUrl) {
+      boothSheet.getRange(rowIdx, imageCol).setValue(imageUrl);
     }
 
     boothSheet.getRange(rowIdx, instaCol).setValue(sns.insta);
