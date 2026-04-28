@@ -930,11 +930,13 @@
     }
 
     function getOrCreateSessionId() {
-      let sid = sessionStorage.getItem("rohei_session_id");
+      // localStorage を使うとブラウザ単位（≒ 1人）で同じ sessionId が維持される
+      let sid = localStorage.getItem("rohei_session_id") || sessionStorage.getItem("rohei_session_id");
       if (!sid) {
         sid = "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-        sessionStorage.setItem("rohei_session_id", sid);
       }
+      localStorage.setItem("rohei_session_id", sid);
+      sessionStorage.setItem("rohei_session_id", sid);
       return sid;
     }
 

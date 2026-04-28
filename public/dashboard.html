@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>展覧会ダッシュボード</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: #1a2a4a;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 20% 10%, rgba(180,60,180,0.55) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 15%, rgba(60,90,200,0.55) 0%, transparent 55%),
+        radial-gradient(ellipse at 75% 80%, rgba(140,40,160,0.55) 0%, transparent 55%),
+        radial-gradient(ellipse at 15% 90%, rgba(40,80,160,0.55) 0%, transparent 55%),
+        linear-gradient(135deg, #1a0b2e 0%, #0f1a3d 50%, #2a0b3a 100%);
+      background-size: 200% 200%, 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+      animation: aurora 18s ease-in-out infinite;
+    }
+    @keyframes aurora {
+      0%, 100% {
+        background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0 0;
+      }
+      50% {
+        background-position: 100% 50%, 0% 100%, 0% 0%, 100% 50%, 0 0;
+      }
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .ex-name {
+      font-size: 2em;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.04em;
+      text-shadow: 0 2px 16px rgba(0,0,0,0.4);
+    }
+    .updated-at {
+      font-size: 0.8em;
+      color: rgba(255,255,255,0.65);
+      margin-top: 6px;
+    }
+    .big-numbers {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 18px;
+      padding: 26px 22px;
+      box-shadow: 0 8px 32px rgba(31,38,135,0.12);
+      border: 1px solid rgba(255,255,255,0.6);
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(31,38,135,0.2); }
+    .stat-label {
+      font-size: 0.85em;
+      color: #6b6685;
+      margin-bottom: 10px;
+      letter-spacing: 0.1em;
+    }
+    .stat-value {
+      font-size: 3em;
+      font-weight: 800;
+      color: #1a2a4a;
+      line-height: 1;
+    }
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .ranking-card, .feed-card {
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 8px 32px rgba(31,38,135,0.12);
+      border: 1px solid rgba(255,255,255,0.6);
+    }
+    .ranking-title {
+      font-size: 1.05em;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: #1a2a4a;
+      border-bottom: 2px solid #c5a3ff;
+      padding-bottom: 8px;
+    }
+    .ranking-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .ranking-item:last-child { border-bottom: none; }
+    .ranking-rank {
+      width: 26px;
+      font-weight: 700;
+      color: #999;
+      font-size: 1.1em;
+      text-align: center;
+    }
+    .ranking-rank.gold { color: #d4a017; font-size: 1.3em; }
+    .ranking-rank.silver { color: #888; font-size: 1.2em; }
+    .ranking-rank.bronze { color: #a0522d; font-size: 1.15em; }
+    .ranking-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .ranking-title-text {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.95em;
+    }
+    .ranking-artist {
+      font-size: 0.78em;
+      color: #888;
+    }
+    .ranking-count {
+      font-weight: 800;
+      color: #d93025;
+      font-size: 1.4em;
+      min-width: 44px;
+      text-align: right;
+    }
+    .feed-card {
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .ranking-card {
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .feed-item {
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .feed-item:last-child { border-bottom: none; }
+    .feed-item.fresh { animation: pop 0.6s; }
+    .feed-meta {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .feed-time { font-size: 0.72em; color: #aaa; }
+    .feed-work {
+      font-size: 0.88em;
+      font-weight: 600;
+      color: #1a73e8;
+    }
+    .feed-nickname {
+      font-size: 0.82em;
+      color: #666;
+    }
+    .feed-comment {
+      font-size: 0.95em;
+      color: #2c2c2c;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .empty {
+      text-align: center;
+      color: #aaa;
+      padding: 24px 0;
+      font-size: 0.9em;
+    }
+    @keyframes pop {
+      0% { background: #fff5b1; }
+      100% { background: transparent; }
+    }
+    @media (max-width: 900px) {
+      .big-numbers { grid-template-columns: repeat(2, 1fr); }
+      .main-content { grid-template-columns: 1fr; }
+      .stat-value { font-size: 2.4em; }
+      .ex-name { font-size: 1.5em; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <div class="ex-name" id="exName">読み込み中...</div>
+    <div class="updated-at" id="updatedAt"></div>
+  </div>
+
+  <div class="big-numbers">
+    <div class="stat-card">
+      <div class="stat-label">参加者数</div>
+      <div class="stat-value" id="statVisitors">―</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">いいね数</div>
+      <div class="stat-value" id="statLikes">―</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">コメント数</div>
+      <div class="stat-value" id="statComments">―</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">登録作品数</div>
+      <div class="stat-value" id="statArtworks">―</div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="ranking-card">
+      <div class="ranking-title">🏆 いいねランキング</div>
+      <div id="likesRanking"><div class="empty">まだいいねがありません</div></div>
+    </div>
+    <div class="feed-card">
+      <div class="ranking-title">📝 最新コメント</div>
+      <div id="commentFeed"><div class="empty">まだコメントがありません</div></div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const fsDb = firebase.firestore();
+
+    const exVal = (new URLSearchParams(location.search).get('ex') || '').trim();
+
+    if (!exVal) {
+      document.getElementById('exName').textContent = '展覧会コードが指定されていません（?ex=...）';
+    } else {
+      let artworks = [];
+      let likes = [];
+      const seenLikeIds = new Set();
+      let firstLikeSnapshot = true;
+
+      fsDb.collection('exhibitions').doc(exVal).onSnapshot(snap => {
+        if (snap.exists) {
+          document.getElementById('exName').textContent = snap.data().ex_name || exVal;
+        } else {
+          document.getElementById('exName').textContent = exVal + ' (展覧会未登録)';
+        }
+      });
+
+      fsDb.collection('artworks').where('exCode', '==', exVal).onSnapshot(snap => {
+        artworks = [];
+        snap.forEach(d => artworks.push(d.data()));
+        renderAll();
+      });
+
+      fsDb.collection('likes').where('exCode', '==', exVal).onSnapshot(snap => {
+        const next = [];
+        const newIds = [];
+        snap.forEach(d => {
+          next.push({ id: d.id, ...d.data() });
+          if (!firstLikeSnapshot && !seenLikeIds.has(d.id)) newIds.push(d.id);
+          seenLikeIds.add(d.id);
+        });
+        likes = next;
+        firstLikeSnapshot = false;
+        renderAll(newIds);
+      });
+
+      function getArtworkInfo(workId) {
+        const a = artworks.find(art => (art.artwork_id || art.artworkId) === workId);
+        return {
+          title: (a && a.title) || workId,
+          artist: (a && a.artist) || ''
+        };
+      }
+
+      function renderAll(newCommentIds) {
+        // 参加者数 = isLike=true を1回以上記録した sessionId の数（実際にいいねした人）
+        const visitors = new Set(likes.filter(l => l.isLike && l.sessionId).map(l => l.sessionId)).size;
+        const totalLikes = likes.filter(l => l.isLike).length;
+        const totalComments = likes.filter(l => l.comment && l.comment.trim()).length;
+        const totalArtworks = artworks.filter(a => (a.status || '').toString() === '1').length;
+
+        document.getElementById('statVisitors').textContent = visitors.toLocaleString();
+        document.getElementById('statLikes').textContent = totalLikes.toLocaleString();
+        document.getElementById('statComments').textContent = totalComments.toLocaleString();
+        document.getElementById('statArtworks').textContent = totalArtworks.toLocaleString();
+
+        renderRanking('likesRanking', countByWork(l => l.isLike), 'いいね');
+        renderFeed(newCommentIds || []);
+
+        document.getElementById('updatedAt').textContent = '最終更新: ' + new Date().toLocaleTimeString('ja-JP');
+      }
+
+      function countByWork(predicate) {
+        const counts = {};
+        likes.forEach(l => {
+          if (predicate(l) && l.workId) counts[l.workId] = (counts[l.workId] || 0) + 1;
+        });
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      }
+
+      function renderRanking(elId, sorted, emptyLabel) {
+        const el = document.getElementById(elId);
+        if (sorted.length === 0) {
+          el.innerHTML = '<div class="empty">まだ' + emptyLabel + 'がありません</div>';
+          return;
+        }
+        el.innerHTML = sorted.map(([workId, count], i) => {
+          const info = getArtworkInfo(workId);
+          const cls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+          return '<div class="ranking-item">'
+            + '<div class="ranking-rank ' + cls + '">' + (i + 1) + '</div>'
+            + '<div class="ranking-info">'
+            + '<div class="ranking-title-text">' + escapeHtml(info.title) + '</div>'
+            + '<div class="ranking-artist">' + escapeHtml(info.artist) + '</div>'
+            + '</div>'
+            + '<div class="ranking-count">' + count + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      function renderFeed(newIds) {
+        const items = likes
+          .filter(l => l.comment && l.comment.trim())
+          .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+          .slice(0, 30);
+
+        const el = document.getElementById('commentFeed');
+        if (items.length === 0) {
+          el.innerHTML = '<div class="empty">まだコメントがありません</div>';
+          return;
+        }
+        el.innerHTML = items.map(l => {
+          const info = getArtworkInfo(l.workId);
+          const time = l.timestamp ? new Date(l.timestamp).toLocaleString('ja-JP') : '';
+          const fresh = newIds.indexOf(l.id) !== -1 ? ' fresh' : '';
+          return '<div class="feed-item' + fresh + '">'
+            + '<div class="feed-meta">'
+            + '<span class="feed-work">' + escapeHtml(info.title) + '</span>'
+            + '<span class="feed-nickname">— ' + escapeHtml(l.nickname || 'Anonymous') + '</span>'
+            + '<span class="feed-time">' + time + '</span>'
+            + '</div>'
+            + '<div class="feed-comment">' + escapeHtml(l.comment) + '</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+      }
+    }
+  </script>
+</body>
+
+</html>
