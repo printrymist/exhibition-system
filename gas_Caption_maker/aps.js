@@ -253,6 +253,13 @@ function doPost(e) {
       return output;
     }
 
+    if (action === 'categorizeArtwork') {
+      output.setContent(JSON.stringify(
+        categorizeArtwork(e.parameter.imageUrl || '')
+      ));
+      return output;
+    }
+
     output.setContent(JSON.stringify({
       success: false, error: '不明なアクション: ' + action
     }));
@@ -654,4 +661,94 @@ function updateQrUrls() {
   }
 
   Logger.log(`完了！合計 ${totalUpdated} 件のqr_urlを更新しました。`);
+}
+
+// 初回認証を強制発動するためのトリガー関数
+// (エディタで一度実行 → 権限承認 → 以降 UrlFetchApp が使える)
+function authorizeExternalRequest() {
+  const r = UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+  Logger.log('UrlFetchApp authorized; status=' + r.getResponseCode());
+}
+
+// =========================================================
+// 🤖 Claude API による作品自動分類
+// =========================================================
+function categorizeArtwork(imageUrl) {
+  try {
+    if (!imageUrl) return { success: false, error: 'image_url が空です' };
+
+    const apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
+    if (!apiKey) return { success: false, error: 'CLAUDE_API_KEY が Script Properties に設定されていません' };
+
+    const systemPrompt = '美術作品を分類するアシスタントです。\n' +
+      '画像を見て、以下の4層で分類してください。\n\n' +
+      'レイヤー1 メディア（複数選択可、形式）:\n' +
+      '[絵画, 版画, 写真, 彫刻, インスタレーション, 映像, テキスタイル, 陶芸, ドローイング]\n\n' +
+      'レイヤー2 モチーフ（複数選択可、内容）:\n' +
+      '[人物, 風景, 静物, 抽象, 動物, 都市, 自然]\n\n' +
+      'レイヤー3 スタイル（1つ選択）:\n' +
+      '[具象, 抽象, アニメ・イラスト系, コンセプチュアル]\n\n' +
+      'レイヤー4 キーワード（日本語で3〜5個、自由記述）\n\n' +
+      'JSON のみ返答してください。説明文・コードブロック不要。\n' +
+      '形式: {"media": [...], "motif": [...], "style": "...", "keywords": [...]}';
+
+    const requestBody = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 512,
+      system: [{
+        type: 'text',
+        text: systemPrompt,
+        cache_control: { type: 'ephemeral' }
+      }],
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: imageUrl } },
+          { type: 'text', text: 'この作品を分類してください。' }
+        ]
+      }]
+    };
+
+    const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      payload: JSON.stringify(requestBody),
+      muteHttpExceptions: true
+    });
+
+    const code = response.getResponseCode();
+    const body = response.getContentText();
+    if (code >= 400) {
+      return { success: false, error: 'Claude API ' + code + ': ' + body };
+    }
+
+    const result = JSON.parse(body);
+    const textBlock = (result.content || []).find(b => b.type === 'text');
+    if (!textBlock) return { success: false, error: 'No text in Claude response' };
+
+    let jsonText = textBlock.text.trim();
+    jsonText = jsonText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      return { success: false, error: 'JSON parse failed: ' + jsonText.substring(0, 200) };
+    }
+
+    return {
+      success: true,
+      media: Array.isArray(parsed.media) ? parsed.media : [],
+      motif: Array.isArray(parsed.motif) ? parsed.motif : [],
+      style: typeof parsed.style === 'string' ? parsed.style : '',
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+      usage: result.usage || null
+    };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
 }
