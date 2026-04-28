@@ -1252,7 +1252,7 @@
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const merged = { exCode, artworkId, ...data };
+      const merged = { exCode, artworkId, artwork_id: artworkId, ...data };
       if (!merged.security_key) {
         const snap = await docRef.get();
         if (snap.exists && snap.data().security_key) {

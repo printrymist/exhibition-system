@@ -1085,7 +1085,7 @@
 
     // ── 作家一覧ロード ──
     function loadArtistList() {
-      gasCall({ action: 'getArtistList', ex: currentEx })
+      window.fsGetArtistList(currentEx)
         .then(res => {
           const sel = document.getElementById('artistSelect');
           if (!res.success) {
@@ -1274,7 +1274,7 @@
             if (window.fsSetArtwork) {
               const snsData = {};
               ['insta','x','facebook','web'].forEach(f => { const el = document.getElementById('art_'+f); if(el) snsData[f]=el.value.trim(); });
-              window.fsSetArtwork(currentEx, res.artworkId, {...data, ...snsData}).catch(e => console.error('Firestore:', e));
+              window.fsSetArtwork(currentEx, res.artworkId, {...data, ...snsData, status: "1"}).catch(e => console.error('Firestore:', e));
             }
             activeFields.filter(f => !ARTIST_FIELDS.includes(f.name)).forEach(f => {
               const el = document.getElementById('art_' + f.name);
@@ -1298,7 +1298,7 @@
       document.getElementById('listCount').innerHTML = '― 件登録済み';
       openRowId = null;
 
-      gasCall({ action: 'getArtworkList', ex: currentEx })
+      window.fsGetArtworkList(currentEx)
         .then(res => {
           if (!res.success) {
             document.getElementById('artworkList').innerHTML = '<div class="list-empty">Error: ' + res.error + '</div>';
@@ -1605,9 +1605,46 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    window.fsGetArtworkList = async (exCode) => {
+      const snap = await fsDb.collection('artworks')
+        .where('exCode', '==', exCode)
+        .get();
+      const artworks = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.status && d.status.toString() === '1') artworks.push(d);
+      });
+      return { success: true, artworks: artworks };
+    };
+    window.fsGetArtistList = async (exCode) => {
+      const snap = await fsDb.collection('artworks')
+        .where('exCode', '==', exCode)
+        .get();
+      const seen = new Set();
+      const artists = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (!d.status || d.status.toString() !== '1') return;
+        const name = (d.artist || '').toString().trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        artists.push({
+          artist: name,
+          artist_en: d.artist_en || '',
+          birth_year: d.birth_year || '',
+          death_year: d.death_year || '',
+          insta: d.insta || '',
+          x: d.x || '',
+          facebook: d.facebook || '',
+          web: d.web || '',
+          birthplace: d.birthplace || ''
+        });
+      });
+      return { success: true, artists: artists };
+    };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const merged = { exCode, artworkId, ...data };
+      const merged = { exCode, artworkId, artwork_id: artworkId, ...data };
       if (!merged.security_key) {
         const snap = await docRef.get();
         if (snap.exists && snap.data().security_key) merged.security_key = snap.data().security_key;
