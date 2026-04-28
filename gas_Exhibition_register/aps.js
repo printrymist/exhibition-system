@@ -287,6 +287,7 @@ function runSetup(payload) {
     });
 
     let rows = [];
+    const artworkSeeds = [];
     for (let i = 1; i <= workCount; i++) {
       const wId = "w" + ("00" + i).slice(-3);
       const sKey = Math.random().toString(36).substring(2, 10);
@@ -297,6 +298,9 @@ function runSetup(payload) {
       row[aHeader.indexOf("qr_url")] = url;
       row[aHeader.indexOf("status")] = "0";
       rows.push(row);
+      const seed = { exCode: exCode };
+      aHeader.forEach((h, idx) => { seed[h] = row[idx]; });
+      artworkSeeds.push(seed);
     }
     aSheet.getRange(2, 1, rows.length, totalCols).setValues(rows);
 
@@ -386,6 +390,17 @@ function runSetup(payload) {
       exCode: exCode,
       exName: exName,
       adminPass: adminPass,
+      artworks: artworkSeeds,
+      exhibitionDoc: {
+        ex_code: exCode,
+        ex_name: exName,
+        image_folder_id: imagesFolderId,
+        artwork_sheet_id: artworkId,
+        comment_sheet_id: commentId,
+        memo: '',
+        registration_fields: defaultJson,
+        caption_fields: defaultJson
+      },
       warning: shareWarnings.length > 0
         ? '\n※ 以下のリソースの共有設定が自動でできませんでした。Drive で手動設定してください:\n  - ' + shareWarnings.join('\n  - ')
         : undefined
@@ -489,6 +504,7 @@ function addArtworks(payload) {
     const totalCols = headers.length;
 
     let newRows = [];
+    const artworkSeeds = [];
     for (let i = 1; i <= addCount; i++) {
       const wId = "w" + ("00" + (lastNum + i)).slice(-3);
       const sKey = Math.random().toString(36).substring(2, 10);
@@ -499,11 +515,14 @@ function addArtworks(payload) {
       row[qrUrlCol] = url;
       row[statusCol] = "0";
       newRows.push(row);
+      const seed = { exCode: exCode };
+      headers.forEach((h, idx) => { seed[h] = row[idx]; });
+      artworkSeeds.push(seed);
     }
 
     sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
 
-    return { success: true };
+    return { success: true, artworks: artworkSeeds };
   } catch (e) {
     return { success: false, error: e.toString() };
   }

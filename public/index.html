@@ -889,7 +889,7 @@
           if (window.fsSetArtwork) {
             const sns = JSON.parse(payload.sns);
             const artistFields = { artist: payload.artistName, insta: sns.insta, x: sns.x, facebook: sns.fb, web: sns.web };
-            window.fsSetArtwork(exVal, idVal, { ...artistFields, title: payload.workTitle })
+            window.fsSetArtwork(exVal, idVal, { ...artistFields, title: payload.workTitle, status: "1" })
               .catch(e => console.error('Firestore:', e));
             (res.propagatedIds || []).forEach(pid => {
               window.fsSetArtwork(exVal, pid, artistFields).catch(e => console.error('Firestore:', e));
@@ -1092,6 +1092,9 @@
         }
 
         if (result.action === "UNLOCK_SUCCESS") {
+          if (window.fsSetArtwork) {
+            window.fsSetArtwork(exVal, idVal, { status: "" }).catch(e => console.error('Firestore unlock mirror failed:', e));
+          }
           alert(t('alertUnlock'));
           reloadApp();
           return;
@@ -1119,7 +1122,17 @@
             ? t('ansCountMsgAdded') + result.count
             : t('ansCountMsg') + result.count;
           localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
-          if (window.fsAddLike) window.fsAddLike({ exCode: exVal, workId: idVal, sessionId: formPayload.sessionId, nickname: formPayload.nickname, comment: formPayload.comment, isLike: formPayload.isLike === "1" }).catch(e => console.error('Firestore:', e));
+          if (window.fsAddLike) window.fsAddLike({
+            exCode: exVal,
+            ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
+            workId: idVal,
+            title: formPayload.workTitle,
+            artist: formPayload.workArtist,
+            sessionId: formPayload.sessionId,
+            nickname: formPayload.nickname,
+            comment: formPayload.comment,
+            isLike: formPayload.isLike === "1"
+          }).catch(e => console.error('Firestore:', e));
           var nickname = document.getElementById('ansNicknameInput').value.trim();
           if (nickname) localStorage.setItem("nickname_" + exVal, nickname);
         }
@@ -1150,9 +1163,40 @@
           fsDb.collection('artworks').doc(exCode + '_' + artworkId).get(),
           fsDb.collection('exhibitions').doc(exCode).get()
         ]);
-        if (!aSnap.exists) return { success: false, msg: '作品IDが見つかりません' };
-        const a = aSnap.data();
-        const e = eSnap.exists ? eSnap.data() : { ex_name: '' };
+        let a = aSnap.exists ? aSnap.data() : null;
+
+        // Firestore に未登録の作品の場合、GAS から取得してバックフィル
+        let backfillExName = null;
+        if (!a) {
+          const gasRes = await gasCall('ansGetArtworkData');
+          if (!gasRes || !gasRes.success) {
+            return { success: false, msg: (gasRes && gasRes.msg) || '作品IDが見つかりません' };
+          }
+          a = {
+            exCode: exCode,
+            artwork_id: artworkId,
+            security_key: gasRes.securityKey,
+            status: gasRes.isRegistered ? "1" : "",
+            title: gasRes.title || '',
+            artist: gasRes.artist || '',
+            image_url: gasRes.image || '',
+            insta: (gasRes.sns && gasRes.sns.insta) || '',
+            x: (gasRes.sns && gasRes.sns.x) || '',
+            facebook: (gasRes.sns && gasRes.sns.fb) || '',
+            web: (gasRes.sns && gasRes.sns.web) || ''
+          };
+          backfillExName = gasRes.exName || '';
+          fsDb.collection('artworks').doc(exCode + '_' + artworkId)
+            .set({ ...a, backfilledAt: new Date().toISOString() }, { merge: true })
+            .catch(e => console.error('backfill artwork failed:', e));
+          if (!eSnap.exists && backfillExName) {
+            fsDb.collection('exhibitions').doc(exCode)
+              .set({ ex_code: exCode, ex_name: backfillExName, backfilledAt: new Date().toISOString() }, { merge: true })
+              .catch(e => console.error('backfill exhibition failed:', e));
+          }
+        }
+
+        const e = eSnap.exists ? eSnap.data() : { ex_name: backfillExName || '' };
         return {
           success: true,
           securityKey: a.security_key,
@@ -1176,10 +1220,21 @@
       await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      await fsDb.collection('artworks').doc(exCode + '_' + artworkId).set(
-        { exCode, artworkId, ...data, updatedAt: new Date().toISOString() },
-        { merge: true }
-      );
+      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
+      const merged = { exCode, artworkId, ...data };
+      if (!merged.security_key) {
+        const snap = await docRef.get();
+        if (snap.exists && snap.data().security_key) {
+          merged.security_key = snap.data().security_key;
+        } else if (typeof keyVal !== 'undefined' && keyVal && exCode === exVal && artworkId === idVal) {
+          merged.security_key = keyVal;
+        } else {
+          console.warn('fsSetArtwork: no security_key available for', exCode, artworkId, '- skipping write');
+          return;
+        }
+      }
+      merged.updatedAt = new Date().toISOString();
+      await docRef.set(merged, { merge: true });
     };
   </script>
 </body>

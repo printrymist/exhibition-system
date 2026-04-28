@@ -843,13 +843,21 @@
     });
     const fsDb = firebase.firestore();
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      await fsDb.collection('artworks').doc(exCode + '_' + artworkId).set(
-        { exCode, artworkId, ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
-      );
+      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
+      const merged = { exCode, artworkId, ...data };
+      if (!merged.security_key) {
+        const snap = await docRef.get();
+        if (snap.exists && snap.data().security_key) merged.security_key = snap.data().security_key;
+      }
+      merged.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await docRef.set(merged, { merge: true });
     };
     window.fsDeleteArtwork = async (exCode, artworkId) => {
-      await fsDb.collection('artworks').doc(exCode + '_' + artworkId).delete();
+      // Security Rules で delete は禁止しているため、status を空文字に戻して論理削除に変更
+      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
+      const snap = await docRef.get();
+      const sk = snap.exists ? snap.data().security_key : null;
+      await docRef.set({ status: "", security_key: sk, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     };
   </script>
 </body>

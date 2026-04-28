@@ -450,13 +450,25 @@
         showError('Error: ' + result.error);
         return;
       }
-      // 🟣 Firestore exhibitions コレクションにも書き込み
+      // 🟣 Firestore exhibitions と各 artwork ドキュメントを作成
       if (window.fsDb && result.exCode) {
-        window.fsDb.collection('exhibitions').doc(result.exCode).set({
-          ex_code: result.exCode,
-          ex_name: result.exName,
-          createdAt: new Date().toISOString()
-        }, { merge: true }).catch(e => console.error('Firestore exhibitions write failed:', e));
+        const exDoc = result.exhibitionDoc
+          ? { ...result.exhibitionDoc, createdAt: new Date().toISOString() }
+          : { ex_code: result.exCode, ex_name: result.exName, createdAt: new Date().toISOString() };
+        window.fsDb.collection('exhibitions').doc(result.exCode).set(exDoc, { merge: true })
+          .catch(e => console.error('Firestore exhibitions write failed:', e));
+
+        if (Array.isArray(result.artworks)) {
+          const ts = new Date().toISOString();
+          result.artworks.forEach(a => {
+            const docId = a.exCode + '_' + a.artwork_id;
+            window.fsDb.collection('artworks').doc(docId).set({
+              ...a,
+              artworkId: a.artwork_id,
+              createdAt: ts
+            }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
+          });
+        }
       }
       showDone(result);
     }
@@ -483,6 +495,17 @@
           if (!res.success) { addMsg.innerText = 'Error: ' + res.error; return; }
           addMsg.innerText = `✅ ${addCount} artworks added successfully.`;
           document.getElementById('addCount').value = '';
+          if (window.fsDb && Array.isArray(res.artworks)) {
+            const ts = new Date().toISOString();
+            res.artworks.forEach(a => {
+              const docId = a.exCode + '_' + a.artwork_id;
+              window.fsDb.collection('artworks').doc(docId).set({
+                ...a,
+                artworkId: a.artwork_id,
+                createdAt: ts
+              }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
+            });
+          }
         });
     }
 
