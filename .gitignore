@@ -67,3 +67,13 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Claude Code / agent IDE local config
+.agents/
+.claude/
+.continue/
+public/.claude/
+skills-lock.json
+
+# Function-local secrets/config
+functions/.env
