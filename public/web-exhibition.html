@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌐 Web 展覧会 設定</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f7f9fc;
+      color: #1a2a4a;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card-title {
+      font-size: 0.95em;
+      font-weight: bold;
+      color: #1a73e8;
+      margin-bottom: 12px;
+    }
+    .ex-row, .pw-row {
+      display: flex;
+      gap: 8px;
+    }
+    .ex-row input, .pw-row input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .btn-primary {
+      padding: 10px 20px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #1557b0;
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: wait;
+    }
+    .msg-ok {
+      color: #1a73e8;
+      font-size: 0.9em;
+      margin-top: 8px;
+      min-height: 1.2em;
+    }
+    .msg-error {
+      color: #d93025;
+      font-size: 0.9em;
+      margin-top: 8px;
+      min-height: 1.2em;
+    }
+    .spinner-sm {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #c5d9f7;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    code {
+      background: #f4f4f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .setting-row label {
+      font-size: 0.88em;
+      font-weight: 600;
+      color: #1a2a4a;
+      min-width: 110px;
+    }
+    .setting-row select,
+    .setting-row input[type="number"] {
+      font-size: 0.92em;
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
+    }
+    .qr-result {
+      margin-top: 14px;
+      padding: 14px;
+      background: #fafbff;
+      border: 1px solid #e0e7f0;
+      border-radius: 10px;
+    }
+    .qr-result .qr-canvas {
+      display: inline-block;
+      padding: 8px;
+      background: white;
+      border-radius: 4px;
+    }
+    .qr-result .qr-url {
+      display: block;
+      margin-top: 10px;
+      font-family: monospace;
+      font-size: 0.78em;
+      word-break: break-all;
+      color: #555;
+      background: #f4f4f9;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .qr-result .qr-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+    }
+    .qr-result .qr-actions button {
+      font-size: 0.82em;
+      padding: 5px 12px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .qr-result .qr-actions button:hover { background: #f4f4f9; }
+  </style>
+</head>
+
+<body>
+
+  <div style="text-align:center; margin-bottom:20px;">
+    <h1 style="font-size:1.3em; color:#1a73e8;">🌐 Web 展覧会 設定</h1>
+    <p style="font-size:0.85em; color:#888; margin-top:4px;">来場者向けバーチャル展覧会 (gallery.html) の公開状態と QR 発行</p>
+    <a id="linkToReports" href="#"
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      ← 出力・レポートへ戻る
+    </a>
+  </div>
+
+  <div id="sandboxBadge" style="display:none;"></div>
+
+  <div class="card">
+    <div class="card-title">Exhibition</div>
+    <div class="ex-row">
+      <input type="text" id="exCodeInput" placeholder="展覧会コードを入力 (例: IT26)" value=""
+        onkeydown="if(event.key==='Enter') loadExhibition()">
+      <button class="btn-primary" id="btnLoad" onclick="loadExhibition()">Load</button>
+    </div>
+    <div class="msg-ok" id="exName"></div>
+    <div class="msg-error" id="exError"></div>
+  </div>
+
+  <div class="card" id="pwCard" style="display:none;">
+    <div class="card-title">主催者ログイン</div>
+    <div id="operatorAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin-bottom:10px;"></div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この展覧会の主催者として登録されたメールアドレスを入力してください。</div>
+    <div class="pw-row" id="emailLinkRow">
+      <input type="email" id="operatorEmailInput" placeholder="主催者メールアドレス" autocomplete="email">
+      <button class="btn-primary" id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <div class="card" id="notOrganizerCard" style="display:none;">
+    <div class="card-title" style="color:#d93025;">⚠ アクセス権限がありません</div>
+    <div style="font-size:0.9em; line-height:1.6;">
+      <code id="notOrganizerEmail"></code> はこの展覧会の主催者として登録されていません。
+    </div>
+    <div id="notOrganizerHint" style="font-size:0.85em; color:#666; margin-top:12px; line-height:1.6;"></div>
+    <div style="margin-top:12px;">
+      <button onclick="signOutAndRetry()" class="btn-primary">別のアカウントでログインし直す</button>
+    </div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 14px; background:#e8f0fe; border-radius:8px; font-size:0.85em; margin-bottom:12px;">
+      <span style="color:#1565c0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔓 <span id="loggedInEmailLabel"></span> でログイン中</span>
+      <a href="#" onclick="signOutAndRetry();return false;" style="color:#1a73e8; text-decoration:underline; flex-shrink:0;">ログアウト</a>
+    </div>
+
+    <div class="card">
+      <div class="card-title">公開設定</div>
+      <div class="setting-row">
+        <label for="gallerySelectVisibility">公開状態</label>
+        <select id="gallerySelectVisibility">
+          <option value="closed">非公開（closed）</option>
+          <option value="visitor_only">QR を持つ来場者のみ（visitor_only）</option>
+          <option value="public">公開（public）</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="gallerySelectInteractions">来場者の操作</label>
+        <select id="gallerySelectInteractions">
+          <option value="none">閲覧のみ</option>
+          <option value="likes_only">いいねのみ</option>
+          <option value="likes_and_comments">いいね + コメント</option>
+        </select>
+      </div>
+      <button class="btn-primary" id="btnSaveGallerySettings" onclick="saveGallerySettings()">💾 設定を保存</button>
+      <div id="gallerySettingMsg" style="font-size:0.85em; min-height:1.2em; margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎨 ギャラリー外観</div>
+      <div style="font-size:0.85em; color:#666; margin-bottom:12px;">
+        gallery.html の見た目をカスタマイズします。未設定の項目は既定値が使われます。
+      </div>
+      <div class="setting-row">
+        <label for="galleryTitleInput">タイトル</label>
+        <input type="text" id="galleryTitleInput" maxlength="100" placeholder="未入力なら展覧会名を表示" style="flex:1; min-width:240px; padding:6px 10px; border:1px solid #ccc; border-radius:6px;">
+      </div>
+      <div class="setting-row">
+        <label for="gallerySubtitleInput">サブタイトル</label>
+        <input type="text" id="gallerySubtitleInput" maxlength="200" placeholder="補足説明 (任意)" style="flex:1; min-width:240px; padding:6px 10px; border:1px solid #ccc; border-radius:6px;">
+      </div>
+      <div class="setting-row">
+        <label>ヒーロー画像</label>
+        <div style="flex:1; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+          <div id="heroPreview" style="width:120px; height:60px; background:#f4f4f9; border:1px solid #e0e7f0; border-radius:6px; background-size:cover; background-position:center;"></div>
+          <input type="file" id="heroFileInput" accept="image/*" style="display:none;" onchange="onAppearanceFileSelect('hero', event)">
+          <button type="button" onclick="document.getElementById('heroFileInput').click()" style="padding:5px 12px; font-size:0.85em; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer;">画像を選択</button>
+          <button type="button" id="btnHeroClear" onclick="clearAppearanceImage('hero')" style="padding:5px 12px; font-size:0.85em; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer; display:none;">クリア</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>背景画像</label>
+        <div style="flex:1; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+          <div id="bgPreview" style="width:120px; height:60px; background:#f4f4f9; border:1px solid #e0e7f0; border-radius:6px; background-size:cover; background-position:center;"></div>
+          <input type="file" id="bgFileInput" accept="image/*" style="display:none;" onchange="onAppearanceFileSelect('bg', event)">
+          <button type="button" onclick="document.getElementById('bgFileInput').click()" style="padding:5px 12px; font-size:0.85em; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer;">画像を選択</button>
+          <button type="button" id="btnBgClear" onclick="clearAppearanceImage('bg')" style="padding:5px 12px; font-size:0.85em; background:#fff; border:1px solid #ccc; border-radius:6px; cursor:pointer; display:none;">クリア</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label for="galleryBgColorInput">背景色</label>
+        <input type="color" id="galleryBgColorInput" value="#fafafa" style="width:50px; height:32px; border:1px solid #ccc; border-radius:6px; padding:2px;">
+        <span style="font-size:0.78em; color:#888;">背景画像が設定されている場合はそちらが優先</span>
+      </div>
+      <button class="btn-primary" id="btnSaveAppearance" onclick="saveGalleryAppearance()">💾 外観を保存</button>
+      <div id="galleryAppearanceMsg" style="font-size:0.85em; min-height:1.2em; margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎫 会場 QR コードの発行</div>
+      <div style="font-size:0.85em; color:#666; margin-bottom:12px; line-height:1.6;">
+        <strong>visitor_only</strong> モードで使う、有効期限付きの URL を発行します。<br>
+        <strong>public</strong> モードでは <code>gallery.html?ex=<span id="qrExCodeHint"></span></code> でアクセスできるので発行不要です。
+      </div>
+      <div class="setting-row">
+        <label for="qrExpDays">有効期限（日）</label>
+        <input type="number" id="qrExpDays" value="60" min="1" max="365">
+        <button class="btn-primary" id="btnIssueGalleryQr" onclick="issueGalleryQr()">QR を発行</button>
+      </div>
+      <div id="galleryQrResult"></div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const fsDb = firebase.firestore();
+    const fsStorage = firebase.storage();
+  </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    function getUrlParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
+    let currentEx = '';
+    let currentExEmail = '';
+    let currentExName = '';
+    let currentExDocExists = false;
+
+    function loadExhibition() {
+      const ex = document.getElementById('exCodeInput').value.trim();
+      if (!ex) return;
+      currentEx = ex;
+      currentExEmail = '';
+      currentExDocExists = false;
+      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+      document.getElementById('exError').innerText = '';
+      document.getElementById('btnLoad').disabled = true;
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'none';
+      document.getElementById('mainArea').style.display = 'none';
+
+      fsDb.collection('exhibitions').doc(ex).get()
+        .then(exSnap => {
+          document.getElementById('btnLoad').disabled = false;
+          if (!exSnap.exists) {
+            document.getElementById('exName').innerText = '';
+            document.getElementById('exError').innerText = '展覧会が見つかりません: ' + ex;
+            return;
+          }
+          currentExDocExists = true;
+          const data = exSnap.data();
+          currentExName = data.ex_name || ex;
+          currentExEmail = (data.email || '').trim().toLowerCase();
+          document.getElementById('exName').innerText = '✅ ' + currentExName;
+          if (window.sandboxBadge) {
+            window.sandboxBadge.render('sandboxBadge', data, 'operator');
+          }
+          document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
+          document.getElementById('qrExCodeHint').innerText = ex;
+          document.getElementById('gallerySelectVisibility').value = data.gallery_visibility || 'closed';
+          document.getElementById('gallerySelectInteractions').value = data.gallery_interactions || 'none';
+          document.getElementById('galleryTitleInput').value = data.gallery_title || '';
+          document.getElementById('gallerySubtitleInput').value = data.gallery_subtitle || '';
+          document.getElementById('galleryBgColorInput').value = data.gallery_bg_color || '#fafafa';
+          setAppearancePreview('hero', data.gallery_hero_url || '');
+          setAppearancePreview('bg', data.gallery_bg_url || '');
+          appearancePending.hero = null;
+          appearancePending.bg = null;
+          appearanceCleared.hero = false;
+          appearanceCleared.bg = false;
+          applyAuthorizationUI();
+        })
+        .catch(err => {
+          console.error('loadExhibition failed:', err);
+          document.getElementById('btnLoad').disabled = false;
+          document.getElementById('exName').innerText = '';
+          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
+        });
+    }
+
+    function applyAuthorizationUI() {
+      const user = firebase.auth().currentUser;
+      const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
+      const isOp = window.operatorAuth && window.operatorAuth.isOperatorEmail(userEmail);
+      const isOrganizer = !!currentExEmail && userEmail === currentExEmail;
+
+      if (!user) {
+        document.getElementById('pwCard').style.display = 'block';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'none';
+        setTimeout(() => {
+          const el = document.getElementById('operatorEmailInput');
+          if (el) el.focus();
+        }, 100);
+        return;
+      }
+
+      if (isOp || isOrganizer) {
+        document.getElementById('pwCard').style.display = 'none';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'block';
+        const emailLabel = document.getElementById('loggedInEmailLabel');
+        if (emailLabel) emailLabel.innerText = user.email;
+        return;
+      }
+
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('mainArea').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'block';
+      document.getElementById('notOrganizerEmail').innerText = user.email;
+
+      const hintEl = document.getElementById('notOrganizerHint');
+      if (!currentExDocExists) {
+        hintEl.innerText = '展覧会 doc (' + currentEx + ') が Firestore に見つかりません。'
+          + 'admin/recover-exhibition.html で復旧するか、運営者 (rymist1@gmail.com) でログインしてください。';
+      } else if (!currentExEmail) {
+        hintEl.innerText = '展覧会 doc に主催者 email フィールドが設定されていません。'
+          + 'admin/recover-exhibition.html で復旧するか、運営者 (rymist1@gmail.com) でログインしてください。';
+      } else {
+        hintEl.innerText = '主催者として登録されているのは ' + currentExEmail + ' です。'
+          + 'そのアカウントか、運営者 (rymist1@gmail.com) でログインしてください。';
+      }
+    }
+
+    // ---- ギャラリー外観 (gallery_title / subtitle / hero / bg) ----
+    const appearancePending = { hero: null, bg: null };  // dataURL of newly selected file
+    const appearanceCleared = { hero: false, bg: false }; // user pressed "クリア"
+
+    function setAppearancePreview(kind, urlOrData) {
+      const el = document.getElementById(kind === 'hero' ? 'heroPreview' : 'bgPreview');
+      const clearBtn = document.getElementById(kind === 'hero' ? 'btnHeroClear' : 'btnBgClear');
+      if (urlOrData) {
+        el.style.backgroundImage = `url("${urlOrData.replace(/"/g, '\\"')}")`;
+        clearBtn.style.display = 'inline-block';
+      } else {
+        el.style.backgroundImage = '';
+        clearBtn.style.display = 'none';
+      }
+    }
+
+    function onAppearanceFileSelect(kind, ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      // クライアント側で長辺 1800px / JPEG 85% にリサイズ
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1800;
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (Math.max(w, h) > MAX) {
+            if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          appearancePending[kind] = dataUrl;
+          appearanceCleared[kind] = false;
+          setAppearancePreview(kind, dataUrl);
+        };
+        img.onerror = () => alert('画像の読み込みに失敗しました');
+        img.src = reader.result;
+      };
+      reader.onerror = () => alert('ファイルの読み込みに失敗しました');
+      reader.readAsDataURL(file);
+      ev.target.value = ''; // 同じファイルを選び直せるように
+    }
+
+    function clearAppearanceImage(kind) {
+      appearancePending[kind] = null;
+      appearanceCleared[kind] = true;
+      setAppearancePreview(kind, '');
+    }
+
+    async function uploadAppearanceImage(kind, dataUrl) {
+      const blob = await (await fetch(dataUrl)).blob();
+      const ref = fsStorage.ref('gallery/' + currentEx + '_' + kind + '.jpg');
+      await ref.put(blob, { contentType: 'image/jpeg' });
+      return await ref.getDownloadURL();
+    }
+
+    async function saveGalleryAppearance() {
+      if (!currentEx) return;
+      const btn = document.getElementById('btnSaveAppearance');
+      const msgEl = document.getElementById('galleryAppearanceMsg');
+      btn.disabled = true;
+      msgEl.style.color = '#888';
+      msgEl.innerText = '保存中...';
+      try {
+        const title = document.getElementById('galleryTitleInput').value.trim();
+        const subtitle = document.getElementById('gallerySubtitleInput').value.trim();
+        const bgColor = document.getElementById('galleryBgColorInput').value;
+        const update = {
+          gallery_title: title,
+          gallery_subtitle: subtitle,
+          gallery_bg_color: bgColor,
+        };
+        if (appearancePending.hero) {
+          msgEl.innerText = 'ヒーロー画像をアップロード中...';
+          update.gallery_hero_url = await uploadAppearanceImage('hero', appearancePending.hero);
+        } else if (appearanceCleared.hero) {
+          // ファイル本体は残るが Firestore からは外す。古いオブジェクトは Storage に居座るが
+          // 同名で上書きされるので実害は小さい。
+          update.gallery_hero_url = '';
+        }
+        if (appearancePending.bg) {
+          msgEl.innerText = '背景画像をアップロード中...';
+          update.gallery_bg_url = await uploadAppearanceImage('bg', appearancePending.bg);
+        } else if (appearanceCleared.bg) {
+          update.gallery_bg_url = '';
+        }
+        await fsDb.collection('exhibitions').doc(currentEx).set(update, { merge: true });
+        appearancePending.hero = null;
+        appearancePending.bg = null;
+        appearanceCleared.hero = false;
+        appearanceCleared.bg = false;
+        msgEl.style.color = '#1a73e8';
+        msgEl.innerText = '✅ 外観を保存しました';
+      } catch (e) {
+        console.error('save appearance failed:', e);
+        msgEl.style.color = '#d93025';
+        msgEl.innerText = '❌ 保存失敗: ' + (e && e.message ? e.message : e);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function saveGallerySettings() {
+      if (!currentEx) return;
+      const visibility = document.getElementById('gallerySelectVisibility').value;
+      const interactions = document.getElementById('gallerySelectInteractions').value;
+      const btn = document.getElementById('btnSaveGallerySettings');
+      const msgEl = document.getElementById('gallerySettingMsg');
+      btn.disabled = true;
+      msgEl.innerText = '保存中...';
+      msgEl.style.color = '#888';
+      try {
+        await fsDb.collection('exhibitions').doc(currentEx).set({
+          gallery_visibility: visibility,
+          gallery_interactions: interactions,
+        }, { merge: true });
+        msgEl.innerText = '✅ 保存しました。';
+        msgEl.style.color = '#1a73e8';
+      } catch (e) {
+        msgEl.innerText = '❌ 保存失敗: ' + (e && e.message ? e.message : e);
+        msgEl.style.color = '#d93025';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function issueGalleryQr() {
+      if (!currentEx) return;
+      const expDays = parseInt(document.getElementById('qrExpDays').value, 10);
+      if (!Number.isFinite(expDays) || expDays < 1 || expDays > 365) {
+        alert('有効期限は 1〜365 の整数で指定してください。');
+        return;
+      }
+      const btn = document.getElementById('btnIssueGalleryQr');
+      const resultEl = document.getElementById('galleryQrResult');
+      btn.disabled = true;
+      resultEl.innerHTML = '<div style="font-size:0.85em; color:#888;">発行中...</div>';
+      try {
+        const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintGalleryQrToken');
+        const res = await fn({ exCode: currentEx, expDays: expDays });
+        const { exp, sig } = res.data || {};
+        if (!exp || !sig) throw new Error('Function から exp/sig が返りませんでした');
+        const url = window.location.origin + '/gallery.html?ex=' + encodeURIComponent(currentEx)
+          + '&exp=' + exp + '&sig=' + sig;
+
+        const qr = qrcode(0, 'H');
+        qr.addData(url);
+        qr.make();
+        const qrImgTag = qr.createImgTag(6, 8);
+
+        const expDate = new Date(exp * 1000);
+        resultEl.innerHTML = `
+          <div class="qr-result">
+            <div class="qr-canvas">${qrImgTag}</div>
+            <div style="font-size:0.85em; color:#555; margin-top:6px;">
+              有効期限: ${expDate.toLocaleString('ja-JP')}
+            </div>
+            <code class="qr-url">${escapeHtml(url)}</code>
+            <div class="qr-actions">
+              <button onclick="copyQrUrl('${url.replace(/'/g, "\\'")}')">URL をコピー</button>
+              <button onclick="printQrPage('${url.replace(/'/g, "\\'")}')">印刷用ページを開く</button>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        resultEl.innerHTML = '<div style="color:#d93025; font-size:0.88em;">発行失敗: '
+          + escapeHtml(e && e.message ? e.message : String(e)) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function copyQrUrl(url) {
+      navigator.clipboard.writeText(url).then(() => {
+        alert('URL をコピーしました。');
+      }).catch(e => alert('コピー失敗: ' + e.message));
+    }
+
+    function printQrPage(url) {
+      const qr = qrcode(0, 'H');
+      qr.addData(url);
+      qr.make();
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>会場 QR</title>
+        <style>body{font-family:sans-serif;text-align:center;padding:40px;}
+        img{max-width:80mm;height:auto;}
+        .url{font-family:monospace;font-size:0.7em;color:#555;word-break:break-all;margin-top:12px;}
+        @media print{body{padding:0;}}
+        </style></head><body>
+        ${qr.createImgTag(10, 12)}
+        <div class="url">${escapeHtml(url)}</div>
+        <script>setTimeout(()=>window.print(),300);<\/script>
+        </body></html>`;
+      const w = window.open('', '_blank');
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const ex = getUrlParam('ex');
+      const exCodeInput = document.getElementById('exCodeInput');
+      if (ex && /[^A-Za-z0-9_-]/.test(ex)) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('ex');
+        window.history.replaceState({}, '', url.toString());
+        return;
+      }
+      if (ex && exCodeInput) {
+        exCodeInput.value = ex;
+        loadExhibition();
+      }
+    });
+
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user) {
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && statusEl) {
+          statusEl.innerText = '🔓 ' + user.email + ' でログイン中';
+          statusEl.style.display = 'block';
+        } else if (statusEl) {
+          statusEl.style.display = 'none';
+        }
+        if (currentEx) {
+          applyAuthorizationUI();
+        }
+      });
+
+      window.signOutAndRetry = function () {
+        window.operatorAuth.signOut().then(function () {
+          if (currentEx) applyAuthorizationUI();
+        });
+      };
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        var normalized = email.toLowerCase();
+        var isOp = window.operatorAuth.isOperatorEmail(normalized);
+        if (!isOp && currentExEmail && normalized !== currentExEmail) {
+          setMsg('このメールアドレスはこの展覧会の主催者として登録されていません。', '#d93025');
+          return;
+        }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+
+</html>

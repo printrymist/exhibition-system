@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOperator() {
+      return request.auth != null && request.auth.token.email == 'rymist1@gmail.com';
+    }
+
+    function isOrganizerEmail(emailField) {
+      return request.auth != null
+        && request.auth.token.email != null
+        && emailField is string
+        && emailField.lower() == request.auth.token.email.lower();
+    }
+
+    match /artworks/{docId} {
+      // 来場者・作家フローで広く読める必要があるため公開読み取りは継続
+      allow read: if true;
+      allow update: if
+        resource != null
+        && request.resource.data.security_key == resource.data.security_key;
+      allow create: if
+        request.resource.data.security_key != null
+        && request.resource.data.security_key != "";
+      allow delete: if isOperator();
+    }
+
+    // likes：読み取りを許可（ダッシュボード用）、変更・削除は禁止
+    // create:
+    //   - 物理会場 QR (input.html) からの anon は引き続き受け入れる (Phase 2 で anon Auth 化予定)
+    //   - gallery.html 経由は visitor custom token が必要 (claim の exCode と一致すること)
+    //   - 運営者はテスト用に常時 OK
+    match /likes/{anyId} {
+      allow read: if true;
+      allow create: if
+        request.resource.data.exCode is string
+        && request.resource.data.exCode.size() > 0
+        && request.resource.data.exCode.size() < 50
+        && request.resource.data.isLike is bool
+        && request.resource.data.sessionId is string
+        && request.resource.data.sessionId.size() < 200
+        && (!('comment' in request.resource.data) || (request.resource.data.comment is string && request.resource.data.comment.size() < 2000))
+        && (
+          request.auth == null
+          || (
+            request.auth.token.role == 'visitor'
+            && request.auth.token.exCode == request.resource.data.exCode
+          )
+          || isOperator()
+        );
+      allow update: if false;
+      allow delete: if isOperator();
+    }
+
+    match /exhibitions/{docId} {
+      // 個別ドキュメントの取得は公開（来場者画面・作家画面で必要）
+      allow get: if true;
+      // 一覧クエリは「自分が主催者の展覧会のみ」または運営者管理者のみ
+      allow list: if isOperator() || isOrganizerEmail(resource.data.email);
+      // 新規作成は認証ユーザかつ自分のメアドを email フィールドに入れた場合のみ
+      allow create: if isOperator() || isOrganizerEmail(request.resource.data.email);
+      // 更新は運営者管理者または該当展覧会の主催者本人のみ
+      allow update: if isOperator() || isOrganizerEmail(resource.data.email);
+      allow delete: if isOperator() || isOrganizerEmail(resource.data.email);
+    }
+
+    // 問い合わせ：誰でも送信可。
+    // 個別ドキュメント (get) は ID を知っていれば読める（リンク所持を実質的なアクセストークンとする）。
+    // 一覧 (list) と更新は運営者（Google ログイン）のみ。
+
+    match /inquiries/{inquiryId} {
+      allow get: if true;
+      allow list: if isOperator();
+      allow create: if true;
+      // 運営者は何でも更新可。
+      // それ以外（リンク所持者）は status を 'open' に戻す変更だけ許可（続報送信時の通知用）。
+      allow update: if isOperator() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'open'
+      );
+      allow delete: if isOperator();
+
+      // 返信履歴サブコレクション
+      // 読み取りは親 inquiry を読める者なら可（リンク所持者）。
+      // 書き込みは運営者か、from='admin' で本文がある場合のみ（リンク所持者の続報）。
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if isOperator() || (
+          request.resource.data.from == 'admin'
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+        );
+        allow update: if false;
+        allow delete: if isOperator();
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

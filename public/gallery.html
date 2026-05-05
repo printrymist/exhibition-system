@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web 展覧会</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #fafafa;
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      color: #1a2a4a;
+      min-height: 100vh;
+    }
+    header {
+      padding: 20px 16px 14px;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+      background: white;
+    }
+    h1.ex-title {
+      font-size: 1.2em;
+      margin: 0;
+      color: #1a2a4a;
+      font-weight: 600;
+    }
+    .ex-subtitle {
+      font-size: 0.78em;
+      color: #888;
+      margin-top: 4px;
+      white-space: pre-wrap;
+    }
+    #heroBanner {
+      width: 100%;
+      height: 180px;
+      background-size: cover;
+      background-position: center;
+      background-color: #e0e7f0;
+      display: none;
+    }
+    @media (min-width: 600px) { #heroBanner { height: 240px; } }
+    @media (min-width: 900px) { #heroBanner { height: 320px; } }
+    main {
+      padding: 12px;
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    @media (min-width: 600px) { #grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+    @media (min-width: 900px) { #grid { grid-template-columns: repeat(4, 1fr); gap: 14px; } }
+    .card {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: transform 0.1s, box-shadow 0.1s;
+      border: none;
+      padding: 0;
+      text-align: left;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .card:focus-visible { outline: 2px solid #1a73e8; outline-offset: 2px; }
+    .card .thumb {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      background: #f0f0f0;
+      display: block;
+    }
+    .card .thumb-wrap {
+      position: relative;
+    }
+    .card .heart-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0,0,0,0.55);
+      color: white;
+      font-size: 0.72em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      pointer-events: none;
+      display: none;
+    }
+    .card .heart-badge.show { display: inline-flex; align-items: center; gap: 3px; }
+    .card .meta {
+      padding: 8px 10px 10px;
+    }
+    .card .title {
+      font-size: 0.85em;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card .artist {
+      font-size: 0.75em;
+      color: #888;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+
+    #status {
+      padding: 60px 20px;
+      text-align: center;
+      color: #888;
+      font-size: 0.92em;
+    }
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 3px solid #c5d9f7;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 100;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: white;
+      border-radius: 12px;
+      max-width: 720px;
+      width: 100%;
+      position: relative;
+      margin: auto 0;
+    }
+    .modal-card .close {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: rgba(0,0,0,0.55);
+      color: white;
+      border-radius: 50%;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .modal-card img.hero {
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      background: #1a1a1a;
+      display: block;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+    .modal-meta {
+      padding: 16px 20px 20px;
+    }
+    .modal-meta .title {
+      font-size: 1.1em;
+      font-weight: 600;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .modal-meta .artist {
+      font-size: 0.92em;
+      color: #555;
+      margin-bottom: 14px;
+      word-break: break-word;
+    }
+    .shop-link {
+      display: inline-block;
+      padding: 9px 18px;
+      background: #1a73e8;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.88em;
+      font-weight: 500;
+    }
+    .shop-link:hover { background: #1557b0; }
+
+    .like-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .like-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: white;
+      border: 1.5px solid #e91e63;
+      color: #e91e63;
+      border-radius: 999px;
+      font-size: 0.95em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .like-btn:hover:not(:disabled) { background: #fce4ec; }
+    .like-btn:disabled,
+    .like-btn.liked {
+      background: #e91e63;
+      color: white;
+      cursor: default;
+    }
+    .like-btn .heart { font-size: 1.1em; line-height: 1; }
+    .like-count-display {
+      font-size: 0.88em;
+      color: #888;
+    }
+
+    .comment-section {
+      margin-top: 6px;
+      padding-top: 16px;
+      border-top: 1px solid #eee;
+    }
+    .comment-form input,
+    .comment-form textarea {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.92em;
+      font-family: inherit;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+      resize: vertical;
+    }
+    .comment-form textarea {
+      min-height: 60px;
+    }
+    .comment-form-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+    }
+    .comment-submit-btn {
+      padding: 8px 18px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9em;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .comment-submit-btn:hover:not(:disabled) { background: #1557b0; }
+    .comment-submit-btn:disabled { opacity: 0.5; cursor: wait; }
+    .comment-msg {
+      font-size: 0.82em;
+      min-height: 1em;
+    }
+    .comment-list {
+      margin-top: 16px;
+    }
+    .comment-list-title {
+      font-size: 0.82em;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    .comment-item {
+      padding: 10px 12px;
+      background: #f7f9fc;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 0.9em;
+    }
+    .comment-item .who {
+      font-weight: 600;
+      color: #1a2a4a;
+      margin-bottom: 3px;
+      font-size: 0.85em;
+    }
+    .comment-item .when {
+      font-weight: normal;
+      color: #aaa;
+      font-size: 0.78em;
+      margin-left: 6px;
+    }
+    .comment-item .body {
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #333;
+    }
+    .comment-empty {
+      font-size: 0.82em;
+      color: #aaa;
+      padding: 6px 0;
+    }
+
+    .info-card {
+      max-width: 480px;
+      margin: 60px auto;
+      background: white;
+      padding: 30px 24px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      text-align: center;
+    }
+    .info-card .icon { font-size: 2.5em; margin-bottom: 12px; }
+    .info-card .heading { font-weight: 600; font-size: 1.05em; margin-bottom: 8px; }
+    .info-card .body { color: #666; font-size: 0.9em; line-height: 1.6; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1 class="ex-title" id="exTitle">読み込み中...</h1>
+    <div class="ex-subtitle" id="exSubtitle"></div>
+  </header>
+
+  <div id="heroBanner"></div>
+
+  <div id="sandboxBadge"></div>
+
+  <main>
+    <div id="status"><span class="spinner"></span> 読み込み中...</div>
+    <div id="grid" style="display:none;"></div>
+    <div id="infoBlock" style="display:none;"></div>
+  </main>
+
+  <div class="modal-overlay" id="modal" onclick="onModalBackdrop(event)" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card" id="modalCard">
+      <button class="close" onclick="closeModal()" aria-label="閉じる">×</button>
+      <img class="hero" id="modalImg" alt="">
+      <div class="modal-meta">
+        <div class="title" id="modalTitle"></div>
+        <div class="artist" id="modalArtist"></div>
+        <div class="like-row" id="modalLikeRow" style="display:none;">
+          <button type="button" class="like-btn" id="modalLikeBtn" onclick="onLikeClick()">
+            <span class="heart" id="modalLikeHeart">♡</span>
+            <span id="modalLikeLabel">いいね</span>
+          </button>
+          <span class="like-count-display" id="modalLikeCount"></span>
+        </div>
+        <div id="modalShopLink"></div>
+        <div class="comment-section" id="modalCommentSection" style="display:none;">
+          <div class="comment-form">
+            <input type="text" id="modalNicknameInput" placeholder="ニックネーム (任意)" maxlength="40">
+            <textarea id="modalCommentInput" placeholder="感想・コメントを書く" maxlength="500"></textarea>
+            <div class="comment-form-row">
+              <span class="comment-msg" id="modalCommentMsg"></span>
+              <button type="button" class="comment-submit-btn" id="modalCommentBtn" onclick="onCommentSubmit()">送信</button>
+            </div>
+          </div>
+          <div class="comment-list" id="modalCommentList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    // 名前付き app "visitor" として初期化し、デフォルト app (主催者ログイン中の web-exhibition.html
+    // など) と auth 状態を完全に分離する。同一オリジンで signInWithCustomToken すると
+    // デフォルト app の IndexedDB セッションを上書きしてしまうので、必ず別 app に閉じる。
+    const visitorApp = firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    }, 'visitor');
+    const fsDb = visitorApp.firestore();
+    const visitorAuth = visitorApp.auth();
+    const visitorFunctions = visitorApp.functions('asia-northeast1');
+  </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script>
+    function getUrlParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+    function safeHttpUrl(url) {
+      if (!url) return '';
+      const s = String(url).trim();
+      return /^https?:\/\//i.test(s) ? s : '';
+    }
+    // 解像度切替を後から差し込めるように関数化 (将来 image_url_hires などに拡張する想定)。
+    function getArtworkImageUrl(artwork, _size) {
+      return artwork && artwork.image_url ? String(artwork.image_url) : '';
+    }
+
+    function showInfo(icon, heading, body) {
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('grid').style.display = 'none';
+      const block = document.getElementById('infoBlock');
+      block.style.display = 'block';
+      block.innerHTML = `
+        <div class="info-card">
+          <div class="icon">${escapeHtml(icon)}</div>
+          <div class="heading">${escapeHtml(heading)}</div>
+          <div class="body">${escapeHtml(body)}</div>
+        </div>
+      `;
+    }
+
+    let artworksCache = [];
+    let interactionsMode = 'none'; // 'none' / 'likes_only' / 'likes_and_comments'
+    let exNameCache = '';
+    let exCodeCache = '';
+    const likesByWork = Object.create(null);    // {workId: count}
+    const commentsByWork = Object.create(null); // {workId: [{nickname, comment, ts, id}]}
+    const likedLocally = new Set();             // 既にいいね済の workId
+    let currentModalIdx = null;
+    let unsubLikes = null;
+
+    function applyAppearance(d) {
+      if (!d) return;
+      const customTitle = (d.gallery_title || '').trim();
+      const fallbackTitle = (d.ex_name || exCodeCache || '').trim() || 'Web 展覧会';
+      const headerTitle = customTitle || fallbackTitle;
+      document.getElementById('exTitle').innerText = headerTitle;
+      document.title = headerTitle + ' - Web 展覧会';
+
+      const subtitle = (d.gallery_subtitle || '').trim();
+      const subEl = document.getElementById('exSubtitle');
+      if (subtitle) {
+        subEl.innerText = subtitle;
+        subEl.style.display = 'block';
+      } else {
+        subEl.style.display = 'none';
+      }
+
+      const bgColor = (d.gallery_bg_color || '').trim();
+      if (bgColor) document.body.style.backgroundColor = bgColor;
+      const bgUrl = safeHttpUrl(d.gallery_bg_url || '');
+      if (bgUrl) {
+        document.body.style.backgroundImage = `url("${bgUrl.replace(/"/g, '\\"')}")`;
+      } else {
+        document.body.style.backgroundImage = '';
+      }
+
+      const heroUrl = safeHttpUrl(d.gallery_hero_url || '');
+      const heroEl = document.getElementById('heroBanner');
+      if (heroUrl) {
+        heroEl.style.backgroundImage = `url("${heroUrl.replace(/"/g, '\\"')}")`;
+        heroEl.style.display = 'block';
+      } else {
+        heroEl.style.display = 'none';
+      }
+    }
+
+    function getOrCreateSessionId() {
+      // index.html と同じキーを共有 (ブラウザ単位 ≒ 1人)。
+      let sid = localStorage.getItem("rohei_session_id") || sessionStorage.getItem("rohei_session_id");
+      if (!sid) {
+        sid = "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+      }
+      localStorage.setItem("rohei_session_id", sid);
+      sessionStorage.setItem("rohei_session_id", sid);
+      return sid;
+    }
+
+    async function init() {
+      const exCode = getUrlParam('ex').trim();
+      if (!exCode) {
+        document.getElementById('exTitle').innerText = 'Web 展覧会';
+        showInfo('❓', '展覧会コードがありません', 'URL に ?ex=展覧会コード を付けてアクセスしてください。');
+        return;
+      }
+      if (/[^A-Za-z0-9_-]/.test(exCode)) {
+        document.getElementById('exTitle').innerText = 'Web 展覧会';
+        showInfo('❓', '展覧会コードが不正です', 'URL の ex= パラメータを確認してください。');
+        return;
+      }
+
+      exCodeCache = exCode;
+
+      // exhibition は誰でも get できるルールなので、表題用に先に取得しておく。
+      let exData = null;
+      try {
+        const exSnap = await fsDb.collection('exhibitions').doc(exCode).get();
+        if (exSnap.exists) {
+          exData = exSnap.data();
+          exNameCache = exData.ex_name || exCode;
+          applyAppearance(exData);
+          if (window.sandboxBadge) {
+            window.sandboxBadge.render('sandboxBadge', exData, 'visitor', { maxWidth: '600px' });
+          }
+        } else {
+          document.getElementById('exTitle').innerText = 'Web 展覧会';
+        }
+      } catch (e) {
+        console.warn('exhibition doc 取得失敗:', e);
+        document.getElementById('exTitle').innerText = 'Web 展覧会';
+      }
+
+      // visitor 認証 (Phase B-2 / B-3): issueGalleryToken で visibility と sig を一括判定。
+      // closed → permission-denied、visitor_only で sig 不足 → invalid-argument、
+      // sig 不一致 → permission-denied、期限切れ → deadline-exceeded。
+      const expRaw = getUrlParam('exp');
+      const sigRaw = getUrlParam('sig');
+      const callPayload = { exCode };
+      if (expRaw) callPayload.exp = Number(expRaw);
+      if (sigRaw) callPayload.sig = sigRaw;
+
+      let issueRes;
+      try {
+        const fn = visitorFunctions.httpsCallable('issueGalleryToken');
+        issueRes = (await fn(callPayload)).data;
+      } catch (e) {
+        const code = (e && e.code) || '';
+        const msg = (e && e.message) || String(e);
+        console.warn('issueGalleryToken failed:', code, msg);
+        if (code === 'functions/permission-denied' && /公開されていません/.test(msg)) {
+          showInfo('🔒', '現在この展覧会は公開されていません', '主催者にお問い合わせください。');
+        } else if (code === 'functions/permission-denied' && /署名/.test(msg)) {
+          showInfo('🔒', 'QR コードが無効です', 'QR コードが破損しているか、別の展覧会のものです。');
+        } else if (code === 'functions/deadline-exceeded') {
+          showInfo('⏰', 'QR コードの有効期限が切れています', '主催者に新しい QR コードを発行してもらってください。');
+        } else if (code === 'functions/invalid-argument' && /exp \+ sig/.test(msg)) {
+          showInfo('🔒', '閲覧には QR コード経由のアクセスが必要です', 'この展覧会は QR コードを持つ来場者のみ閲覧できます。');
+        } else if (code === 'functions/not-found') {
+          showInfo('❓', '展覧会が見つかりません', '展覧会コードを確認してください。');
+        } else {
+          showInfo('⚠', '閲覧できません', msg);
+        }
+        return;
+      }
+
+      const customToken = issueRes && issueRes.token;
+      interactionsMode = String(issueRes && issueRes.interactions || 'none');
+      if (!customToken) {
+        showInfo('⚠', '認証トークンが取得できませんでした', '時間をおいて再度お試しください。');
+        return;
+      }
+      try {
+        // visitor セッションをタブメモリだけに留めて、IndexedDB を一切汚さない。
+        // これでブラウザを閉じれば消え、他タブにも漏れない。
+        await visitorAuth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+        await visitorAuth.signInWithCustomToken(customToken);
+      } catch (e) {
+        console.error('signInWithCustomToken failed:', e);
+        showInfo('⚠', '認証に失敗しました', e.message || String(e));
+        return;
+      }
+
+      // 作品取得。status='1' のみ表示 (登録完了した作品)。
+      try {
+        const snap = await fsDb.collection('artworks')
+          .where('exCode', '==', exCode)
+          .get();
+        const artworks = [];
+        snap.forEach(d => {
+          const a = d.data();
+          if (String(a.status || '') !== '1') return;
+          if (!getArtworkImageUrl(a, 'display')) return;
+          artworks.push(a);
+        });
+        artworks.sort((a, b) =>
+          String(a.artwork_id || '').localeCompare(String(b.artwork_id || '')));
+        artworksCache = artworks;
+        // localStorage から既にいいね済の作品を復元
+        artworks.forEach(a => {
+          if (localStorage.getItem('voted_' + exCode + '_' + a.artwork_id)) {
+            likedLocally.add(a.artwork_id);
+          }
+        });
+        renderGrid(artworks);
+        if (interactionsMode !== 'none') {
+          subscribeToLikes(exCode);
+        }
+      } catch (e) {
+        console.error('artworks 取得失敗:', e);
+        showInfo('⚠', '作品の取得に失敗しました', e.message || String(e));
+      }
+    }
+
+    function subscribeToLikes(exCode) {
+      if (unsubLikes) { try { unsubLikes(); } catch(_){} }
+      unsubLikes = fsDb.collection('likes')
+        .where('exCode', '==', exCode)
+        .onSnapshot(snap => {
+          for (const k of Object.keys(likesByWork)) delete likesByWork[k];
+          for (const k of Object.keys(commentsByWork)) delete commentsByWork[k];
+          snap.forEach(d => {
+            const data = d.data();
+            const wid = data.workId;
+            if (!wid) return;
+            if (data.isLike) {
+              likesByWork[wid] = (likesByWork[wid] || 0) + 1;
+            }
+            const c = (data.comment || '').trim();
+            if (c) {
+              if (!commentsByWork[wid]) commentsByWork[wid] = [];
+              commentsByWork[wid].push({
+                id: d.id,
+                nickname: data.nickname || '',
+                comment: c,
+                ts: data.timestamp || ''
+              });
+            }
+          });
+          // newest first
+          for (const wid of Object.keys(commentsByWork)) {
+            commentsByWork[wid].sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+          }
+          updateGridLikeBadges();
+          if (currentModalIdx != null) updateModalLikeUI();
+        }, err => console.error('likes subscribe failed:', err));
+    }
+
+    function updateGridLikeBadges() {
+      if (interactionsMode === 'none') return;
+      const cards = document.querySelectorAll('#grid .card');
+      cards.forEach(card => {
+        const idx = Number(card.dataset.idx);
+        const a = artworksCache[idx];
+        if (!a) return;
+        const cnt = likesByWork[a.artwork_id] || 0;
+        const badge = card.querySelector('.heart-badge');
+        if (!badge) return;
+        if (cnt > 0) {
+          badge.classList.add('show');
+          badge.innerHTML = '<span>♥</span><span>' + cnt + '</span>';
+        } else {
+          badge.classList.remove('show');
+        }
+      });
+    }
+
+    function renderGrid(artworks) {
+      document.getElementById('status').style.display = 'none';
+      const grid = document.getElementById('grid');
+      if (artworks.length === 0) {
+        grid.style.display = 'none';
+        showInfo('🖼', '展示作品がまだありません', '作家による作品登録が完了すると、ここに表示されます。');
+        return;
+      }
+      grid.style.display = 'grid';
+      grid.innerHTML = artworks.map((a, idx) => {
+        const img = getArtworkImageUrl(a, 'thumb');
+        return `
+          <button type="button" class="card" data-idx="${idx}" onclick="openModal(${idx})">
+            <div class="thumb-wrap">
+              <img class="thumb" src="${escapeHtml(img)}" alt="${escapeHtml(a.title || '')}" loading="lazy">
+              <span class="heart-badge" aria-hidden="true"></span>
+            </div>
+            <div class="meta">
+              <div class="title">${escapeHtml(a.title || '（タイトル未設定）')}</div>
+              <div class="artist">${escapeHtml(a.artist || '')}</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+      updateGridLikeBadges();
+    }
+
+    function openModal(idx) {
+      const a = artworksCache[idx];
+      if (!a) return;
+      currentModalIdx = idx;
+      document.getElementById('modalImg').src = getArtworkImageUrl(a, 'display');
+      document.getElementById('modalImg').alt = a.title || '';
+      document.getElementById('modalTitle').innerText = a.title || '（タイトル未設定）';
+      document.getElementById('modalArtist').innerText = a.artist || '';
+      const shopUrl = safeHttpUrl(a.shop_url);
+      const shopEl = document.getElementById('modalShopLink');
+      shopEl.innerHTML = shopUrl
+        ? `<a class="shop-link" href="${escapeHtml(shopUrl)}" target="_blank" rel="noopener noreferrer">ショップを見る →</a>`
+        : '';
+      updateModalLikeUI();
+      updateModalCommentUI();
+      document.getElementById('modal').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function updateModalLikeUI() {
+      const row = document.getElementById('modalLikeRow');
+      if (interactionsMode === 'none' || currentModalIdx == null) {
+        row.style.display = 'none';
+        return;
+      }
+      const a = artworksCache[currentModalIdx];
+      if (!a) { row.style.display = 'none'; return; }
+      row.style.display = 'flex';
+      const isLiked = likedLocally.has(a.artwork_id);
+      const btn = document.getElementById('modalLikeBtn');
+      btn.classList.toggle('liked', isLiked);
+      btn.disabled = isLiked;
+      document.getElementById('modalLikeHeart').innerText = isLiked ? '♥' : '♡';
+      document.getElementById('modalLikeLabel').innerText = isLiked ? 'ありがとうございます' : 'いいね';
+      const cnt = likesByWork[a.artwork_id] || 0;
+      document.getElementById('modalLikeCount').innerText = cnt > 0 ? cnt + ' いいね' : '';
+    }
+
+    function formatTs(ts) {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (_) { return ''; }
+    }
+
+    function updateModalCommentUI() {
+      const sec = document.getElementById('modalCommentSection');
+      if (interactionsMode !== 'likes_and_comments' || currentModalIdx == null) {
+        sec.style.display = 'none';
+        return;
+      }
+      const a = artworksCache[currentModalIdx];
+      if (!a) { sec.style.display = 'none'; return; }
+      sec.style.display = 'block';
+
+      // ニックネームは展覧会単位で復元 (index.html と同じキー)
+      const nickInput = document.getElementById('modalNicknameInput');
+      if (!nickInput.dataset.userEdited) {
+        const saved = localStorage.getItem('nickname_' + exCodeCache);
+        if (saved) nickInput.value = saved;
+      }
+      nickInput.oninput = () => { nickInput.dataset.userEdited = '1'; };
+
+      // 既存コメント描画
+      const list = document.getElementById('modalCommentList');
+      const items = commentsByWork[a.artwork_id] || [];
+      if (items.length === 0) {
+        list.innerHTML = '<div class="comment-empty">まだコメントはありません。最初の感想を投稿してみよう。</div>';
+      } else {
+        list.innerHTML = '<div class="comment-list-title">' + items.length + '件のコメント</div>'
+          + items.map(c => `
+              <div class="comment-item">
+                <div class="who">${escapeHtml(c.nickname || '匿名')}<span class="when">${escapeHtml(formatTs(c.ts))}</span></div>
+                <div class="body">${escapeHtml(c.comment)}</div>
+              </div>
+            `).join('');
+      }
+    }
+
+    async function onCommentSubmit() {
+      if (currentModalIdx == null) return;
+      const a = artworksCache[currentModalIdx];
+      if (!a) return;
+      const commentInput = document.getElementById('modalCommentInput');
+      const nickInput = document.getElementById('modalNicknameInput');
+      const btn = document.getElementById('modalCommentBtn');
+      const msgEl = document.getElementById('modalCommentMsg');
+      const comment = (commentInput.value || '').trim();
+      const nickname = (nickInput.value || '').trim();
+      if (!comment) {
+        msgEl.style.color = '#d93025';
+        msgEl.innerText = 'コメントを入力してください';
+        return;
+      }
+      if (comment.length > 500) {
+        msgEl.style.color = '#d93025';
+        msgEl.innerText = 'コメントは 500 文字以内で入力してください';
+        return;
+      }
+      btn.disabled = true;
+      msgEl.style.color = '#888';
+      msgEl.innerText = '送信中...';
+      const sid = getOrCreateSessionId();
+      try {
+        // コメントは isLike: false で書く (いいねボタンと独立)。
+        // ダッシュボードはこの shape で likes/comments を別カウントしている。
+        await fsDb.collection('likes').add({
+          exCode: exCodeCache,
+          ex_name: exNameCache,
+          workId: a.artwork_id,
+          title: a.title || '',
+          artist: a.artist || '',
+          sessionId: sid,
+          nickname: nickname,
+          comment: comment,
+          isLike: false,
+          source: 'gallery',
+          timestamp: new Date().toISOString()
+        });
+        if (nickname) localStorage.setItem('nickname_' + exCodeCache, nickname);
+        commentInput.value = '';
+        msgEl.style.color = '#1a73e8';
+        msgEl.innerText = '✅ 送信しました';
+        // 一覧はリスナー経由で自動更新
+      } catch (e) {
+        console.error('comment 書き込み失敗:', e);
+        msgEl.style.color = '#d93025';
+        msgEl.innerText = '送信失敗: ' + (e && e.message ? e.message : e);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function onLikeClick() {
+      if (currentModalIdx == null) return;
+      const a = artworksCache[currentModalIdx];
+      if (!a) return;
+      if (likedLocally.has(a.artwork_id)) return;
+      const btn = document.getElementById('modalLikeBtn');
+      btn.disabled = true;
+      const sid = getOrCreateSessionId();
+      try {
+        await fsDb.collection('likes').add({
+          exCode: exCodeCache,
+          ex_name: exNameCache,
+          workId: a.artwork_id,
+          title: a.title || '',
+          artist: a.artist || '',
+          sessionId: sid,
+          isLike: true,
+          source: 'gallery',
+          timestamp: new Date().toISOString()
+        });
+        localStorage.setItem('voted_' + exCodeCache + '_' + a.artwork_id, 'true');
+        likedLocally.add(a.artwork_id);
+        updateModalLikeUI();
+        // count はリスナー経由で更新される
+      } catch (e) {
+        console.error('like 書き込み失敗:', e);
+        btn.disabled = false;
+        alert('いいねの送信に失敗しました: ' + (e && e.message ? e.message : e));
+      }
+    }
+
+    function closeModal() {
+      currentModalIdx = null;
+      // 次に開く作品でニックネームを再フェッチできるようにフラグだけクリア
+      const nickInput = document.getElementById('modalNicknameInput');
+      if (nickInput) delete nickInput.dataset.userEdited;
+      const commentInput = document.getElementById('modalCommentInput');
+      if (commentInput) commentInput.value = '';
+      const msgEl = document.getElementById('modalCommentMsg');
+      if (msgEl) msgEl.innerText = '';
+      document.getElementById('modal').classList.remove('show');
+      document.body.style.overflow = '';
+    }
+
+    function onModalBackdrop(e) {
+      if (e.target === e.currentTarget) closeModal();
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    init();
+  </script>
+</body>
+
+</html>

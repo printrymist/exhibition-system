@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /artworks/{filename} {
+      allow read: if true;
+      allow create, update: if
+        request.resource != null
+        && request.resource.size < 1 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && filename.matches('.+\\.jpg');
+      allow delete: if false;
+    }
+
+    // gallery 用の hero / 背景画像。クライアント側で JPEG 化してから上げる。
+    match /gallery/{filename} {
+      allow read: if true;
+      allow create, update: if
+        request.resource != null
+        && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && filename.matches('.+\\.jpg');
+      allow delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
