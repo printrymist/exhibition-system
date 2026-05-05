@@ -10,6 +10,7 @@
     body {
       font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
       color: #1a2a4a;
+      font-size: 17px;
       padding: 24px;
       min-height: 100vh;
       background:
@@ -34,16 +35,16 @@
       margin-bottom: 28px;
     }
     .ex-name {
-      font-size: 2em;
+      font-size: 2.4em;
       font-weight: 700;
       color: #fff;
       letter-spacing: 0.04em;
       text-shadow: 0 2px 16px rgba(0,0,0,0.4);
     }
     .updated-at {
-      font-size: 0.8em;
-      color: rgba(255,255,255,0.65);
-      margin-top: 6px;
+      font-size: 0.95em;
+      color: rgba(255,255,255,0.7);
+      margin-top: 8px;
     }
     .big-numbers {
       display: grid;
@@ -64,13 +65,14 @@
     }
     .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(31,38,135,0.2); }
     .stat-label {
-      font-size: 0.85em;
+      font-size: 1.05em;
       color: #6b6685;
       margin-bottom: 10px;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
+      font-weight: 600;
     }
     .stat-value {
-      font-size: 3em;
+      font-size: 3.2em;
       font-weight: 800;
       color: #1a2a4a;
       line-height: 1;
@@ -91,12 +93,12 @@
       border: 1px solid rgba(255,255,255,0.6);
     }
     .ranking-title {
-      font-size: 1.05em;
+      font-size: 1.3em;
       font-weight: 700;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
       color: #1a2a4a;
       border-bottom: 2px solid #c5a3ff;
-      padding-bottom: 8px;
+      padding-bottom: 10px;
     }
     .ranking-item {
       display: flex;
@@ -107,15 +109,15 @@
     }
     .ranking-item:last-child { border-bottom: none; }
     .ranking-rank {
-      width: 26px;
+      width: 30px;
       font-weight: 700;
       color: #999;
-      font-size: 1.1em;
+      font-size: 1.25em;
       text-align: center;
     }
-    .ranking-rank.gold { color: #d4a017; font-size: 1.3em; }
-    .ranking-rank.silver { color: #888; font-size: 1.2em; }
-    .ranking-rank.bronze { color: #a0522d; font-size: 1.15em; }
+    .ranking-rank.gold { color: #d4a017; font-size: 1.5em; }
+    .ranking-rank.silver { color: #888; font-size: 1.4em; }
+    .ranking-rank.bronze { color: #a0522d; font-size: 1.3em; }
     .ranking-info {
       flex: 1;
       min-width: 0;
@@ -125,17 +127,18 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-size: 0.95em;
+      font-size: 1.1em;
     }
     .ranking-artist {
-      font-size: 0.78em;
+      font-size: 0.92em;
       color: #888;
+      margin-top: 2px;
     }
     .ranking-count {
       font-weight: 800;
       color: #d93025;
-      font-size: 1.4em;
-      min-width: 44px;
+      font-size: 1.7em;
+      min-width: 50px;
       text-align: right;
     }
     .feed-card {
@@ -159,37 +162,44 @@
       margin-bottom: 4px;
       flex-wrap: wrap;
     }
-    .feed-time { font-size: 0.72em; color: #aaa; }
+    .feed-time { font-size: 0.85em; color: #aaa; }
     .feed-work {
-      font-size: 0.88em;
+      font-size: 1em;
       font-weight: 600;
       color: #1a73e8;
     }
     .feed-nickname {
-      font-size: 0.82em;
+      font-size: 0.95em;
       color: #666;
     }
     .feed-comment {
-      font-size: 0.95em;
+      font-size: 1.05em;
       color: #2c2c2c;
-      line-height: 1.5;
+      line-height: 1.55;
       word-break: break-word;
+      margin-top: 4px;
     }
     .empty {
       text-align: center;
       color: #aaa;
-      padding: 24px 0;
-      font-size: 0.9em;
+      padding: 28px 0;
+      font-size: 1em;
     }
     @keyframes pop {
       0% { background: #fff5b1; }
       100% { background: transparent; }
     }
     @media (max-width: 900px) {
-      .big-numbers { grid-template-columns: repeat(2, 1fr); }
+      body { font-size: 16px; padding: 16px; }
+      .big-numbers { grid-template-columns: repeat(2, 1fr); gap: 12px; }
       .main-content { grid-template-columns: 1fr; }
-      .stat-value { font-size: 2.4em; }
-      .ex-name { font-size: 1.5em; }
+      .stat-value { font-size: 2.5em; }
+      .stat-card { padding: 18px 14px; }
+      .ex-name { font-size: 1.7em; }
+      .ranking-title { font-size: 1.15em; }
+    }
+    @media (min-width: 1400px) {
+      body { font-size: 18px; }
     }
   </style>
 </head>
@@ -199,6 +209,8 @@
     <div class="ex-name" id="exName">読み込み中...</div>
     <div class="updated-at" id="updatedAt"></div>
   </div>
+
+  <div id="sandboxBadge" style="display:none;"></div>
 
   <div class="big-numbers">
     <div class="stat-card">
@@ -245,6 +257,12 @@
 
     const exVal = (new URLSearchParams(location.search).get('ex') || '').trim();
 
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
     if (!exVal) {
       document.getElementById('exName').textContent = '展覧会コードが指定されていません（?ex=...）';
     } else {
@@ -255,7 +273,13 @@
 
       fsDb.collection('exhibitions').doc(exVal).onSnapshot(snap => {
         if (snap.exists) {
-          document.getElementById('exName').textContent = snap.data().ex_name || exVal;
+          const exData = snap.data();
+          const title = (exData.ex_name || '').trim() || exVal;
+          document.getElementById('exName').textContent = title;
+          document.title = title + ' - ダッシュボード';
+          if (window.sandboxBadge) {
+            window.sandboxBadge.render('sandboxBadge', exData, 'operator');
+          }
         } else {
           document.getElementById('exName').textContent = exVal + ' (展覧会未登録)';
         }
@@ -360,13 +384,9 @@
         }).join('');
       }
 
-      function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str == null ? '' : String(str);
-        return div.innerHTML;
-      }
     }
   </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
 </body>
 
 </html>
