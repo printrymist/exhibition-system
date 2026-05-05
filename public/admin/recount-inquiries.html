@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Recount Inquiries</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.2em; }
+    button { padding: 10px 20px; font-size: 15px; cursor: pointer; }
+    pre { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    .note { font-size: 0.85em; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Recount Inquiries (Firestore -> inquiries_index sheet)</h1>
+  <p>Firestore の inquiries コレクションを読んで、SS の <code>inquiries_index</code> シートに 1 行ずつ追加します。
+     既に同じ inquiry_id がある行はスキップされます（idempotent）。</p>
+  <p class="note">Google ログイン済み（rymist1@gmail.com）でないと list 権限がありません。先に inbox.html でサインインしておくとスムーズです。</p>
+  <button onclick="run()">recount を実行</button>
+  <pre id="log">(待機中)</pre>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var auth = firebase.auth();
+    var GAS_URL = "https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec";
+    var logEl = document.getElementById("log");
+
+    function append(s) { logEl.textContent += "\n" + s; }
+    function fmtDate(ts) {
+      if (!ts) return "";
+      var d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString("ja-JP", { hour12: false }).replace(/\//g, "/");
+    }
+
+    async function run() {
+      logEl.textContent = "実行中...";
+      try {
+        if (!auth.currentUser) {
+          append("Google ログインを開始します...");
+          await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+        }
+        append("user: " + auth.currentUser.email);
+
+        var snap = await db.collection("inquiries").get();
+        append("Firestore inquiries: " + snap.size + " 件");
+
+        var rows = snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
+        rows.sort(function(a, b){
+          var ta = a.created_at && a.created_at.toDate ? a.created_at.toDate().getTime() : 0;
+          var tb = b.created_at && b.created_at.toDate ? b.created_at.toDate().getTime() : 0;
+          return ta - tb;
+        });
+
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          // last_message_at: messages サブコレクションの最後 or created_at
+          var lastAt = fmtDate(r.created_at);
+          try {
+            var msgSnap = await db.collection("inquiries").doc(r.id).collection("messages").orderBy("at", "desc").limit(1).get();
+            if (!msgSnap.empty) {
+              var m = msgSnap.docs[0].data();
+              if (m.at) lastAt = fmtDate(m.at);
+            }
+          } catch (e) { /* skip */ }
+
+          var payload = {
+            inquiry_id: r.id,
+            ex_code: r.ex_code || "",
+            ex_name: r.ex_name || "",
+            organizer: r.organizer || "",
+            email: r.email || "",
+            category: r.category || "",
+            subcategory: r.subcategory || "",
+            subject: r.subject || "",
+            status: r.status || "open",
+            created_at: fmtDate(r.created_at),
+            last_message_at: lastAt
+          };
+          var body = new URLSearchParams({
+            action: "appendInquiryToIndex",
+            payload: JSON.stringify(payload)
+          });
+          var res = await fetch(GAS_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body
+          }).then(function(r){ return r.json(); });
+          var note = res.success
+            ? (res.skipped ? "skipped (" + res.skipped + ")" : "OK")
+            : ("NG: " + (res.error || ""));
+          append((i + 1) + "/" + rows.length + " " + r.id + " (" + (r.ex_code || "?") + ") -> " + note);
+        }
+        append("=== recount-inquiries 完了 ===");
+      } catch (e) {
+        append("ERROR: " + (e && e.message ? e.message : String(e)));
+      }
+    }
+  </script>
+</body>
+</html>

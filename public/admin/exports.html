@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Exhibition Exports</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 720px; margin: 0 auto; color: #1a2a4a; }
+    h1 { font-size: 1.3em; }
+    .row { margin: 14px 0; }
+    select, button { padding: 10px 14px; font-size: 15px; border-radius: 6px; border: 1px solid #ddd; }
+    button { background: #1a73e8; color: #fff; border-color: #1a73e8; cursor: pointer; min-width: 200px; text-align: left; }
+    button:hover:not(:disabled) { background: #1557b0; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .btn-list { display: flex; flex-direction: column; gap: 10px; max-width: 360px; margin-top: 16px; }
+    .desc { font-size: 0.85em; color: #666; margin-top: 4px; }
+    pre { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    .premium-tag { font-size: 0.7em; background: #fff3e0; color: #b26a00; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-row button { min-width: auto; padding: 10px 16px; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <a id="backToReports" href="../reports.html"
+    style="display:inline-block; margin-bottom:8px; padding:6px 14px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:13px; text-decoration:none;">
+    ← 出力・レポートへ戻る
+  </a>
+  <h1>Exhibition Data Exports</h1>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">主催者ログイン</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">展覧会を申し込んだ際のメールアドレスを入力してください。あなたが主催者として登録された展覧会のデータのみダウンロードできます。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+
+    <div class="row">
+      <label>Exhibition:
+        <select id="exSelect" onchange="onExChange()"></select>
+      </label>
+    </div>
+
+    <div class="btn-list">
+      <button onclick="dl('artworks')">🎨 Artworks XLSX</button>
+      <div class="desc">登録済み作品(status=1)の一覧。列は caption_fields に従う。Excel で型崩れせず往復編集できるよう xlsx 形式。</div>
+
+      <button onclick="dl('comments')">💬 Comments CSV</button>
+      <div class="desc">コメント全件(送信時刻順、同一 session の複数コメントもすべて残す)。</div>
+
+      <button onclick="dl('likes')">👍 Likes CSV</button>
+      <div class="desc">いいね一覧。同一 session × 同一作品は 1 票に dedup。</div>
+
+      <button onclick="dl('summary')">📊 Summary CSV<span class="premium-tag">将来有料予定</span></button>
+      <div class="desc">作品別 like 数 / コメント数 / 最新コメントの集計。</div>
+    </div>
+
+    <pre id="log"></pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var logEl = document.getElementById("log");
+    var exMap = {}; // ex_code -> exhibitions doc
+
+    function log(s) { logEl.textContent += "\n" + s; }
+    function clearLog() { logEl.textContent = ""; }
+
+    async function loadExhibitionsForUser(userEmail) {
+      // ドロップダウンと exMap をリセット
+      var sel = document.getElementById("exSelect");
+      sel.innerHTML = '';
+      exMap = {};
+      clearLog();
+      if (!userEmail) {
+        log("ログインしていません。");
+        return;
+      }
+      try {
+        // 展覧会の email フィールドが認証ユーザのメアドと一致するもののみ取得
+        var normalized = userEmail.trim().toLowerCase();
+        var snap = await db.collection("exhibitions")
+          .where("email", "==", normalized)
+          .get();
+        snap.docs.forEach(function(d){
+          var data = d.data();
+          exMap[d.id] = data;
+          var label = (data.ex_name || "(名称未設定)") + " (" + d.id + ")";
+          var opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+        if (snap.docs.length === 0) {
+          log("あなたが主催者として登録された展覧会はありません。");
+        } else {
+          // URL パラメータ ?ex=XXX が指定されていて該当があれば自動選択
+          var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+          if (urlEx && exMap[urlEx]) {
+            sel.value = urlEx;
+          }
+        }
+      } catch (e) {
+        log("ERROR: " + e.message);
+      }
+    }
+
+    function onExChange() { clearLog(); }
+
+    // 「出力・レポートへ戻る」リンクに現在の ex を渡す
+    (function updateBackLink() {
+      var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+      var backLink = document.getElementById('backToReports');
+      if (backLink && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx)) {
+        backLink.href = '../reports.html?ex=' + urlEx;
+      }
+    })();
+
+    // ===== CSV utilities =====
+    function csvEscape(v) {
+      if (v === null || v === undefined) return "";
+      var s = String(v);
+      if (s.indexOf('"') !== -1 || s.indexOf(",") !== -1 || s.indexOf("\n") !== -1) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+    function rowsToCSV(headers, rows) {
+      var head = headers.map(csvEscape).join(",");
+      var body = rows.map(function(r){
+        return headers.map(function(h){ return csvEscape(r[h]); }).join(",");
+      }).join("\r\n");
+      return head + "\r\n" + body + (body ? "\r\n" : "");
+    }
+    function downloadCSV(filename, csvText) {
+      // BOM 付きで保存(Excel が UTF-8 と認識する)
+      var blob = new Blob(["﻿" + csvText], { type: "text/csv;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    }
+    function fmtDate(ts) {
+      if (!ts) return "";
+      var d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (isNaN(d.getTime())) return String(ts);
+      return d.toLocaleString("ja-JP", { hour12: false }).replace(/\//g, "-");
+    }
+
+    // ===== Download dispatcher =====
+    async function dl(kind) {
+      clearLog();
+      var ex = document.getElementById("exSelect").value;
+      if (!ex) { log("展覧会を選択してください。"); return; }
+      var btns = document.querySelectorAll("button");
+      btns.forEach(function(b){ b.disabled = true; });
+      try {
+        if (kind === "artworks") await dlArtworks(ex);
+        else if (kind === "comments") await dlComments(ex);
+        else if (kind === "likes") await dlLikes(ex);
+        else if (kind === "summary") await dlSummary(ex);
+        log("=== 完了 ===");
+      } catch (e) {
+        log("ERROR: " + e.message);
+      } finally {
+        btns.forEach(function(b){ b.disabled = false; });
+      }
+    }
+
+    // ===== 1. Artworks XLSX =====
+    // 型を保持できる xlsx 形式で出力。すべてのデータセルを Text 型として明示し、
+    // edition の "5/10" などが Excel で日付化されるのを防ぐ。
+    async function dlArtworks(ex) {
+      log("Artworks 取得中...");
+      var exDoc = exMap[ex] || {};
+      var captionFields = [];
+      if (exDoc.caption_fields) {
+        try { captionFields = JSON.parse(exDoc.caption_fields); }
+        catch (e) { console.warn("caption_fields parse failed:", e); }
+      }
+      var fieldNames = captionFields.map(function(f){ return f.name; });
+      if (fieldNames.length === 0) {
+        fieldNames = ["title","artist","year","technique","size","price"];
+      }
+      var headers = ["artwork_id"].concat(fieldNames);
+
+      var snap = await db.collection("artworks").where("exCode", "==", ex).get();
+      var rows = [];
+      snap.docs.forEach(function(d){
+        var x = d.data();
+        if (((x.status || "") + "").trim() !== "1") return;
+        if (!x.artwork_id) return;
+        var row = { artwork_id: x.artwork_id };
+        fieldNames.forEach(function(h){ row[h] = x[h] !== undefined ? x[h] : ""; });
+        rows.push(row);
+      });
+      rows.sort(function(a, b){ return (a.artwork_id || "").localeCompare(b.artwork_id || ""); });
+      log("Artworks: " + rows.length + " 件");
+
+      // セルを Text 型 (t:'s') 固定で組み立てる
+      var aoa = [headers].concat(rows.map(function(r){
+        return headers.map(function(h){
+          var v = r[h];
+          return v === null || v === undefined ? "" : String(v);
+        });
+      }));
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      // 全セル文字列型に揃える
+      var range = XLSX.utils.decode_range(ws['!ref']);
+      for (var R = range.s.r; R <= range.e.r; ++R) {
+        for (var C = range.s.c; C <= range.e.c; ++C) {
+          var addr = XLSX.utils.encode_cell({ r: R, c: C });
+          var cell = ws[addr];
+          if (!cell) continue;
+          cell.t = 's';
+          cell.v = cell.v == null ? '' : String(cell.v);
+        }
+      }
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'artworks');
+      XLSX.writeFile(wb, ex + "_artworks.xlsx");
+    }
+
+    // ===== 2. Comments CSV =====
+    async function dlComments(ex) {
+      log("Comments 取得中...");
+      var snap = await db.collection("likes").where("exCode", "==", ex).get();
+      var headers = ["timestamp","artwork_id","title","artist","nickname","comment"];
+      var rows = [];
+      snap.docs.forEach(function(d){
+        var x = d.data();
+        var c = (x.comment || "").toString().trim();
+        if (!c) return; // コメントが空の行は除外
+        rows.push({
+          timestamp: fmtDate(x.timestamp),
+          artwork_id: x.workId || "",
+          title: x.title || "",
+          artist: x.artist || "",
+          nickname: (x.nickname || "").trim() || "(匿名)",
+          comment: c
+        });
+      });
+      rows.sort(function(a,b){ return a.timestamp.localeCompare(b.timestamp); });
+      log("Comments: " + rows.length + " 件");
+      downloadCSV(ex + "_comments.csv", rowsToCSV(headers, rows));
+    }
+
+    // ===== 3. Likes CSV =====
+    async function dlLikes(ex) {
+      log("Likes 取得中...");
+      var snap = await db.collection("likes").where("exCode", "==", ex).get();
+      // (sessionId, workId) で dedup、最初の投稿を採用
+      var headers = ["timestamp","artwork_id","title","artist","session_id"];
+      var seen = {};
+      var rows = [];
+      var raws = snap.docs.map(function(d){ return d.data(); });
+      raws.sort(function(a,b){
+        var ta = a.timestamp ? new Date(a.timestamp.toDate ? a.timestamp.toDate() : a.timestamp).getTime() : 0;
+        var tb = b.timestamp ? new Date(b.timestamp.toDate ? b.timestamp.toDate() : b.timestamp).getTime() : 0;
+        return ta - tb;
+      });
+      raws.forEach(function(x){
+        // isLike が false (= comment-only) はスキップ。明示 true、または未指定で comment 空でもイベント残ってる場合は like 扱い
+        if (x.isLike === false) return;
+        var key = (x.sessionId || "") + "|" + (x.workId || "");
+        if (seen[key]) return;
+        seen[key] = true;
+        rows.push({
+          timestamp: fmtDate(x.timestamp),
+          artwork_id: x.workId || "",
+          title: x.title || "",
+          artist: x.artist || "",
+          session_id: x.sessionId || ""
+        });
+      });
+      log("Likes (dedup 済み): " + rows.length + " 件");
+      downloadCSV(ex + "_likes.csv", rowsToCSV(headers, rows));
+    }
+
+    // ===== 4. Summary CSV =====
+    async function dlSummary(ex) {
+      log("Summary 集計中...");
+      var [aSnap, lSnap] = await Promise.all([
+        db.collection("artworks").where("exCode", "==", ex).get(),
+        db.collection("likes").where("exCode", "==", ex).get()
+      ]);
+      var artworks = {};
+      aSnap.docs.forEach(function(d){
+        var x = d.data();
+        if (!x.artwork_id) return;
+        if (((x.status || "") + "").trim() !== "1") return;
+        artworks[x.artwork_id] = {
+          artwork_id: x.artwork_id,
+          title: x.title || "",
+          artist: x.artist || "",
+          like_count: 0,
+          comment_count: 0,
+          latest_comment: "",
+          latest_comment_at: ""
+        };
+      });
+      var likeKeys = {}; // sessionId|workId
+      var raws = lSnap.docs.map(function(d){ return d.data(); });
+      raws.sort(function(a,b){
+        var ta = a.timestamp ? new Date(a.timestamp.toDate ? a.timestamp.toDate() : a.timestamp).getTime() : 0;
+        var tb = b.timestamp ? new Date(b.timestamp.toDate ? b.timestamp.toDate() : b.timestamp).getTime() : 0;
+        return ta - tb;
+      });
+      raws.forEach(function(x){
+        var aw = artworks[x.workId];
+        if (!aw) return;
+        // like dedup
+        if (x.isLike !== false) {
+          var key = (x.sessionId || "") + "|" + (x.workId || "");
+          if (!likeKeys[key]) {
+            likeKeys[key] = true;
+            aw.like_count++;
+          }
+        }
+        // comment count
+        var c = (x.comment || "").toString().trim();
+        if (c) {
+          aw.comment_count++;
+          aw.latest_comment = c;
+          aw.latest_comment_at = fmtDate(x.timestamp);
+        }
+      });
+      var rows = Object.keys(artworks).map(function(k){ return artworks[k]; });
+      rows.sort(function(a,b){
+        if (b.like_count !== a.like_count) return b.like_count - a.like_count;
+        return b.comment_count - a.comment_count;
+      });
+      var headers = ["artwork_id","title","artist","like_count","comment_count","latest_comment","latest_comment_at"];
+      log("Summary: " + rows.length + " 作品");
+      downloadCSV(ex + "_summary.csv", rowsToCSV(headers, rows));
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && user.email) {
+          if (statusEl) {
+            statusEl.innerText = '🔓 ' + user.email + ' でログイン中';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+          loadExhibitionsForUser(user.email);
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+</html>

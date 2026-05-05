@@ -463,6 +463,8 @@
     <p style="font-size:0.95em; color:#1a73e8; font-weight:bold; margin-top:4px;" id="exNameHeader"></p>
   </div>
 
+  <div id="sandboxBadge" style="display:none;"></div>
+
   <div class="card" id="nameCard">
     <div class="card-title">作家名を入力してください</div>
     <div class="name-row">
@@ -532,9 +534,10 @@
     }
 
     const ARTIST_FIELDS = ['artist', 'artist_en', 'birth_year', 'death_year'];
-    const SNS_FIELDS = ['insta', 'x', 'facebook', 'web'];
+    const SNS_FIELDS = ['insta', 'x', 'facebook', 'web', 'shop_url'];
     const ALL_ARTIST_FIELDS = [...ARTIST_FIELDS, ...SNS_FIELDS];
     const FIELD_DEFS = {
+      image_url: { label: '作品画像', desc: '作品の写真（JPEG/PNG）', textarea: false, type: 'image' },
       title: { label: 'タイトル', desc: '作品名（日本語）', textarea: false },
       title_en: { label: 'タイトル（英語）', desc: '作品名（英語）', textarea: false },
       year: { label: '制作年', desc: '制作された年（例：2024）', textarea: false },
@@ -542,6 +545,8 @@
       technique: { label: '技法', desc: '制作技法（例：油彩、版画）', textarea: false },
       material: { label: '素材・支持体', desc: '使用素材や支持体', textarea: false },
       size: { label: 'サイズ', desc: '作品の寸法（例：530×455mm）', textarea: false },
+      sheet_size: { label: 'シートサイズ', desc: '版画等の紙寸法（例：530×455mm）', textarea: false },
+      image_size: { label: 'イメージサイズ', desc: '版画等の刷り部分の寸法（例：300×220mm）', textarea: false },
       edition: { label: 'エディション', desc: '版画等のエディション番号（例：3/30）', textarea: false },
       artist: { label: '作家名', desc: '作家名（日本語）', textarea: false },
       artist_en: { label: '作家名（英語）', desc: '作家名（英語）', textarea: false },
@@ -549,7 +554,7 @@
       death_year: { label: '没年', desc: '作家の没年。存命の場合は空欄', textarea: false },
       birthplace: { label: '出身地', desc: '作家の出身地（例：東京都、Paris）', textarea: false },
       price: { label: '価格', desc: '税込価格（数字のみ）', textarea: false },
-      price_framed: { label: '額装価格', desc: '額装込みの価格（数字のみ）', textarea: false },
+      price_framed: { label: '額装価格', desc: '額装込みの価格。数字なら自動でカンマ整形、「別途注文」等の文言もそのまま保存', textarea: false },
       certificate: { label: '証明書', desc: '真贋証明書・保証書の有無や種類', textarea: false },
       collection: { label: 'コレクション', desc: '所蔵先・コレクション名', textarea: false },
       courtesy: { label: 'クレジット', desc: '画廊・提供元のクレジット表記', textarea: false },
@@ -559,6 +564,7 @@
       x: { label: 'X (Twitter)', desc: '@username', textarea: false },
       facebook: { label: 'Facebook', desc: 'URLまたはユーザー名', textarea: false },
       web: { label: 'Web', desc: 'https://...', textarea: false },
+      shop_url: { label: '販売 / ショップ', desc: 'BASE / minne / Creema 等のショップ URL（作家単位）', textarea: false },
     };
 
     const ex = getUrlParam('ex');
@@ -572,6 +578,12 @@
         document.getElementById('btnSearch').disabled = true;
         return;
       }
+      // ex_code は英数字・ハイフン・アンダースコアのみ許可
+      if (/[^A-Za-z0-9_-]/.test(ex)) {
+        document.getElementById('searchError').innerText = 'URL の展覧会コードが不正です。主催者から届いた招待 URL を再度ご確認ください。';
+        document.getElementById('btnSearch').disabled = true;
+        return;
+      }
       gasCall({ action: 'verifyExCode', ex: ex })
         .then(res => {
           if (res.success) document.getElementById('exNameHeader').textContent = res.exName;
@@ -579,8 +591,19 @@
       window.fsGetRegistrationFields(ex)
         .then(res => {
           activeFields = (res && res.length > 0) ? res
-            : ['title', 'artist', 'year', 'technique', 'size', 'price'].map(n => ({ name: n, required: false }));
+            : ['image_url', 'title', 'artist', 'year', 'technique', 'size', 'price'].map(n => ({ name: n, required: false }));
         });
+      // 練習モードバッジ (作家向け) + sandbox 状態をグローバルに保持
+      fsDb.collection('exhibitions').doc(ex).get()
+        .then(snap => {
+          if (snap.exists) {
+            const exData = snap.data();
+            window._exIsSandbox = !!exData.is_sandbox;
+            if (window.sandboxBadge) {
+              window.sandboxBadge.render('sandboxBadge', exData, 'artist', { maxWidth: '660px' });
+            }
+          }
+        }).catch(() => {});
     });
 
     function searchByArtist() {
@@ -728,66 +751,130 @@
       appendFieldsToPanel(artworkGrid, artFields, 'new_', {});
     }
 
-    function saveNewArtwork() {
+    async function saveNewArtwork() {
+      // 練習モード展覧会への新規登録は事前確認
+      if (window._exIsSandbox) {
+        if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?')) return;
+      }
       let hasError = false; document.getElementById('newFormError').innerText = '';
       const artistEl = document.getElementById('new_artist'); artistEl.classList.remove('error');
       if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_DEFS[f.name]; if (!def) return;
+        if (def.type === 'image') {
+          if (!f.required) return;
+          const pending = (document.getElementById('new_' + f.name + '_preview') || {}).dataset || {};
+          const existing = (document.getElementById('new_' + f.name + '_existing') || {}).value || '';
+          if (!pending.pending && !existing) hasError = true;
+          return;
+        }
         const el = document.getElementById('new_' + f.name); if (!el) return; el.classList.remove('error');
         if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; }
       });
-      if (hasError) { document.getElementById('newFormError').innerText = '⚠️ 必須項目を入力してください。'; return; }
+      if (hasError) { document.getElementById('newFormError').innerText = '⚠️ 必須項目を入力してください（画像必須の場合は写真も）。'; return; }
 
       const data = {};
       ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById('new_' + name); if (el) data[name] = el.value.trim(); });
-      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el = document.getElementById('new_' + f.name); if (el) data[f.name] = el.value.trim(); });
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_DEFS[f.name]; if (!def || def.type === 'image') return;
+        const el = document.getElementById('new_' + f.name);
+        if (el) data[f.name] = stripCommasIfPrice(f.name, el.value.trim());
+      });
 
       document.getElementById('btnNewSave').disabled = true;
 
-      window.fsSaveArtwork(ex, data)
-        .then(async res => {
+      try {
+        const res = await window.fsSaveArtwork(ex, data);
+        if (!res.success) {
           document.getElementById('btnNewSave').disabled = false;
-          if (res.success) {
-            const banner = document.getElementById('saveBanner');
-            banner.textContent = '✅ ' + res.artworkId + ' を登録しました。'; banner.style.display = 'block';
-            setTimeout(() => { banner.style.display = 'none'; }, 3000);
-            activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el = document.getElementById('new_' + f.name); if (el) { el.value = ''; el.classList.remove('error'); } });
-            window.fsGetArtworksByArtist(ex, currentArtist)
-              .then(res2 => { if (res2.success) { existingWorks = res2.artworks; showArtworkList(); } });
-          } else {
-            document.getElementById('newFormError').innerText = 'Error: ' + res.error;
+          document.getElementById('newFormError').innerText = 'Error: ' + res.error;
+          return;
+        }
+        const newId = res.artworkId;
+        const imageField = activeFields.find(f => FIELD_DEFS[f.name] && FIELD_DEFS[f.name].type === 'image');
+        if (imageField) {
+          const preview = document.getElementById('new_' + imageField.name + '_preview');
+          const pending = preview && preview.dataset ? preview.dataset.pending : '';
+          if (pending) {
+            const url = await window.fsUploadArtworkImage(ex, newId, pending);
+            await window.fsSetArtwork(ex, newId, { image_url: url });
           }
-        })
-        .catch(err => {
-          document.getElementById('btnNewSave').disabled = false;
-          document.getElementById('newFormError').innerText = 'Error: ' + err.message;
+        }
+        document.getElementById('btnNewSave').disabled = false;
+        const banner = document.getElementById('saveBanner');
+        banner.textContent = '✅ ' + newId + ' を登録しました。'; banner.style.display = 'block';
+        setTimeout(() => { banner.style.display = 'none'; }, 3000);
+        // 連続入力支援: 画像だけクリア、テキスト系は全部保持。タイトルも保持。
+        activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+          const def = FIELD_DEFS[f.name]; if (!def) return;
+          if (def.type === 'image') {
+            const file = document.getElementById('new_' + f.name); if (file) file.value = '';
+            const prev = document.getElementById('new_' + f.name + '_preview');
+            if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); delete prev.dataset.pending; }
+            return;
+          }
+          const el = document.getElementById('new_' + f.name);
+          if (el) el.classList.remove('error');
         });
+        const titleEl = document.getElementById('new_title');
+        if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
+        const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
+        if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
+      } catch (err) {
+        document.getElementById('btnNewSave').disabled = false;
+        document.getElementById('newFormError').innerText = 'Error: ' + err.message;
+      }
     }
 
-    function updateArtwork(artworkId, originalArtist, card) {
+    async function updateArtwork(artworkId, originalArtist, card) {
       const prefix = 'ep_' + artworkId + '_';
-      const artworkData = {}; activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => { const el = document.getElementById(prefix + f.name); if (el) artworkData[f.name] = el.value.trim(); });
+      const artworkData = {};
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_DEFS[f.name]; if (!def || def.type === 'image') return;
+        const el = document.getElementById(prefix + f.name);
+        if (el) artworkData[f.name] = stripCommasIfPrice(f.name, el.value.trim());
+      });
       const artistData = {}; ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById(prefix + name); if (el) artistData[name] = el.value.trim(); });
+
+      const imageField = activeFields.find(f => FIELD_DEFS[f.name] && FIELD_DEFS[f.name].type === 'image');
+      if (imageField && imageField.required) {
+        const preview = document.getElementById(prefix + imageField.name + '_preview');
+        const existing = (document.getElementById(prefix + imageField.name + '_existing') || {}).value || '';
+        const pending = preview && preview.dataset ? preview.dataset.pending : '';
+        if (!pending && !existing) {
+          const msgEl = document.getElementById('editMsg_' + artworkId);
+          if (msgEl) { msgEl.textContent = '⚠️ 作品画像は必須です。'; msgEl.style.color = '#d93025'; }
+          return;
+        }
+      }
+
       const btnSave = card.querySelector('.btn-save'); if (btnSave) btnSave.disabled = true;
       const msgEl = document.getElementById('editMsg_' + artworkId);
       if (msgEl) { msgEl.innerHTML = '<span class="spinner-sm"></span> 更新中...'; msgEl.style.color = '#888'; }
 
-      window.fsUpdateArtwork(ex, artworkId, artworkData, artistData, originalArtist)
-        .then(res => {
-          if (btnSave) btnSave.disabled = false;
-          if (res.success) {
-            const msg = '✅ 更新しました。' + (res.updatedArtistCount > 1 ? '（作家情報を' + res.updatedArtistCount + '件の作品に反映）' : '');
-            if (msgEl) { msgEl.textContent = msg; msgEl.style.color = '#1a73e8'; }
-            existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData); if (a.artist === originalArtist) return Object.assign({}, a, artistData); return a; });
-            const titleEl = card.querySelector('.artwork-card-title'); if (titleEl) titleEl.textContent = artworkData.title || artworkData.title_en || '（タイトルなし）';
-          } else {
-            if (msgEl) { msgEl.textContent = 'Error: ' + res.error; msgEl.style.color = '#d93025'; }
+      try {
+        if (imageField) {
+          const preview = document.getElementById(prefix + imageField.name + '_preview');
+          const pending = preview && preview.dataset ? preview.dataset.pending : '';
+          if (pending) {
+            const url = await window.fsUploadArtworkImage(ex, artworkId, pending);
+            artworkData.image_url = url;
           }
-        })
-        .catch(err => {
-          if (btnSave) btnSave.disabled = false;
-          if (msgEl) { msgEl.textContent = 'Error: ' + err.message; msgEl.style.color = '#d93025'; }
-        });
+        }
+        const res = await window.fsUpdateArtwork(ex, artworkId, artworkData, artistData, originalArtist);
+        if (btnSave) btnSave.disabled = false;
+        if (res.success) {
+          const msg = '✅ 更新しました。' + (res.updatedArtistCount > 1 ? '（作家情報を' + res.updatedArtistCount + '件の作品に反映）' : '');
+          if (msgEl) { msgEl.textContent = msg; msgEl.style.color = '#1a73e8'; }
+          existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData); if (a.artist === originalArtist) return Object.assign({}, a, artistData); return a; });
+          const titleEl = card.querySelector('.artwork-card-title'); if (titleEl) titleEl.textContent = artworkData.title || artworkData.title_en || '（タイトルなし）';
+        } else {
+          if (msgEl) { msgEl.textContent = 'Error: ' + res.error; msgEl.style.color = '#d93025'; }
+        }
+      } catch (err) {
+        if (btnSave) btnSave.disabled = false;
+        if (msgEl) { msgEl.textContent = 'Error: ' + err.message; msgEl.style.color = '#d93025'; }
+      }
     }
 
     function appendFieldsToPanel(parent, fields, prefix, values) {
@@ -795,7 +882,8 @@
       fields.forEach(f => {
         const def = FIELD_DEFS[f.name]; if (!def) return;
         const val = values[f.name] !== undefined ? values[f.name].toString() : '';
-        if (def.textarea) { if (gridOpen) { parent.appendChild(gridEl); gridOpen = false; gridEl = null; } parent.appendChild(makeField({ name: f.name, label: def.label, desc: def.desc, textarea: true }, f.required, prefix, val)); }
+        const isBlock = def.textarea || def.type === 'image';
+        if (isBlock) { if (gridOpen) { parent.appendChild(gridEl); gridOpen = false; gridEl = null; } parent.appendChild(makeField({ name: f.name, label: def.label, desc: def.desc, textarea: !!def.textarea, type: def.type }, f.required, prefix, val)); }
         else { if (!gridOpen) { gridEl = document.createElement('div'); gridEl.className = 'input-grid'; gridOpen = true; } gridEl.appendChild(makeField({ name: f.name, label: def.label, desc: def.desc, textarea: false }, f.required, prefix, val)); }
       });
       if (gridOpen) parent.appendChild(gridEl);
@@ -808,19 +896,130 @@
       const badge = document.createElement('span'); badge.className = required ? 'badge-required' : 'badge-optional'; badge.textContent = required ? '必須' : '任意'; labelRow.appendChild(badge);
       const hint = document.createElement('span'); hint.className = 'field-name-hint'; hint.textContent = def.name; labelRow.appendChild(hint);
       wrap.appendChild(labelRow);
+      if (def.type === 'image') {
+        const file = document.createElement('input');
+        file.type = 'file'; file.accept = 'image/*'; file.id = prefix + def.name; file.style.display = 'none';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = 'padding:10px 14px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; margin-top:4px;';
+        btn.textContent = '📷 写真を選択';
+        btn.addEventListener('click', () => file.click());
+        const preview = document.createElement('img');
+        preview.id = prefix + def.name + '_preview';
+        preview.style.cssText = 'display:none; max-width:200px; max-height:200px; border-radius:8px; margin-top:8px; border:1px solid #eee;';
+        const existingHidden = document.createElement('input');
+        existingHidden.type = 'hidden'; existingHidden.id = prefix + def.name + '_existing';
+        if (currentVal) {
+          preview.src = currentVal; preview.style.display = 'block';
+          existingHidden.value = currentVal;
+        }
+        file.addEventListener('change', async (e) => {
+          if (!e.target.files || e.target.files.length === 0) return;
+          btn.disabled = true; btn.textContent = '🔄 読み込み中...';
+          try {
+            const dataUrl = await resizeImageToDataUrl(e.target.files[0], 1600);
+            preview.src = dataUrl; preview.style.display = 'block';
+            preview.dataset.pending = dataUrl;
+            btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
+          } catch (err) {
+            btn.textContent = '⚠️ 読み込み失敗';
+            alert('画像の読み込みに失敗しました: ' + err.message);
+          } finally { btn.disabled = false; }
+        });
+        wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);
+        return wrap;
+      }
       let input;
       if (def.textarea) { input = document.createElement('textarea'); input.rows = 4; }
       else { input = document.createElement('input'); input.type = 'text'; }
       input.id = prefix + def.name; input.placeholder = def.desc;
-      if (currentVal !== undefined) input.value = currentVal;
+      applyNumericBehavior(input, def.name);
+      if (currentVal !== undefined) input.value = formatInitialValue(def.name, currentVal);
       wrap.appendChild(input);
       return wrap;
+    }
+
+    // 数字のみ許可: year / birth_year / death_year
+    // 数字 + カンマ自動挿入: price
+    // 数字なら整形・非数字ならそのまま: price_framed
+    const NUMERIC_INT_FIELDS = ['year', 'birth_year', 'death_year'];
+    const NUMERIC_PRICE_FIELDS = ['price'];
+    const FLEXIBLE_PRICE_FIELDS = ['price_framed'];
+    function applyNumericBehavior(input, name) {
+      if (NUMERIC_INT_FIELDS.indexOf(name) !== -1) {
+        input.inputMode = 'numeric';
+        input.setAttribute('pattern', '\\d*');
+        input.addEventListener('input', e => {
+          e.target.value = e.target.value.replace(/[^\d]/g, '');
+        });
+      } else if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        input.inputMode = 'numeric';
+        input.addEventListener('input', e => {
+          const digits = e.target.value.replace(/[^\d]/g, '');
+          e.target.value = digits ? Number(digits).toLocaleString('en-US') : '';
+        });
+      } else if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        input.addEventListener('input', e => {
+          const v = e.target.value;
+          if (/^[\d,]*$/.test(v)) {
+            const digits = v.replace(/,/g, '');
+            e.target.value = digits ? Number(digits).toLocaleString('en-US') : '';
+          }
+        });
+      }
+    }
+    function formatInitialValue(name, val) {
+      if (val === null || val === undefined) return '';
+      const s = String(val);
+      if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        const digits = s.replace(/[^\d]/g, '');
+        return digits ? Number(digits).toLocaleString('en-US') : '';
+      }
+      if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        if (/^[\d,]*$/.test(s)) {
+          const digits = s.replace(/,/g, '');
+          return digits ? Number(digits).toLocaleString('en-US') : '';
+        }
+        return s;
+      }
+      return s;
+    }
+    function stripCommasIfPrice(name, val) {
+      if (typeof val !== 'string') return val;
+      if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        return val.replace(/,/g, '');
+      }
+      if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        return /^[\d,]+$/.test(val) ? val.replace(/,/g, '') : val;
+      }
+      return val;
+    }
+
+    function resizeImageToDataUrl(file, maxEdge) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const longEdge = Math.max(img.width, img.height);
+          const scale = longEdge > maxEdge ? maxEdge / longEdge : 1;
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
+        img.src = url;
+      });
     }
 
     function makeDivider() { const hr = document.createElement('hr'); hr.className = 'section-divider'; return hr; }
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
@@ -831,6 +1030,13 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    const fsStorage = firebase.storage();
+    window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
+      const blob = await (await fetch(dataUrl)).blob();
+      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
+      await ref.put(blob, { contentType: 'image/jpeg' });
+      return await ref.getDownloadURL();
+    };
     window.fsGetRegistrationFields = async (exCode) => {
       const snap = await fsDb.collection('exhibitions').doc(exCode).get();
       if (!snap.exists) return null;
@@ -860,6 +1066,8 @@
       if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
       const targetId = candidates[0].artwork_id;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
+      gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: 1 })
+        .catch(e => console.warn('bumpArtworkCount failed:', e));
       return { success: true, artworkId: targetId };
     };
     window.fsUpdateArtwork = async (exCode, artworkId, artworkData, artistData, originalArtist) => {
@@ -896,8 +1104,13 @@
       // Security Rules で delete は禁止しているため、status を空文字に戻して論理削除に変更
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
       const snap = await docRef.get();
+      const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
       const sk = snap.exists ? snap.data().security_key : null;
       await docRef.set({ status: "", security_key: sk, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      if (wasRegistered) {
+        gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
+          .catch(e => console.warn('bumpArtworkCount failed:', e));
+      }
     };
   </script>
 </body>

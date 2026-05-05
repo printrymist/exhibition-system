@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recover Exhibition (Firestore 再書き込み)</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.2em; }
+    button { padding: 10px 20px; font-size: 15px; cursor: pointer; }
+    button.primary { background: #1a73e8; color: #fff; border: none; border-radius: 6px; }
+    button.primary:disabled { background: #ccc; cursor: not-allowed; }
+    button.secondary { background: #fff; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 6px; }
+    pre { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+    .row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+    .info { background: #e8f0fe; border: 1px solid #c5d9f7; padding: 12px; border-radius: 8px; font-size: 0.9em; margin: 12px 0; }
+    .warn { background: #fff3e0; border: 1px solid #ffb74d; padding: 12px; border-radius: 8px; font-size: 0.9em; margin: 12px 0; }
+    .preview { background: #f1f8e9; border: 1px solid #aed581; padding: 12px; border-radius: 8px; font-size: 0.9em; margin: 12px 0; display: none; }
+    .preview h3 { margin: 0 0 8px 0; font-size: 1em; }
+    .preview ul { margin: 4px 0 0 20px; padding: 0; }
+  </style>
+</head>
+<body>
+  <h1>Recover Exhibition (ex_code 指定で Firestore に再書き込み)</h1>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">運営者管理者ログインが必要です</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この管理ツールは Firestore への書き込みのため、運営者管理者 (rymist1@gmail.com) のみ実行できます。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+
+    <div class="info">
+      <strong>用途:</strong> GAS 認証 (Email Link) は通ったが Firestore <code>exhibitions/{exCode}</code> への書き込みが取りこぼされた展覧会を、Master SS の値から再構築して書き戻します。<br>
+      <strong>前提:</strong> Master SS の <code>exhibitions</code> シートに該当 ex_code の行が存在すること。<br>
+      <strong>動作:</strong> Cloud Function <code>adminRecoverExhibitionDoc</code> が GAS から canonical doc を取得し、<code>set(..., { merge: true })</code> で Firestore に書き込みます (冪等)。
+    </div>
+
+    <div class="row">
+      <input type="text" id="exCodeInput" placeholder="ex_code (例: PR002)">
+      <button class="secondary" onclick="checkStatus()">現在の状態を確認</button>
+    </div>
+
+    <div id="preview" class="preview"></div>
+
+    <div class="row">
+      <button id="btnRecover" class="primary" onclick="runRecover()" disabled>復旧を実行</button>
+    </div>
+
+    <pre id="log">(待機中)</pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var logEl = document.getElementById("log");
+    var previewEl = document.getElementById("preview");
+    var btnRecover = document.getElementById("btnRecover");
+    var lastChecked = null;
+
+    function append(s) { logEl.textContent += "\n" + s; }
+    function reset() { logEl.textContent = ""; previewEl.style.display = "none"; btnRecover.disabled = true; lastChecked = null; }
+
+    function getEx() {
+      var ex = (document.getElementById("exCodeInput").value || "").trim();
+      if (!ex) { alert("ex_code を入力してください。"); return null; }
+      return ex;
+    }
+
+    async function checkStatus() {
+      reset();
+      var ex = getEx();
+      if (!ex) return;
+      logEl.textContent = "確認中...";
+      try {
+        var snap = await db.collection("exhibitions").doc(ex).get();
+        var existsLine = snap.exists
+          ? "<li><strong style=\"color:#d93025;\">Firestore に既存ドキュメントあり</strong> (復旧で merge 上書きされます)</li>"
+          : "<li>Firestore に exhibitions ドキュメント無し → 復旧で新規作成されます</li>";
+        previewEl.innerHTML =
+          "<h3>確認 (ex_code = " + ex + ")</h3>" +
+          "<ul>" + existsLine + "</ul>" +
+          "<div style=\"font-size:0.85em; color:#555; margin-top:8px;\">復旧実行時、Master SS の値を Cloud Function 経由で読み出して書き込みます。Master SS に該当行が無ければ復旧は失敗します。</div>";
+        previewEl.style.display = "block";
+        logEl.textContent = "確認完了。問題なければ「復旧を実行」を押してください。";
+        lastChecked = { ex: ex, alreadyExists: snap.exists };
+        btnRecover.disabled = false;
+      } catch (e) {
+        logEl.textContent = "ERROR: " + e.message;
+      }
+    }
+
+    async function runRecover() {
+      if (!lastChecked) { alert("先に「現在の状態を確認」を実行してください。"); return; }
+      var ex = getEx();
+      if (!ex || ex !== lastChecked.ex) {
+        alert("確認後に ex_code が変更されました。再度「現在の状態を確認」を実行してください。");
+        reset();
+        return;
+      }
+      if (lastChecked.alreadyExists) {
+        if (!confirm("ex_code = " + ex + " の Firestore ドキュメントは既に存在します。\nMaster SS の値で merge 上書きしますか?")) return;
+      } else {
+        if (!confirm("ex_code = " + ex + " の Firestore ドキュメントを Master SS の値から作成します。\n実行しますか?")) return;
+      }
+
+      btnRecover.disabled = true;
+      logEl.textContent = "復旧中...";
+      try {
+        var fn = firebase.app().functions("asia-northeast1").httpsCallable("adminRecoverExhibitionDoc");
+        var res = await fn({ exCode: ex });
+        if (res && res.data && res.data.success) {
+          append("✅ 復旧完了 (ex_code = " + res.data.exCode + ")");
+          if (res.data.exhibitionDoc) {
+            append("--- 書き込まれた内容 ---");
+            append(JSON.stringify(res.data.exhibitionDoc, null, 2));
+          }
+          previewEl.style.display = "none";
+          lastChecked = null;
+        } else {
+          append("⚠️ 想定外のレスポンス: " + JSON.stringify(res));
+          btnRecover.disabled = false;
+        }
+      } catch (e) {
+        append("ERROR: " + (e && e.message ? e.message : e));
+        if (e && e.details) append("details: " + JSON.stringify(e.details));
+        btnRecover.disabled = false;
+      }
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (isOp) {
+          if (statusEl) {
+            statusEl.innerText = '🔓 ' + user.email + ' で認証済み';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          if (user && user.email) {
+            setMsg('⚠️ ' + user.email + ' は運営者管理者として登録されていません。', '#d93025');
+          }
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+</html>

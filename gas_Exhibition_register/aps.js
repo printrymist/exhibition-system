@@ -150,14 +150,38 @@ function doPost(e) {
         venue: e.parameter.venue,
         startDate: e.parameter.startDate,
         organizer: e.parameter.organizer,
-        email: e.parameter.email
+        email: e.parameter.email,
+        sandbox: e.parameter.sandbox === '1'
       };
       output.setContent(JSON.stringify(submitApplication(payload)));
       return output;
     }
 
+    if (action === 'graduateExhibition') {
+      output.setContent(JSON.stringify(graduateExhibition(e.parameter.ex, e.parameter.email)));
+      return output;
+    }
+
     if (action === 'confirmToken') {
       output.setContent(JSON.stringify(confirmToken(e.parameter.token)));
+      return output;
+    }
+
+    if (action === 'verifyTokenForFinalize') {
+      const payload = {
+        token: e.parameter.token,
+        exCode: e.parameter.exCode
+      };
+      output.setContent(JSON.stringify(verifyTokenForFinalize(payload)));
+      return output;
+    }
+
+    if (action === 'getCanonicalExhibitionDocAdmin') {
+      const payload = {
+        exCode: e.parameter.exCode,
+        adminSecret: e.parameter.adminSecret
+      };
+      output.setContent(JSON.stringify(getCanonicalExhibitionDocAdmin(payload)));
       return output;
     }
 
@@ -260,7 +284,7 @@ function runSetup(payload) {
     const aHeader = [
       "artwork_id", "security_key", "title", "title_en", "artist", "artist_en",
       "birth_year", "death_year", "birthplace", "year", "series", "technique", "material",
-      "size", "edition", "price", "price_framed", "certificate", "collection",
+      "size", "sheet_size", "image_size", "edition", "price", "price_framed", "certificate", "collection",
       "courtesy", "note", "artist_note", "image_url", "qr_url", "status",
       "insta", "x", "facebook", "web"
     ];
@@ -337,19 +361,8 @@ function runSetup(payload) {
 
     // --- exhibitions マスターに記録 ---
     const timestamp = Utilities.formatDate(new Date(), "JST", "yyyy/MM/dd, HH:mm:ss");
-    const adminPass = ("0000" + Math.floor(Math.random() * 10000)).slice(-4);
 
-    masterSheet.appendRow([
-      exCode,
-      imagesFolderId,
-      artworkId,
-      commentId,
-      exName,
-      adminPass,
-      timestamp
-    ]);
-
-    // --- registration_fields / caption_fields の初期値を設定 ---
+    // --- registration_fields / caption_fields の初期値 ---
     const defaultActiveFields = [
       { name: 'title', required: true },
       { name: 'year', required: false },
@@ -359,23 +372,61 @@ function runSetup(payload) {
     ];
     const defaultJson = JSON.stringify(defaultActiveFields);
 
-    const masterHeaders = masterSheet.getRange(1, 1, 1, masterSheet.getLastColumn()).getValues()[0];
+    // applications 行から連絡先系をコピー
+    const venueIdx = appHeaders.indexOf('venue');
+    const startDateIdx = appHeaders.indexOf('start_date');
+    const organizerIdx = appHeaders.indexOf('organizer');
+    const emailIdx = appHeaders.indexOf('email');
+    const sandboxIdx = appHeaders.indexOf('sandbox');
+    const appRow = appData[appRowIdx - 1];
+    const venue = venueIdx !== -1 ? (appRow[venueIdx] || '') : '';
+    const startDate = startDateIdx !== -1 ? (appRow[startDateIdx] || '') : '';
+    const organizer = organizerIdx !== -1 ? (appRow[organizerIdx] || '') : '';
+    const appEmail = emailIdx !== -1 ? (appRow[emailIdx] || '') : '';
+    const isSandbox = sandboxIdx !== -1 && String(appRow[sandboxIdx]).toUpperCase().trim() === 'TRUE';
 
-    // registration_fields
-    let rfColIdx = masterHeaders.indexOf('registration_fields');
-    if (rfColIdx === -1) {
-      rfColIdx = masterSheet.getLastColumn();
-      masterSheet.getRange(1, rfColIdx + 1).setValue('registration_fields');
+    // 練習モードなら 14 日後に自動削除予定の expire_at を設定
+    let expireAtIso = '';
+    if (isSandbox) {
+      const expireMs = Date.now() + 14 * 24 * 60 * 60 * 1000;
+      expireAtIso = new Date(expireMs).toISOString();
     }
-    masterSheet.getRange(masterSheet.getLastRow(), rfColIdx + 1).setValue(defaultJson);
 
-    // caption_fields
-    let cfColIdx = masterHeaders.indexOf('caption_fields');
-    if (cfColIdx === -1) {
-      cfColIdx = masterSheet.getLastColumn();
-      masterSheet.getRange(1, cfColIdx + 1).setValue('caption_fields');
+    // ヘッダー名 → 値の dict を作って、ヘッダー順に並べて appendRow（列順非依存）
+    // 既存マスター sheet に is_sandbox / expire_at 列が無ければ追加する
+    let masterHeaders = masterSheet.getRange(1, 1, 1, masterSheet.getLastColumn()).getValues()[0];
+    if (masterHeaders.indexOf('is_sandbox') === -1) {
+      masterSheet.getRange(1, masterHeaders.length + 1).setValue('is_sandbox');
+      masterHeaders = masterSheet.getRange(1, 1, 1, masterSheet.getLastColumn()).getValues()[0];
     }
-    masterSheet.getRange(masterSheet.getLastRow(), cfColIdx + 1).setValue(defaultJson);
+    if (masterHeaders.indexOf('expire_at') === -1) {
+      masterSheet.getRange(1, masterHeaders.length + 1).setValue('expire_at');
+      masterHeaders = masterSheet.getRange(1, 1, 1, masterSheet.getLastColumn()).getValues()[0];
+    }
+    const newRow = {
+      ex_code: exCode,
+      ex_name: exName,
+      status: 'active',
+      artworks_registered: 0,
+      artworks_total: workCount,
+      last_artwork_update_at: '',
+      organizer: organizer,
+      email: appEmail || email,
+      venue: venue,
+      start_date: startDate,
+      image_folder_id: imagesFolderId,
+      artwork_sheet_id: artworkId,
+      comment_sheet_id: commentId,
+      registration_fields: defaultJson,
+      caption_fields: defaultJson,
+      created_at: timestamp,
+      updated_at: timestamp,
+      memo: '',
+      is_sandbox: isSandbox ? 'TRUE' : 'FALSE',
+      expire_at: expireAtIso
+    };
+    const rowArr = masterHeaders.map(h => newRow[h] !== undefined ? newRow[h] : '');
+    masterSheet.appendRow(rowArr);
 
     // --- applications シートに ex_code と setup_at を記録 ---
     const setupAt = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss');
@@ -383,23 +434,34 @@ function runSetup(payload) {
     appSheet.getRange(appRowIdx, setupAtIdx + 1).setValue(setupAt);
 
     // --- 完了メール送信 ---
-    sendCompletionEmail(email, exCode, exName, adminPass);
+    sendCompletionEmail(email, exCode, exName, isSandbox);
 
     return {
       success: true,
       exCode: exCode,
       exName: exName,
-      adminPass: adminPass,
       artworks: artworkSeeds,
       exhibitionDoc: {
         ex_code: exCode,
         ex_name: exName,
+        status: 'active',
+        artworks_registered: 0,
+        artworks_total: workCount,
+        last_artwork_update_at: '',
+        organizer: organizer,
+        email: appEmail || email,
+        venue: venue,
+        start_date: startDate,
         image_folder_id: imagesFolderId,
         artwork_sheet_id: artworkId,
         comment_sheet_id: commentId,
-        memo: '',
         registration_fields: defaultJson,
-        caption_fields: defaultJson
+        caption_fields: defaultJson,
+        created_at: timestamp,
+        updated_at: timestamp,
+        memo: '',
+        is_sandbox: isSandbox,
+        expire_at: expireAtIso
       },
       warning: shareWarnings.length > 0
         ? '\n※ 以下のリソースの共有設定が自動でできませんでした。Drive で手動設定してください:\n  - ' + shareWarnings.join('\n  - ')
@@ -414,12 +476,19 @@ function runSetup(payload) {
 // =========================================================
 // 🌟 完了メール送信
 // =========================================================
-function sendCompletionEmail(email, exCode, exName, adminPass) {
-  const inputUrl = "https://rohei-printer-system.web.app/input.html?ex=" + exCode;
+function sendCompletionEmail(email, exCode, exName, isSandbox) {
   const captionUrl = "https://rohei-printer-system.web.app/caption.html?ex=" + exCode;
   const registerUrl = "https://rohei-printer-system.web.app/register.html?ex=" + exCode;
+  const inquiryUrl = "https://rohei-printer-system.web.app/inquiry.html?ex=" + exCode;
 
-  const subject = `[Exhibition Setup Complete] ${exName} (${exCode})`;
+  const subjectPrefix = isSandbox ? '[練習モード] ' : '';
+  const subject = subjectPrefix + `[Exhibition Setup Complete] ${exName} (${exCode})`;
+  const sandboxNote = isSandbox ? `
+[練習] これは練習モードで作成された展覧会です:
+・14 日後に自動的に削除されます
+・作家への案内メール送信は無効化されており、運営者宛にだけ届きます
+・気に入った設定で本番運用したい場合は、register.html の項目設定タブから「本番運用に切替」できます
+` : '';
   const body = `
 Your exhibition has been set up successfully!
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -427,9 +496,8 @@ Exhibition Details
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Exhibition code : ${exCode}
 Exhibition name : ${exName}
-Admin password  : ${adminPass}
 ━━━━━━━━━━━━━━━━━━━━━━━━
-
+${sandboxNote}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Exhibition Register（作品登録・項目設定）
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -441,33 +509,15 @@ Caption Manager（キャプション印刷・QR印刷）
 ${captionUrl}
 
 【手順】
-1. Exhibition RegisterにアクセスしてExhibition code（${exCode}）を入力してLoadしてください。
-2. 管理者パスワード（${adminPass}）を入力して認証してください。
-3. 「項目設定」タブで作家が入力する項目・必須/任意を設定して保存してください。
-4. 作家への案内メール（下記テンプレート）を送ってください。
-5. 作家から作品情報の入力完了の連絡を受けたら、Caption ManagerでキャプションをPreview→Printしてください。
-6. QR PrintタブでQRコードを印刷してください。
-━━━━━━━━━━━━━━━━━━━━━━━━
-【作家の方への案内テンプレート】
-以下をコピーして作家の方にお送りください。
-━━━━━━━━━━━━━━━━━━━━━━━━
-件名：作品情報のご入力のお願い（${exName}）
-
-この度は展覧会へのご参加ありがとうございます。
-以下のURLより作品情報をご入力ください。
-
-▼ 作品情報入力フォーム
-${inputUrl}
-
-入力の流れ：
-1. 上のURLにアクセス
-2. 作家名（日本語）を入力して「開始」をクリック
-3. 「＋ 作品を追加」から作品を登録
-
-ご不明な点は主催者までお問い合わせください。
+1. 上の Exhibition Register URL からアクセスし、運営者メールアドレスでログインしてください。届いたリンクをクリックすると自動でログインします。
+2. 「項目設定」タブで作家が入力する項目・必須/任意を設定して保存してください。
+3. 同タブの「案内メールを送信」ボタンを押すと、項目説明入りの案内メールが届くので、作家へ転送してください。
+4. 作家から作品情報の入力完了の連絡を受けたら、Caption ManagerでキャプションをPreview→Printしてください。
+5. QR PrintタブでQRコードを印刷してください。
 ━━━━━━━━━━━━━━━━━━━━━━━━
 このメールは送信専用です。返信はできません。
-お問い合わせは ryohei.miyagawa.art@gmail.com までご連絡ください。
+お問い合わせは下記URLのフォームからお願いします。
+${inquiryUrl}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Rohei Printer System
   `;
@@ -477,6 +527,212 @@ Rohei Printer System
     replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
     from: 'noreply.rohei.printer@gmail.com'
   });
+}
+
+// =========================================================
+// 🌟 練習モード展覧会の自動メンテナンス (毎日定期実行)
+// - expire_at < now の sandbox 展覧会 → master sheet 行と Drive フォルダを削除、運営者に通知
+// - expire_at が翌日以内の sandbox 展覧会 → 運営者に「明日削除されます」と通知
+// 注: Firestore ドキュメント (artworks / likes) は GAS から直接削除できないため、
+//     master sheet 削除後に運営者がアクセスしても展覧会一覧に出なくなる挙動になる。
+//     完全な Firestore クリーンアップは将来 Cloud Functions 移行時に実装予定。
+// =========================================================
+function dailySandboxMaintenance() {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sheet = ss.getSheetByName('exhibitions');
+    if (!sheet) return;
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const exCodeIdx = headers.indexOf('ex_code');
+    const exNameIdx = headers.indexOf('ex_name');
+    const emailIdx = headers.indexOf('email');
+    const isSandboxIdx = headers.indexOf('is_sandbox');
+    const expireAtIdx = headers.indexOf('expire_at');
+    const folderIdIdx = headers.indexOf('image_folder_id');
+    const artworkSheetIdx = headers.indexOf('artwork_sheet_id');
+    const commentSheetIdx = headers.indexOf('comment_sheet_id');
+
+    if (isSandboxIdx === -1 || expireAtIdx === -1) {
+      Logger.log('dailySandboxMaintenance: is_sandbox / expire_at 列が見つからないためスキップ');
+      return;
+    }
+
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const rowsToDelete = [];
+    const rowsToWarn = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const isSandbox = String(row[isSandboxIdx]).toUpperCase().trim() === 'TRUE';
+      if (!isSandbox) continue;
+      const expireRaw = row[expireAtIdx];
+      if (!expireRaw) continue;
+      const expireAt = new Date(expireRaw);
+      if (isNaN(expireAt.getTime())) continue;
+      if (expireAt <= now) {
+        rowsToDelete.push({ rowIndex: i + 1, row: row });
+      } else if (expireAt <= tomorrow) {
+        rowsToWarn.push({ rowIndex: i + 1, row: row });
+      }
+    }
+
+    // 翌日警告
+    rowsToWarn.forEach(item => {
+      const r = item.row;
+      const exCode = r[exCodeIdx];
+      const exName = r[exNameIdx];
+      const email = r[emailIdx];
+      if (email) {
+        sendSandboxExpiringNotification(email, exCode, exName, r[expireAtIdx]);
+      }
+    });
+
+    // 削除実行 (下から削除しないと行番号がずれる)
+    rowsToDelete.sort((a, b) => b.rowIndex - a.rowIndex);
+    rowsToDelete.forEach(item => {
+      const r = item.row;
+      const exCode = r[exCodeIdx];
+      const exName = r[exNameIdx];
+      const email = r[emailIdx];
+      const folderId = folderIdIdx !== -1 ? r[folderIdIdx] : '';
+      const artworkSheetId = artworkSheetIdx !== -1 ? r[artworkSheetIdx] : '';
+      const commentSheetId = commentSheetIdx !== -1 ? r[commentSheetIdx] : '';
+
+      // Drive フォルダ・スプレッドシート削除
+      [folderId, artworkSheetId, commentSheetId].forEach(id => {
+        if (!id) return;
+        try {
+          const file = DriveApp.getFileById(id);
+          file.setTrashed(true);
+        } catch (e) {
+          Logger.log('Drive 削除失敗 (' + id + '): ' + e);
+        }
+      });
+
+      // master sheet 行削除
+      sheet.deleteRow(item.rowIndex);
+
+      // 運営者に削除完了通知
+      if (email) {
+        sendSandboxDeletedNotification(email, exCode, exName);
+      }
+    });
+
+    Logger.log('dailySandboxMaintenance: 警告 ' + rowsToWarn.length + ' 件、削除 ' + rowsToDelete.length + ' 件');
+  } catch (e) {
+    Logger.log('dailySandboxMaintenance error: ' + e);
+  }
+}
+
+// 翌日削除予定の通知
+function sendSandboxExpiringNotification(email, exCode, exName, expireAtIso) {
+  const subject = '[練習モード] 明日削除されます: ' + exName;
+  const body = `${exName} (${exCode}) は練習モードで作成された展覧会です。
+明日 (${expireAtIso} 以降) に自動的に削除されます。
+
+このまま運用を続けたい場合は、本日中に「本番運用に切替」ボタンを押してください:
+https://rohei-printer-system.web.app/register.html?ex=${exCode}
+
+削除後はテスト作品データ・コメント・いいねがすべて消えます。
+━━━━━━━━━━━━━━━━━━━━━━━━
+Rohei Printer System
+`;
+  GmailApp.sendEmail(email, subject, body, {
+    name: 'Rohei Printer System',
+    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    from: 'noreply.rohei.printer@gmail.com'
+  });
+}
+
+// 削除完了通知
+function sendSandboxDeletedNotification(email, exCode, exName) {
+  const subject = '[練習モード] 削除しました: ' + exName;
+  const body = `${exName} (${exCode}) は練習モードでの試行期間 (14 日) を過ぎたため、自動的に削除されました。
+
+新たに練習を始めたい場合、または本番運用したい場合は再度申請してください:
+https://rohei-printer-system.web.app/setup.html
+━━━━━━━━━━━━━━━━━━━━━━━━
+Rohei Printer System
+`;
+  GmailApp.sendEmail(email, subject, body, {
+    name: 'Rohei Printer System',
+    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    from: 'noreply.rohei.printer@gmail.com'
+  });
+}
+
+// 定期トリガを設定する関数 (運営者が一度だけ実行する)
+function setupSandboxTrigger() {
+  // 既存の dailySandboxMaintenance トリガを削除して二重登録を防ぐ
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'dailySandboxMaintenance') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  // 毎日 4 時 (JST) に実行
+  ScriptApp.newTrigger('dailySandboxMaintenance')
+    .timeBased()
+    .everyDays(1)
+    .atHour(4)
+    .create();
+  Logger.log('Trigger created: dailySandboxMaintenance (daily at 4am JST)');
+}
+
+// =========================================================
+// 🌟 練習モードから本番運用に切替（卒業）
+// 主催者が認証済みであることをチェックし、master sheet の is_sandbox / expire_at をクリアする。
+// Firestore 側のフラグ更新と関連データ (artworks / likes / 画像) のクリアはクライアント側で行う。
+// =========================================================
+function graduateExhibition(exCode, requesterEmail) {
+  try {
+    if (!exCode) return { success: false, error: '展覧会コードが必要です。' };
+    if (!requesterEmail) return { success: false, error: 'リクエスト元のメールアドレスが必要です。' };
+
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sheet = ss.getSheetByName('exhibitions');
+    if (!sheet) return { success: false, error: 'exhibitions シートが見つかりません。' };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const exCodeIdx = headers.indexOf('ex_code');
+    const emailIdx = headers.indexOf('email');
+    const isSandboxIdx = headers.indexOf('is_sandbox');
+    const expireAtIdx = headers.indexOf('expire_at');
+    const updatedAtIdx = headers.indexOf('updated_at');
+
+    if (isSandboxIdx === -1 || expireAtIdx === -1) {
+      return { success: false, error: 'is_sandbox / expire_at 列が見つかりません。setup.html から作成された展覧会のみ卒業可能です。' };
+    }
+
+    const requesterNorm = String(requesterEmail).trim().toLowerCase();
+    let rowIdx = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][exCodeIdx].toString().trim() === exCode) {
+        const rowEmail = String(data[i][emailIdx] || '').trim().toLowerCase();
+        if (rowEmail !== requesterNorm) {
+          return { success: false, error: 'この展覧会の主催者ではありません。' };
+        }
+        rowIdx = i + 1; // 1-based
+        break;
+      }
+    }
+    if (rowIdx === -1) return { success: false, error: '展覧会が見つかりません: ' + exCode };
+
+    sheet.getRange(rowIdx, isSandboxIdx + 1).setValue('FALSE');
+    sheet.getRange(rowIdx, expireAtIdx + 1).setValue('');
+    if (updatedAtIdx !== -1) {
+      sheet.getRange(rowIdx, updatedAtIdx + 1).setValue(
+        Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd, HH:mm:ss')
+      );
+    }
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
 }
 
 // =========================================================
@@ -522,6 +778,8 @@ function addArtworks(payload) {
 
     sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
 
+    bumpArtworkCount(exCode, addCount, 0);
+
     return { success: true, artworks: artworkSeeds };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -539,7 +797,7 @@ function getApplicationsSheet() {
     const headers = [
       'timestamp', 'ex_name', 'venue', 'start_date',
       'organizer', 'email', 'confirm_token',
-      'confirmed', 'ex_code', 'setup_at'
+      'confirmed', 'ex_code', 'setup_at', 'sandbox'
     ];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     const headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -547,6 +805,12 @@ function getApplicationsSheet() {
     headerRange.setFontColor('#ffffff');
     headerRange.setFontWeight('bold');
     sheet.setFrozenRows(1);
+  } else {
+    // 既存シートに sandbox 列が無ければ追加
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf('sandbox') === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('sandbox');
+    }
   }
   return sheet;
 }
@@ -556,7 +820,7 @@ function getApplicationsSheet() {
 // =========================================================
 function submitApplication(payload) {
   try {
-    const { exName, venue, startDate, organizer, email } = payload;
+    const { exName, venue, startDate, organizer, email, sandbox } = payload;
 
     // 開催日チェック（今日より後であること）
     const today = new Date();
@@ -570,18 +834,28 @@ function submitApplication(payload) {
     const token = Utilities.getUuid();
     const timestamp = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss');
 
-    // applicationsシートに記録
+    // applicationsシートに記録（ヘッダー順に依存しないよう dict で構築）
     const sheet = getApplicationsSheet();
-    sheet.appendRow([
-      timestamp, exName, venue, startDate,
-      organizer, email, token,
-      'FALSE', '', ''
-    ]);
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const rowDict = {
+      timestamp: timestamp,
+      ex_name: exName,
+      venue: venue,
+      start_date: startDate,
+      organizer: organizer,
+      email: email,
+      confirm_token: token,
+      confirmed: 'FALSE',
+      ex_code: '',
+      setup_at: '',
+      sandbox: sandbox ? 'TRUE' : 'FALSE'
+    };
+    const rowArr = headers.map(h => rowDict[h] !== undefined ? rowDict[h] : '');
+    sheet.appendRow(rowArr);
 
     // 確認メール送信
-    // Exhibition_register のデプロイURL（確認メールのリンクに使用）
     const confirmUrl = "https://rohei-printer-system.web.app/setup.html?token=" + token;
-    sendConfirmationEmail(email, organizer, exName, venue, startDate, confirmUrl);
+    sendConfirmationEmail(email, organizer, exName, venue, startDate, confirmUrl, sandbox);
 
     return { success: true };
   } catch (e) {
@@ -592,13 +866,21 @@ function submitApplication(payload) {
 // =========================================================
 // 🌟 確認メール送信
 // =========================================================
-function sendConfirmationEmail(email, organizer, exName, venue, startDate, confirmUrl) {
-  const subject = `[Exhibition Setup] メールアドレスの確認`;
+function sendConfirmationEmail(email, organizer, exName, venue, startDate, confirmUrl, sandbox) {
+  const subjectPrefix = sandbox ? '[練習モード] ' : '';
+  const subject = subjectPrefix + `[Exhibition Setup] メールアドレスの確認`;
+  const sandboxNote = sandbox ? `
+[練習] これは練習モードでの申請です:
+・14 日後に自動的に削除されます (期限が来る前に「本番運用に切替」も可能)
+・案内メールは作家には送られず、運営者宛にのみ届きます
+・気軽に試行錯誤してください
+
+` : '';
   const body = `
 ${organizer} 様
 
 以下の展覧会のセットアップ申請を受け付けました。
-
+${sandboxNote}
 展覧会名　: ${exName}
 開催場所　: ${venue}
 開催予定日: ${startDate}
@@ -608,6 +890,12 @@ ${organizer} 様
 ${confirmUrl}
 
 このリンクは申請者本人のみ使用してください。
+
+──
+セットアップ画面に進んだ後、もう 1 通「展覧会セットアップの確認」メール
+が届きます。迷惑メールフォルダに振り分けられる場合がありますので、
+受信トレイに届かない場合はそちらもご確認ください。
+──
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 このメールは送信専用です。返信はできません。
@@ -667,4 +955,162 @@ function confirmToken(token) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
+}
+
+// =========================================================
+// 🌟 finalizeExhibitionSetup 用の token 検証 + canonical doc 返却
+//   Cloud Function `finalizeExhibitionSetup` から呼ばれる。
+//   applications 行の confirmed=TRUE / setup_at 記録済 / ex_code 一致を確認し、
+//   authoritative な email + master SS exhibitions 行から組み立てた
+//   canonical な exhibitionDoc を返す。Cloud Function はクライアント値を
+//   信用せず、ここで返した dict を Firestore に書き込む。
+// =========================================================
+function verifyTokenForFinalize(payload) {
+  try {
+    const token = ((payload && payload.token) || '').toString().trim();
+    const exCode = ((payload && payload.exCode) || '').toString().trim();
+    if (!token) return { success: false, error: 'token が指定されていません' };
+    if (!exCode) return { success: false, error: 'exCode が指定されていません' };
+
+    const sheet = getApplicationsSheet();
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const tokenIdx = headers.indexOf('confirm_token');
+    const emailIdx = headers.indexOf('email');
+    const confirmedIdx = headers.indexOf('confirmed');
+    const setupAtIdx = headers.indexOf('setup_at');
+    const exCodeIdx = headers.indexOf('ex_code');
+
+    if (tokenIdx === -1 || emailIdx === -1 || confirmedIdx === -1
+      || setupAtIdx === -1 || exCodeIdx === -1) {
+      return { success: false, error: 'applications シートのヘッダー構成が想定外です' };
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      const rowToken = data[i][tokenIdx].toString().trim();
+      if (rowToken !== token) continue;
+      const confirmed = String(data[i][confirmedIdx]).toUpperCase().trim() === 'TRUE';
+      if (!confirmed) {
+        return { success: false, error: 'token がまだ確認されていません' };
+      }
+      const setupAt = data[i][setupAtIdx].toString().trim();
+      if (!setupAt) {
+        return { success: false, error: 'setup が完了していません' };
+      }
+      const recordedExCode = data[i][exCodeIdx].toString().trim();
+      if (recordedExCode !== exCode) {
+        return { success: false, error: 'exCode が一致しません (記録: ' + recordedExCode + ')' };
+      }
+      const email = data[i][emailIdx].toString().trim().toLowerCase();
+      const exhibitionDoc = readMasterExhibitionDoc(exCode);
+      if (!exhibitionDoc) {
+        return { success: false, error: 'master SS に exhibitions 行が見つかりません: ' + exCode };
+      }
+      // GAS が確認した email を必ず採用 (master SS 値とのズレ吸収)
+      exhibitionDoc.email = email;
+      return { success: true, email: email, exCode: exCode, exhibitionDoc: exhibitionDoc };
+    }
+    return { success: false, error: 'token が見つかりません' };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =========================================================
+// 🌟 admin 復旧用: ex_code だけで canonical doc を返す
+//   Cloud Function `adminRecoverExhibitionDoc` から呼ばれる。
+//   Script Property `ADMIN_SECRET` と一致する adminSecret が必要。
+//   token 照合は行わない (admin 復旧のため、Cloud Function 側で operator
+//   email auth を済ませている前提)。applications 行から authoritative な
+//   email を引き、master SS exhibitions 行と合わせて返す。
+// =========================================================
+function getCanonicalExhibitionDocAdmin(payload) {
+  try {
+    const exCode = ((payload && payload.exCode) || '').toString().trim();
+    const adminSecret = ((payload && payload.adminSecret) || '').toString();
+    if (!exCode) return { success: false, error: 'exCode が指定されていません' };
+    if (!adminSecret) return { success: false, error: 'adminSecret が指定されていません' };
+
+    const expected = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
+    if (!expected) {
+      return { success: false, error: 'GAS 側で ADMIN_SECRET が未設定です' };
+    }
+    if (adminSecret !== expected) {
+      return { success: false, error: 'adminSecret が一致しません' };
+    }
+
+    const exhibitionDoc = readMasterExhibitionDoc(exCode);
+    if (!exhibitionDoc) {
+      return { success: false, error: 'master SS に exhibitions 行が見つかりません: ' + exCode };
+    }
+
+    // applications 行から email を引き直す (verifyTokenForFinalize と同じく
+    // master SS 値とのズレを吸収する目的)
+    let email = (exhibitionDoc.email || '').toString().trim().toLowerCase();
+    try {
+      const appSheet = getApplicationsSheet();
+      const data = appSheet.getDataRange().getValues();
+      const headers = data[0];
+      const exCodeIdx = headers.indexOf('ex_code');
+      const emailIdx = headers.indexOf('email');
+      if (exCodeIdx !== -1 && emailIdx !== -1) {
+        for (let i = 1; i < data.length; i++) {
+          if (data[i][exCodeIdx].toString().trim() === exCode) {
+            const appEmail = data[i][emailIdx].toString().trim().toLowerCase();
+            if (appEmail) email = appEmail;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      // applications 検索失敗時は master SS の email を採用
+    }
+    exhibitionDoc.email = email;
+    return { success: true, exCode: exCode, email: email, exhibitionDoc: exhibitionDoc };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// master SS exhibitions シートから ex_code 一致行を読み、JSON-safe な dict に整形して返す。
+// 該当行が無ければ null。Cloud Function に渡す canonical な exhibitionDoc を作る用途。
+function readMasterExhibitionDoc(exCode) {
+  const masterSS = SpreadsheetApp.openById(MASTER_SS_ID);
+  const masterSheet = masterSS.getSheetByName('exhibitions');
+  const all = masterSheet.getDataRange().getValues();
+  const headers = all[0];
+  const exCodeIdx = headers.indexOf('ex_code');
+  if (exCodeIdx === -1) return null;
+  for (let i = 1; i < all.length; i++) {
+    if (all[i][exCodeIdx].toString().trim() !== exCode) continue;
+    const dict = {};
+    headers.forEach(function (h, idx) {
+      if (!h) return;
+      dict[h] = normalizeExhibitionFieldValue(h, all[i][idx]);
+    });
+    return dict;
+  }
+  return null;
+}
+
+// セルの生値を Cloud Function (JSON) に乗せやすい形に正規化する。
+// runSetup が返していた exhibitionDoc の型と揃える:
+//   - Date は JST の文字列に
+//   - is_sandbox は boolean に
+//   - artworks_registered / artworks_total は number に
+//   - その他はそのまま
+function normalizeExhibitionFieldValue(key, value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, 'JST', 'yyyy/MM/dd, HH:mm:ss');
+  }
+  if (key === 'is_sandbox') {
+    if (typeof value === 'boolean') return value;
+    return String(value).toUpperCase().trim() === 'TRUE';
+  }
+  if (key === 'artworks_registered' || key === 'artworks_total') {
+    const n = parseInt(value, 10);
+    return isNaN(n) ? 0 : n;
+  }
+  if (value === null || value === undefined) return '';
+  return value;
 }

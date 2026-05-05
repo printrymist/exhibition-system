@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>お問い合わせ - Rohei Printer System</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 28px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 600px;
+      margin-top: 20px;
+    }
+    .logo { text-align: center; margin-bottom: 24px; }
+    .logo h1 { font-size: 1.5em; color: #1a73e8; margin: 0 0 4px 0; }
+    .logo p { font-size: 0.85em; color: #888; margin: 0; }
+    .ctx-block {
+      background: #f7f9fc;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      font-size: 0.85em;
+      color: #555;
+      line-height: 1.7;
+    }
+    .ctx-block .label { color: #888; display: inline-block; min-width: 6em; }
+    .ctx-block .value { color: #1a2a4a; font-weight: bold; }
+    label.field-label {
+      display: block;
+      margin-top: 16px;
+      font-weight: bold;
+      color: #444;
+      font-size: 0.9em;
+    }
+    .badge-required {
+      background: #fbe9e7;
+      color: #d32f2f;
+      font-size: 0.7em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    input[type="text"], textarea, select {
+      width: 100%;
+      padding: 10px 12px;
+      margin-top: 6px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      transition: border-color 0.15s;
+      background: #fff;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    .radio-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .radio-group label:hover { background: #f0f7ff; }
+    .radio-group input[type="radio"] { width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
+    .radio-group label.selected {
+      background: #e8f0fe;
+      border-color: #1a73e8;
+      color: #1a73e8;
+      font-weight: bold;
+    }
+    .hint { font-size: 0.78em; color: #999; margin-top: 4px; }
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      margin-top: 22px;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-submit:hover:not(:disabled) { background: #1557b0; }
+    .btn-submit:disabled {
+      background: #c5d9f7;
+      cursor: not-allowed;
+    }
+    .msg {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9em;
+      text-align: center;
+      display: none;
+    }
+    .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+    .msg.error   { background: #ffebee; color: #c62828; display: block; }
+    .msg.info    { background: #e3f2fd; color: #1565c0; display: block; }
+    .footer-note {
+      margin-top: 20px;
+      font-size: 0.75em;
+      color: #999;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #c5d9f7;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* スレッド表示 */
+    .thread-orig {
+      background: #f7f9fc;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .thread-orig .subject {
+      font-weight: bold;
+      font-size: 1.05em;
+      margin-bottom: 8px;
+    }
+    .thread-orig .meta {
+      font-size: 0.75em;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    .thread-orig .body {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92em;
+      line-height: 1.6;
+    }
+    .msg-item {
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .msg-item.operator {
+      background: #e8f5e9;
+      border-left: 3px solid #34a853;
+    }
+    .msg-item.admin {
+      background: #fff8e1;
+      border-left: 3px solid #fbbc04;
+    }
+    .msg-item .meta {
+      font-size: 0.72em;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    .msg-item .body {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92em;
+      line-height: 1.6;
+    }
+    .section-label {
+      font-size: 0.85em;
+      font-weight: bold;
+      color: #666;
+      margin: 22px 0 10px 0;
+      padding-top: 14px;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="logo">
+      <h1 id="pageTitle">お問い合わせ</h1>
+      <p>Rohei Printer System</p>
+    </div>
+
+    <div id="loadingArea" class="msg info"><span class="spinner"></span> 読み込み中…</div>
+    <div id="errorArea" class="msg error" style="display:none;"></div>
+
+    <!-- ===== 新規モード（?ex=...) ===== -->
+    <div id="newArea" style="display:none;">
+      <div class="ctx-block">
+        <div><span class="label">展覧会:</span> <span class="value" id="newCtxExName">—</span></div>
+        <div><span class="label">展覧会コード:</span> <span class="value" id="newCtxExCode">—</span></div>
+        <div><span class="label">主催者:</span> <span class="value" id="newCtxOrganizer">—</span></div>
+        <div><span class="label">返信先:</span> <span class="value" id="newCtxEmail">—</span></div>
+      </div>
+
+      <label class="field-label">カテゴリ<span class="badge-required">必須</span></label>
+      <div class="radio-group" id="categoryGroup">
+        <label><input type="radio" name="category" value="bug">不具合</label>
+        <label><input type="radio" name="category" value="op">操作方法</label>
+        <label><input type="radio" name="category" value="request">機能要望</label>
+        <label><input type="radio" name="category" value="other">その他</label>
+      </div>
+
+      <div id="subCatWrap" style="display:none;">
+        <label class="field-label">サブカテゴリ</label>
+        <select id="subcategorySelect">
+          <option value="">— 選択してください —</option>
+          <option value="setup">セットアップ</option>
+          <option value="fields">項目設定</option>
+          <option value="register">作品入力</option>
+          <option value="caption">キャプション印刷</option>
+          <option value="qr">QR印刷</option>
+          <option value="auth">認証・パスワード</option>
+        </select>
+      </div>
+
+      <label class="field-label" for="subjectInput">件名<span class="badge-required">必須</span></label>
+      <input type="text" id="subjectInput" placeholder="一行で要点を">
+
+      <label class="field-label" for="bodyInput">本文<span class="badge-required">必須</span></label>
+      <textarea id="bodyInput" placeholder="現象・再現手順・期待動作などを具体的にお書きください。"></textarea>
+      <div class="hint">画面 URL やブラウザ情報も自動で送られます。</div>
+
+      <button class="btn-submit" id="btnSubmit" onclick="submitInquiry()">送信</button>
+      <div class="msg" id="submitMsg"></div>
+    </div>
+
+    <!-- ===== スレッドモード（?id=...) ===== -->
+    <div id="threadArea" style="display:none;">
+      <div class="ctx-block">
+        <div><span class="label">展覧会:</span> <span class="value" id="thrCtxExName">—</span></div>
+        <div><span class="label">主催者:</span> <span class="value" id="thrCtxOrganizer">—</span></div>
+        <div><span class="label">返信先:</span> <span class="value" id="thrCtxEmail">—</span></div>
+      </div>
+
+      <div class="section-label">最初の問い合わせ</div>
+      <div class="thread-orig">
+        <div class="subject" id="thrOrigSubject">—</div>
+        <div class="meta" id="thrOrigMeta"></div>
+        <div class="body" id="thrOrigBody"></div>
+      </div>
+
+      <div class="section-label">やり取り</div>
+      <div id="thrMessages"><div class="hint">まだ返信はありません。</div></div>
+
+      <div class="section-label">続けて問い合わせる</div>
+      <textarea id="followupBody" placeholder="追加のご質問・補足を入力してください。"></textarea>
+      <button class="btn-submit" id="btnFollowup" onclick="submitFollowup()">続報を送信</button>
+      <div class="msg" id="followupMsg"></div>
+    </div>
+
+    <div class="footer-note">
+      お問い合わせ内容は運営者が確認し、返信先メールアドレスにご返信します。<br>
+      Rohei Printer System
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const db = firebase.firestore();
+
+    function getUrlParam(name) {
+      const m = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    function gasCall(params) {
+      const body = new URLSearchParams(params);
+      return fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      }).then(r => r.json());
+    }
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    }
+    function fmtDate(ts) {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function showError(msg) {
+      document.getElementById('loadingArea').style.display = 'none';
+      const e = document.getElementById('errorArea');
+      e.innerText = msg;
+      e.style.display = 'block';
+    }
+
+    // === エントリーポイント：モード判定 ===
+    const exParam = getUrlParam('ex');
+    const idParam = getUrlParam('id');
+
+    if (idParam) {
+      document.getElementById('pageTitle').innerText = '問い合わせの続き';
+      loadThread(idParam);
+    } else if (exParam) {
+      loadNewMode(exParam);
+    } else {
+      showError('展覧会コード（ex）または問い合わせ ID（id）が URL に指定されていません。');
+    }
+
+    // ============================================================
+    // 新規モード
+    // ============================================================
+    let newCtx = null;
+
+    async function loadNewMode(exCode) {
+      try {
+        const res = await gasCall({ action: 'getInquiryContext', ex: exCode });
+        document.getElementById('loadingArea').style.display = 'none';
+        if (!res.success || !res.context) {
+          showError('展覧会情報を取得できませんでした。コードを確認してください。');
+          return;
+        }
+        newCtx = res.context;
+        document.getElementById('newCtxExName').innerText = newCtx.ex_name || '(名称未設定)';
+        document.getElementById('newCtxExCode').innerText = newCtx.ex_code;
+        document.getElementById('newCtxOrganizer').innerText = newCtx.organizer || '(未登録)';
+        document.getElementById('newCtxEmail').innerText = newCtx.email || '(未登録)';
+        document.getElementById('newArea').style.display = 'block';
+      } catch (err) {
+        showError('通信エラー: ' + err.message);
+      }
+    }
+
+    document.getElementById('categoryGroup').addEventListener('change', e => {
+      document.querySelectorAll('#categoryGroup label').forEach(l => l.classList.remove('selected'));
+      const target = e.target.closest('label');
+      if (target) target.classList.add('selected');
+      document.getElementById('subCatWrap').style.display = e.target.value === 'op' ? 'block' : 'none';
+    });
+
+    function showSubmitMsg(text, type) {
+      const el = document.getElementById('submitMsg');
+      el.className = 'msg ' + type;
+      el.innerHTML = text;
+    }
+
+    async function submitInquiry() {
+      const category = (document.querySelector('input[name=category]:checked') || {}).value || '';
+      const subcategory = category === 'op' ? document.getElementById('subcategorySelect').value : '';
+      const subject = document.getElementById('subjectInput').value.trim();
+      const body = document.getElementById('bodyInput').value.trim();
+
+      if (!category) return showSubmitMsg('カテゴリを選択してください。', 'error');
+      if (category === 'op' && !subcategory) return showSubmitMsg('サブカテゴリを選択してください。', 'error');
+      if (!subject) return showSubmitMsg('件名を入力してください。', 'error');
+      if (!body) return showSubmitMsg('本文を入力してください。', 'error');
+
+      const btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      showSubmitMsg('<span class="spinner"></span> 送信中…', 'info');
+
+      const docData = {
+        ex_code: newCtx.ex_code,
+        ex_name: newCtx.ex_name || '',
+        organizer: newCtx.organizer || '',
+        email: newCtx.email || '',
+        category, subcategory,
+        subject, message: body,
+        page_url: document.referrer || '',
+        user_agent: navigator.userAgent || '',
+        status: 'open',
+        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        resolved_at: null
+      };
+
+      try {
+        const docRef = await db.collection('inquiries').add(docData);
+        let notifyOk = false, notifyErrMsg = '';
+        try {
+          const notifyRes = await gasCall({
+            action: 'sendInquiryNotification',
+            payload: JSON.stringify({
+              inquiryId: docRef.id,
+              exCode: newCtx.ex_code,
+              exName: newCtx.ex_name,
+              organizer: newCtx.organizer,
+              email: newCtx.email,
+              category, subcategory,
+              subject, body,
+              pageUrl: docData.page_url,
+              userAgent: docData.user_agent
+            })
+          });
+          if (notifyRes && notifyRes.success) notifyOk = true;
+          else notifyErrMsg = (notifyRes && notifyRes.error) || '不明なエラー';
+        } catch (notifyErr) {
+          notifyErrMsg = notifyErr.message;
+        }
+        // SS 側 inquiries_index に行追加（fire-and-forget）
+        const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
+        gasCall({
+          action: 'appendInquiryToIndex',
+          payload: JSON.stringify({
+            inquiry_id: docRef.id,
+            ex_code: newCtx.ex_code,
+            ex_name: newCtx.ex_name || '',
+            organizer: newCtx.organizer || '',
+            email: newCtx.email || '',
+            category, subcategory,
+            subject,
+            status: 'open',
+            created_at: nowStr,
+            last_message_at: nowStr
+          })
+        }).catch(e => console.warn('appendInquiryToIndex failed:', e));
+        if (notifyOk) {
+          showSubmitMsg('✅ 送信しました。返信は登録メールアドレスへお送りします。', 'success');
+        } else {
+          showSubmitMsg('⚠️ 内容は記録されましたが、通知メール送信に失敗しました（' + notifyErrMsg + '）。', 'error');
+        }
+        document.getElementById('btnSubmit').style.display = 'none';
+        document.querySelectorAll('#newArea input, #newArea textarea, #newArea select').forEach(el => el.disabled = true);
+      } catch (err) {
+        btn.disabled = false;
+        showSubmitMsg('Error: ' + err.message, 'error');
+      }
+    }
+
+    // ============================================================
+    // スレッドモード
+    // ============================================================
+    let threadCtx = null;
+
+    async function loadThread(id) {
+      try {
+        const docRef = db.collection('inquiries').doc(id);
+        const [docSnap, msgSnap] = await Promise.all([
+          docRef.get(),
+          docRef.collection('messages').orderBy('at', 'asc').get()
+        ]);
+        document.getElementById('loadingArea').style.display = 'none';
+        if (!docSnap.exists) {
+          showError('問い合わせが見つかりません。リンクが古い可能性があります。');
+          return;
+        }
+        const inq = { id: docSnap.id, ...docSnap.data() };
+        threadCtx = inq;
+        document.getElementById('thrCtxExName').innerText = inq.ex_name || '(名称未設定)';
+        document.getElementById('thrCtxOrganizer').innerText = inq.organizer || '(不明)';
+        document.getElementById('thrCtxEmail').innerText = inq.email || '(なし)';
+
+        document.getElementById('thrOrigSubject').innerText = inq.subject || '(件名なし)';
+        document.getElementById('thrOrigMeta').innerText = `${fmtDate(inq.created_at)}`;
+        document.getElementById('thrOrigBody').innerText = inq.message || '';
+
+        const messages = msgSnap.docs.map(d => d.data());
+        renderMessages(messages);
+
+        document.getElementById('threadArea').style.display = 'block';
+      } catch (err) {
+        showError('読み込みエラー: ' + err.message);
+      }
+    }
+
+    function renderMessages(messages) {
+      const el = document.getElementById('thrMessages');
+      if (!messages || messages.length === 0) {
+        el.innerHTML = '<div class="hint">まだ返信はありません。</div>';
+        return;
+      }
+      el.innerHTML = messages.map(m => {
+        const cls = m.from === 'admin' ? 'admin' : 'operator';
+        const label = m.from === 'admin' ? '主催者からの続報' : '運営者の返信';
+        return `
+          <div class="msg-item ${cls}">
+            <div class="meta">${label} — ${fmtDate(m.at)}</div>
+            <div class="body">${escapeHtml(m.body || '')}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function showFollowupMsg(text, type) {
+      const el = document.getElementById('followupMsg');
+      el.className = 'msg ' + type;
+      el.innerHTML = text;
+    }
+
+    async function submitFollowup() {
+      const body = document.getElementById('followupBody').value.trim();
+      if (!body) return showFollowupMsg('続報の本文を入力してください。', 'error');
+      if (!threadCtx) return showFollowupMsg('スレッド情報が読み込めていません。', 'error');
+
+      const btn = document.getElementById('btnFollowup');
+      btn.disabled = true;
+      showFollowupMsg('<span class="spinner"></span> 送信中…', 'info');
+
+      try {
+        const docRef = db.collection('inquiries').doc(threadCtx.id);
+        await docRef.collection('messages').add({
+          from: 'admin',
+          body: body,
+          at: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        // status を open に戻す（運営者の Inbox で気づけるように）。失敗しても続行。
+        try { await docRef.update({ status: 'open' }); } catch (e) { console.warn('status update skipped:', e); }
+        // SS 側 inquiries_index も更新（fire-and-forget）
+        const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
+        gasCall({
+          action: 'updateInquiryInIndex',
+          payload: JSON.stringify({
+            inquiry_id: threadCtx.id,
+            status: 'open',
+            last_message_at: nowStr
+          })
+        }).catch(e => console.warn('updateInquiryInIndex failed:', e));
+        // 通知メール
+        let notifyOk = false, notifyErrMsg = '';
+        try {
+          const notifyRes = await gasCall({
+            action: 'sendAdminFollowupNotification',
+            payload: JSON.stringify({
+              inquiryId: threadCtx.id,
+              exCode: threadCtx.ex_code,
+              exName: threadCtx.ex_name,
+              organizer: threadCtx.organizer,
+              email: threadCtx.email,
+              originalSubject: threadCtx.subject,
+              body: body
+            })
+          });
+          if (notifyRes && notifyRes.success) notifyOk = true;
+          else notifyErrMsg = (notifyRes && notifyRes.error) || '不明なエラー';
+        } catch (notifyErr) {
+          notifyErrMsg = notifyErr.message;
+        }
+        if (notifyOk) {
+          showFollowupMsg('✅ 続報を送信しました。', 'success');
+        } else {
+          showFollowupMsg('⚠️ 内容は記録されましたが、運営者通知に失敗しました（' + notifyErrMsg + '）。', 'error');
+        }
+        document.getElementById('followupBody').value = '';
+        // 履歴を再描画
+        const refreshSnap = await docRef.collection('messages').orderBy('at', 'asc').get();
+        renderMessages(refreshSnap.docs.map(d => d.data()));
+        btn.disabled = false;
+      } catch (err) {
+        btn.disabled = false;
+        showFollowupMsg('Error: ' + err.message, 'error');
+      }
+    }
+  </script>
+</body>
+
+</html>

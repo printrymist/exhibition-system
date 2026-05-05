@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inquiry Inbox - Rohei Printer System</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: #f4f4f9;
+      color: #1a2a4a;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e5e8ec;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    header .title {
+      font-size: 1.1em;
+      font-weight: bold;
+      color: #1a73e8;
+    }
+    header .user-area {
+      font-size: 0.85em;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .signin-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 32px;
+      max-width: 420px;
+      margin: 60px auto;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+    .signin-card h2 { font-size: 1.2em; margin: 0 0 16px 0; }
+    .signin-card p { color: #666; font-size: 0.9em; margin: 0 0 24px 0; line-height: 1.6; }
+    .btn-google {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px 22px;
+      background: #fff;
+      color: #1a2a4a;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-google:hover { background: #f7f9fc; border-color: #1a73e8; }
+    .btn-google svg { width: 18px; height: 18px; }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      background: #fff;
+      cursor: pointer;
+      font-size: 0.85em;
+      transition: all 0.15s;
+    }
+    .btn:hover:not(:disabled) { background: #f0f7ff; border-color: #1a73e8; color: #1a73e8; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: #1a73e8;
+      color: #fff;
+      border-color: #1a73e8;
+    }
+    .btn-primary:hover:not(:disabled) { background: #1557b0; color: #fff; }
+    .btn-resolved {
+      background: #34a853;
+      color: #fff;
+      border-color: #34a853;
+    }
+    .btn-resolved:hover:not(:disabled) { background: #2c8841; color: #fff; }
+
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 0.85em;
+    }
+    .filter-bar select {
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      font-size: 0.85em;
+    }
+
+    .inquiry-list {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    .inquiry-row {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f0f2f5;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 110px 1fr 130px 90px;
+      gap: 12px;
+      align-items: center;
+      transition: background 0.1s;
+    }
+    .inquiry-row:hover { background: #f7f9fc; }
+    .inquiry-row:last-child { border-bottom: none; }
+    .inq-date { font-size: 0.78em; color: #888; }
+    .inq-main { min-width: 0; }
+    .inq-subject {
+      font-weight: bold;
+      font-size: 0.95em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .inq-meta {
+      font-size: 0.78em;
+      color: #666;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .inq-cat {
+      font-size: 0.75em;
+      color: #1a73e8;
+      background: #e8f0fe;
+      padding: 2px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      text-align: center;
+    }
+    .badge-status {
+      font-size: 0.75em;
+      padding: 3px 10px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .badge-status.open { background: #fbe9e7; color: #d32f2f; }
+    .badge-status.in_progress { background: #fff3e0; color: #ef6c00; }
+    .badge-status.resolved { background: #e8f5e9; color: #2e7d32; }
+
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: #999;
+      font-size: 0.9em;
+    }
+
+    /* Detail */
+    .detail-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+    .detail-back {
+      background: none;
+      border: none;
+      color: #1a73e8;
+      font-size: 0.9em;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 14px;
+    }
+    .detail-header {
+      border-bottom: 1px solid #e5e8ec;
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+    }
+    .detail-meta {
+      font-size: 0.82em;
+      color: #666;
+      line-height: 1.7;
+    }
+    .detail-meta b { color: #1a2a4a; }
+    .detail-subject {
+      font-size: 1.15em;
+      font-weight: bold;
+      margin: 8px 0 4px 0;
+    }
+    .detail-body {
+      background: #f7f9fc;
+      border-radius: 8px;
+      padding: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92em;
+      line-height: 1.6;
+      margin-top: 8px;
+    }
+    .messages {
+      margin-top: 22px;
+    }
+    .message-item {
+      padding: 10px 14px;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 10px;
+    }
+    .message-item.operator {
+      background: #e8f5e9;
+      border-left: 3px solid #34a853;
+    }
+    .message-item.admin {
+      background: #fff8e1;
+      border-left: 3px solid #fbbc04;
+    }
+    .message-meta {
+      font-size: 0.75em;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    .message-body {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.92em;
+      line-height: 1.6;
+    }
+    .reply-area {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #e5e8ec;
+    }
+    .reply-area textarea {
+      width: 100%;
+      min-height: 140px;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.9em;
+      resize: vertical;
+    }
+    .reply-area textarea:focus { outline: none; border-color: #1a73e8; }
+    .reply-buttons {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .msg {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      display: none;
+    }
+    .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+    .msg.error   { background: #ffebee; color: #c62828; display: block; }
+    .msg.info    { background: #e3f2fd; color: #1565c0; display: block; }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #c5d9f7;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .access-denied {
+      background: #fff;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      max-width: 480px;
+      margin: 60px auto;
+      color: #c62828;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="title">Inquiry Inbox</div>
+    <div class="user-area" id="userArea"></div>
+  </header>
+
+  <div class="container">
+    <!-- サインイン状態（未ログイン） -->
+    <div id="signInArea">
+      <div class="signin-card">
+        <h2>運営者ログイン</h2>
+        <p>問い合わせ内容を表示するには、運営者の Google アカウントでサインインしてください。</p>
+        <button class="btn-google" onclick="signIn()">
+          <svg viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.08-1.78 2.72v2.27h2.88c1.69-1.55 2.7-3.84 2.7-6.63z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.88-2.27c-.8.54-1.83.86-3.08.86-2.36 0-4.36-1.6-5.07-3.74H.95v2.34C2.44 16.05 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.93 10.71c-.18-.54-.28-1.12-.28-1.71s.1-1.17.28-1.71V4.95H.95C.34 6.17 0 7.55 0 9s.34 2.83.95 4.05l2.98-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 1.95.95 4.95l2.98 2.34C4.64 5.18 6.64 3.58 9 3.58z"/></svg>
+          Google でサインイン
+        </button>
+      </div>
+    </div>
+
+    <!-- アクセス拒否 -->
+    <div id="accessDenied" style="display:none;">
+      <div class="access-denied">
+        <h2>アクセスが許可されていません</h2>
+        <p id="deniedDetails" style="margin-top:12px; color:#666; font-size:0.9em;"></p>
+        <button class="btn" style="margin-top:18px;" onclick="signOut()">別アカウントでサインイン</button>
+      </div>
+    </div>
+
+    <!-- 一覧 -->
+    <div id="listArea" style="display:none;">
+      <div class="filter-bar">
+        <span>ステータス:</span>
+        <select id="filterStatus" onchange="renderList()">
+          <option value="all">全て</option>
+          <option value="open" selected>未対応</option>
+          <option value="in_progress">対応中</option>
+          <option value="resolved">解決済み</option>
+        </select>
+        <span style="margin-left:16px;">カテゴリ:</span>
+        <select id="filterCategory" onchange="renderList()">
+          <option value="all">全て</option>
+          <option value="bug">不具合</option>
+          <option value="op">操作方法</option>
+          <option value="request">機能要望</option>
+          <option value="other">その他</option>
+        </select>
+        <button class="btn" style="margin-left:auto;" onclick="loadInquiries()">↻ 更新</button>
+      </div>
+      <div id="listContent" class="inquiry-list">
+        <div class="empty-state"><span class="spinner"></span> 読み込み中…</div>
+      </div>
+    </div>
+
+    <!-- 詳細 -->
+    <div id="detailArea" style="display:none;"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    const ALLOWED_EMAIL = 'rymist1@gmail.com';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    let allInquiries = [];
+
+    function gasCall(params) {
+      const body = new URLSearchParams(params);
+      return fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      }).then(r => r.json());
+    }
+
+    function signIn() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => {
+        alert('サインインエラー: ' + err.message);
+      });
+    }
+    function signOut() { auth.signOut(); }
+
+    function showOnly(id) {
+      ['signInArea', 'accessDenied', 'listArea', 'detailArea'].forEach(x => {
+        document.getElementById(x).style.display = x === id ? 'block' : 'none';
+      });
+    }
+
+    auth.onAuthStateChanged(user => {
+      const userArea = document.getElementById('userArea');
+      if (!user) {
+        userArea.innerHTML = '';
+        showOnly('signInArea');
+        return;
+      }
+      if (user.email !== ALLOWED_EMAIL) {
+        userArea.innerHTML = `<span>${user.email}</span> <button class="btn" onclick="signOut()">サインアウト</button>`;
+        document.getElementById('deniedDetails').innerText
+          = `${user.email} ではアクセスできません。許可されているアカウントでサインインしてください。`;
+        showOnly('accessDenied');
+        return;
+      }
+      userArea.innerHTML = `<span>${user.email}</span> <button class="btn" onclick="signOut()">サインアウト</button>`;
+      showOnly('listArea');
+      loadInquiries();
+    });
+
+    async function loadInquiries() {
+      const listEl = document.getElementById('listContent');
+      listEl.innerHTML = `<div class="empty-state"><span class="spinner"></span> 読み込み中…</div>`;
+      try {
+        const snap = await db.collection('inquiries').orderBy('created_at', 'desc').limit(200).get();
+        allInquiries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderList();
+      } catch (err) {
+        listEl.innerHTML = `<div class="empty-state" style="color:#c62828;">読み込みエラー: ${err.message}</div>`;
+      }
+    }
+
+    function fmtDate(ts) {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      const m = d.getMonth() + 1, day = d.getDate();
+      const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+      return `${m}/${day} ${hh}:${mm}`;
+    }
+
+    const CAT_LABEL = { bug: '不具合', op: '操作', request: '要望', other: 'その他' };
+    const STATUS_LABEL = { open: '未対応', in_progress: '対応中', resolved: '解決済' };
+
+    function renderList() {
+      const status = document.getElementById('filterStatus').value;
+      const category = document.getElementById('filterCategory').value;
+      const filtered = allInquiries.filter(q => {
+        if (status !== 'all' && (q.status || 'open') !== status) return false;
+        if (category !== 'all' && q.category !== category) return false;
+        return true;
+      });
+      const listEl = document.getElementById('listContent');
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<div class="empty-state">該当する問い合わせはありません。</div>`;
+        return;
+      }
+      listEl.innerHTML = filtered.map(q => `
+        <div class="inquiry-row" onclick="showDetail('${q.id}')">
+          <div class="inq-date">${fmtDate(q.created_at)}</div>
+          <div class="inq-main">
+            <div class="inq-subject">${escapeHtml(q.subject || '(件名なし)')}</div>
+            <div class="inq-meta">${escapeHtml(q.ex_name || '(展覧会不明)')} / ${escapeHtml(q.organizer || '(不明)')}</div>
+          </div>
+          <div><span class="inq-cat">${CAT_LABEL[q.category] || q.category || ''}</span></div>
+          <div><span class="badge-status ${q.status || 'open'}">${STATUS_LABEL[q.status || 'open']}</span></div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    }
+
+    let currentInquiry = null;
+
+    async function showDetail(id) {
+      const inq = allInquiries.find(q => q.id === id);
+      if (!inq) return;
+      currentInquiry = inq;
+      const detailEl = document.getElementById('detailArea');
+      showOnly('detailArea');
+      detailEl.innerHTML = `<div class="empty-state"><span class="spinner"></span> 読み込み中…</div>`;
+
+      // messages サブコレクション取得
+      let messages = [];
+      try {
+        const msgSnap = await db.collection('inquiries').doc(id).collection('messages').orderBy('at', 'asc').get();
+        messages = msgSnap.docs.map(d => d.data());
+      } catch (err) {
+        console.error('messages load error:', err);
+      }
+
+      const subcatLabel = inq.subcategory ? ` / ${inq.subcategory}` : '';
+      detailEl.innerHTML = `
+        <div class="detail-card">
+          <button class="detail-back" onclick="backToList()">← 一覧へ戻る</button>
+          <div class="detail-header">
+            <div class="detail-meta">
+              <span class="badge-status ${inq.status || 'open'}" style="margin-right:8px;">${STATUS_LABEL[inq.status || 'open']}</span>
+              <span class="inq-cat">${CAT_LABEL[inq.category] || inq.category}${subcatLabel}</span>
+            </div>
+            <div class="detail-subject">${escapeHtml(inq.subject || '')}</div>
+            <div class="detail-meta" style="margin-top:6px;">
+              <b>展覧会:</b> ${escapeHtml(inq.ex_name || '')} (${escapeHtml(inq.ex_code || '')})<br>
+              <b>主催者:</b> ${escapeHtml(inq.organizer || '(不明)')}<br>
+              <b>返信先:</b> <a href="mailto:${escapeHtml(inq.email || '')}">${escapeHtml(inq.email || '(なし)')}</a><br>
+              <b>受信:</b> ${fmtDate(inq.created_at)}
+              ${inq.page_url ? `<br><b>発生画面:</b> ${escapeHtml(inq.page_url)}` : ''}
+              ${inq.user_agent ? `<br><b>環境:</b> <span style="font-size:0.85em;color:#999;">${escapeHtml(inq.user_agent)}</span>` : ''}
+            </div>
+            <div class="detail-body">${escapeHtml(inq.message || '')}</div>
+          </div>
+
+          <div class="messages">
+            ${messages.length === 0 ? '<div style="color:#999;font-size:0.85em;">まだやり取りはありません。</div>' :
+              messages.map(m => {
+                const cls = m.from === 'admin' ? 'admin' : 'operator';
+                const label = m.from === 'admin' ? '主催者からの続報' : '運営者の返信';
+                return `
+                  <div class="message-item ${cls}">
+                    <div class="message-meta">${label} — ${fmtDate(m.at)}</div>
+                    <div class="message-body">${escapeHtml(m.body || '')}</div>
+                  </div>`;
+              }).join('')}
+          </div>
+
+          <div class="reply-area">
+            <label style="font-size:0.85em;font-weight:bold;color:#444;">返信を作成（送信すると登録メールに届きます）</label>
+            <textarea id="replyBody" placeholder="ご回答内容..."></textarea>
+            <div class="reply-buttons">
+              <button class="btn" onclick="markResolved()" ${(inq.status === 'resolved') ? 'disabled' : ''}>解決済みにする（送信なし）</button>
+              <button class="btn-primary btn" onclick="sendReply()">返信送信</button>
+            </div>
+            <div class="msg" id="replyMsg"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function backToList() {
+      currentInquiry = null;
+      showOnly('listArea');
+    }
+
+    function showReplyMsg(html, type) {
+      const el = document.getElementById('replyMsg');
+      el.className = 'msg ' + type;
+      el.innerHTML = html;
+    }
+
+    async function sendReply() {
+      if (!currentInquiry) return;
+      const body = document.getElementById('replyBody').value.trim();
+      if (!body) return showReplyMsg('返信内容を入力してください。', 'error');
+      if (!currentInquiry.email) return showReplyMsg('返信先メールアドレスがないため送信できません。', 'error');
+
+      showReplyMsg('<span class="spinner"></span> 送信中…', 'info');
+      const id = currentInquiry.id;
+      try {
+        // 1. messages サブコレクションに追加
+        await db.collection('inquiries').doc(id).collection('messages').add({
+          from: 'operator',
+          body: body,
+          at: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        // 2. メール通知
+        const mailRes = await gasCall({
+          action: 'sendInquiryReply',
+          payload: JSON.stringify({
+            toEmail: currentInquiry.email,
+            exCode: currentInquiry.ex_code,
+            exName: currentInquiry.ex_name,
+            subject: currentInquiry.subject,
+            body: body,
+            inquiryId: id
+          })
+        });
+        if (!mailRes || !mailRes.success) {
+          showReplyMsg('⚠️ Firestore に保存しましたが、通知メール送信に失敗: ' + (mailRes && mailRes.error || '不明エラー'), 'error');
+        } else {
+          // 3. status を in_progress に更新
+          await db.collection('inquiries').doc(id).update({ status: 'in_progress' });
+          showReplyMsg('✅ 返信を送信しました。', 'success');
+          // ローカル状態更新
+          currentInquiry.status = 'in_progress';
+          // メッセージリストを再描画するため詳細を再表示
+          setTimeout(() => showDetail(id), 800);
+          // allInquiries 側も更新
+          const idx = allInquiries.findIndex(q => q.id === id);
+          if (idx !== -1) allInquiries[idx].status = 'in_progress';
+          // SS 側 inquiries_index も更新（fire-and-forget）
+          const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
+          gasCall({
+            action: 'updateInquiryInIndex',
+            payload: JSON.stringify({
+              inquiry_id: id,
+              status: 'in_progress',
+              last_message_at: nowStr
+            })
+          }).catch(e => console.warn('updateInquiryInIndex failed:', e));
+        }
+      } catch (err) {
+        showReplyMsg('Error: ' + err.message, 'error');
+      }
+    }
+
+    async function markResolved() {
+      if (!currentInquiry) return;
+      const id = currentInquiry.id;
+      showReplyMsg('<span class="spinner"></span> 更新中…', 'info');
+      try {
+        await db.collection('inquiries').doc(id).update({
+          status: 'resolved',
+          resolved_at: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        currentInquiry.status = 'resolved';
+        const idx = allInquiries.findIndex(q => q.id === id);
+        if (idx !== -1) allInquiries[idx].status = 'resolved';
+        showReplyMsg('✅ 解決済みにしました。', 'success');
+        setTimeout(() => showDetail(id), 600);
+        // SS 側 inquiries_index も更新（fire-and-forget）
+        gasCall({
+          action: 'updateInquiryInIndex',
+          payload: JSON.stringify({
+            inquiry_id: id,
+            status: 'resolved'
+          })
+        }).catch(e => console.warn('updateInquiryInIndex failed:', e));
+      } catch (err) {
+        showReplyMsg('Error: ' + err.message, 'error');
+      }
+    }
+  </script>
+</body>
+
+</html>

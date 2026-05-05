@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Recount Artworks</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.2em; }
+    button { padding: 10px 20px; font-size: 15px; cursor: pointer; }
+    pre { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1>Recount Artworks (Firestore -> exhibitions sheet)</h1>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">運営者管理者ログインが必要です</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この管理ツールは全展覧会を対象に集計するため、運営者管理者 (rymist1@gmail.com) のみ実行できます。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+    <p>Firestore の artworks を ex_code 別に集計して、exhibitions シートの artworks_total / artworks_registered に絶対値で書き戻します。</p>
+    <button onclick="run()">recount を実行</button>
+    <pre id="log">(待機中)</pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var GAS_URL = "https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec";
+    var logEl = document.getElementById("log");
+
+    function append(s) {
+      logEl.textContent += "\n" + s;
+    }
+
+    async function run() {
+      logEl.textContent = "実行中...";
+      try {
+        var exSnap = await db.collection("exhibitions").get();
+        var codes = exSnap.docs.map(function(d){ return d.id; });
+        append("対象 ex_code: " + codes.join(", "));
+        for (var i = 0; i < codes.length; i++) {
+          var code = codes[i];
+          var aSnap = await db.collection("artworks").where("exCode", "==", code).get();
+          var total = 0, reg = 0;
+          aSnap.docs.forEach(function(d){
+            var x = d.data();
+            if (!x.artwork_id) return;
+            total++;
+            if (((x.status || "") + "").trim() === "1") reg++;
+          });
+          var body = new URLSearchParams({
+            action: "setArtworkCount",
+            ex: code,
+            total: String(total),
+            registered: String(reg)
+          });
+          var res = await fetch(GAS_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body
+          }).then(function(r){ return r.json(); });
+          append(code + ": " + reg + " / " + total + " " + (res.success ? "OK" : ("NG: " + (res.error || ""))));
+        }
+        append("=== recount 完了 ===");
+      } catch (e) {
+        append("ERROR: " + e.message);
+      }
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (isOp) {
+          if (statusEl) {
+            statusEl.innerText = '🔓 ' + user.email + ' で認証済み';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          if (user && user.email) {
+            setMsg('⚠️ ' + user.email + ' は運営者管理者として登録されていません。', '#d93025');
+          }
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+</html>

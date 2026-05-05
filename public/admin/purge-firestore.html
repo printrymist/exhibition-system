@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Purge Firestore (ex_code)</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.2em; }
+    button { padding: 10px 20px; font-size: 15px; cursor: pointer; }
+    button.danger { background: #d93025; color: #fff; border: none; border-radius: 6px; }
+    button.danger:disabled { background: #ccc; cursor: not-allowed; }
+    button.primary { background: #1a73e8; color: #fff; border: none; border-radius: 6px; }
+    pre { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+    .row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+    .warn { background: #fff3e0; border: 1px solid #ffb74d; padding: 12px; border-radius: 8px; font-size: 0.9em; margin: 12px 0; }
+    .preview { background: #f1f8e9; border: 1px solid #aed581; padding: 12px; border-radius: 8px; font-size: 0.9em; margin: 12px 0; display: none; }
+    .preview h3 { margin: 0 0 8px 0; font-size: 1em; }
+    .preview ul { margin: 4px 0 0 20px; padding: 0; }
+  </style>
+</head>
+<body>
+  <h1>Purge Firestore (ex_code 指定で削除)</h1>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">運営者管理者ログインが必要です</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この管理ツールは破壊的な操作のため、運営者管理者 (rymist1@gmail.com) のみ実行できます。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+
+    <div class="warn">
+      <strong>用途:</strong> sandbox 削除 (dailySandboxMaintenance / 手動 purge) 後に Firestore に残った残骸を掃除します。<br>
+      <strong>削除対象:</strong> 指定 ex_code に紐づく <code>artworks</code> / <code>likes</code> / <code>exhibitions</code> ドキュメントと、Storage の <code>artworks/{ex_code}_*</code> 画像。<br>
+      <strong>削除しない:</strong> <code>inquiries</code> (お問い合わせ履歴は保護)、Master SS、Drive (これらは GAS purge.js / dailySandboxMaintenance で別途削除)。
+    </div>
+
+    <div class="row">
+      <input type="text" id="exCodeInput" placeholder="ex_code (例: PR002)">
+      <button class="primary" onclick="dryRun()">対象を確認 (DRY RUN)</button>
+    </div>
+
+    <div id="preview" class="preview"></div>
+
+    <div class="row">
+      <button id="btnPurge" class="danger" onclick="purge()" disabled>削除を実行</button>
+    </div>
+
+    <pre id="log">(待機中)</pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var logEl = document.getElementById("log");
+    var previewEl = document.getElementById("preview");
+    var btnPurge = document.getElementById("btnPurge");
+    var lastDryRun = null;
+
+    function append(s) { logEl.textContent += "\n" + s; }
+    function reset() { logEl.textContent = ""; previewEl.style.display = "none"; btnPurge.disabled = true; lastDryRun = null; }
+
+    function getEx() {
+      var ex = (document.getElementById("exCodeInput").value || "").trim();
+      if (!ex) {
+        alert("ex_code を入力してください。");
+        return null;
+      }
+      return ex;
+    }
+
+    async function dryRun() {
+      reset();
+      var ex = getEx();
+      if (!ex) return;
+      logEl.textContent = "確認中...";
+      try {
+        var aSnap = await db.collection("artworks").where("exCode", "==", ex).get();
+        var lSnap = await db.collection("likes").where("exCode", "==", ex).get();
+        var exDoc = await db.collection("exhibitions").doc(ex).get();
+        var imgCount = 0;
+        try {
+          var listing = await firebase.storage().ref("artworks").listAll();
+          imgCount = listing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; }).length;
+        } catch (e) {
+          append("Storage 一覧取得失敗: " + e.message);
+        }
+
+        previewEl.innerHTML =
+          "<h3>削除対象 (ex_code = " + ex + ")</h3>" +
+          "<ul>" +
+          "<li>artworks: " + aSnap.size + " 件</li>" +
+          "<li>likes: " + lSnap.size + " 件</li>" +
+          "<li>exhibitions ドキュメント: " + (exDoc.exists ? "あり (削除する)" : "なし") + "</li>" +
+          "<li>Storage 画像 (artworks/" + ex + "_*): " + imgCount + " 件</li>" +
+          "</ul>";
+        previewEl.style.display = "block";
+        logEl.textContent = "DRY RUN 完了。問題なければ「削除を実行」を押してください。";
+
+        var totalNonZero = aSnap.size + lSnap.size + (exDoc.exists ? 1 : 0) + imgCount;
+        if (totalNonZero === 0) {
+          logEl.textContent += "\n⚠️ 削除対象が見つかりません。ex_code が正しいか確認してください。";
+        } else {
+          lastDryRun = { ex: ex, artworks: aSnap.size, likes: lSnap.size, exhibition: exDoc.exists, images: imgCount };
+          btnPurge.disabled = false;
+        }
+      } catch (e) {
+        logEl.textContent = "ERROR: " + e.message;
+      }
+    }
+
+    async function purge() {
+      if (!lastDryRun) { alert("先に DRY RUN を実行してください。"); return; }
+      var ex = getEx();
+      if (!ex || ex !== lastDryRun.ex) {
+        alert("DRY RUN 後に ex_code が変更されました。再度 DRY RUN してください。");
+        reset();
+        return;
+      }
+      var msg = "ex_code = " + ex + " のデータを完全削除します。\n\n" +
+        "artworks: " + lastDryRun.artworks + " 件\n" +
+        "likes: " + lastDryRun.likes + " 件\n" +
+        "exhibitions ドキュメント: " + (lastDryRun.exhibition ? "削除" : "なし") + "\n" +
+        "Storage 画像: " + lastDryRun.images + " 件\n\n" +
+        "この操作は取り消せません。本当に実行しますか?";
+      if (!confirm(msg)) return;
+      var typed = prompt("確認: 削除する ex_code を再度入力してください。", "");
+      if (typed !== ex) { alert("ex_code が一致しません。中止します。"); return; }
+
+      btnPurge.disabled = true;
+      logEl.textContent = "削除中...";
+      try {
+        // 1. artworks
+        var aSnap = await db.collection("artworks").where("exCode", "==", ex).get();
+        await Promise.all(aSnap.docs.map(function(d){ return d.ref.delete(); }));
+        append("artworks: " + aSnap.size + " 件削除");
+
+        // 2. likes
+        var lSnap = await db.collection("likes").where("exCode", "==", ex).get();
+        await Promise.all(lSnap.docs.map(function(d){ return d.ref.delete(); }));
+        append("likes: " + lSnap.size + " 件削除");
+
+        // 3. exhibitions doc
+        try {
+          await db.collection("exhibitions").doc(ex).delete();
+          append("exhibitions ドキュメント: 削除");
+        } catch (e) {
+          append("exhibitions ドキュメント削除失敗: " + e.message);
+        }
+
+        // 4. Storage images
+        try {
+          var listing = await firebase.storage().ref("artworks").listAll();
+          var targets = listing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; });
+          await Promise.all(targets.map(function(it){ return it.delete(); }));
+          append("Storage 画像: " + targets.length + " 件削除");
+        } catch (e) {
+          append("Storage 削除部分失敗: " + e.message);
+        }
+
+        append("=== purge 完了 ===");
+        previewEl.style.display = "none";
+        lastDryRun = null;
+      } catch (e) {
+        append("ERROR: " + e.message);
+        btnPurge.disabled = false;
+      }
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (isOp) {
+          if (statusEl) {
+            statusEl.innerText = '🔓 ' + user.email + ' で認証済み';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          if (user && user.email) {
+            setMsg('⚠️ ' + user.email + ' は運営者管理者として登録されていません。', '#d93025');
+          }
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+</html>

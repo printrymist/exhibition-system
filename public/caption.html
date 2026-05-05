@@ -410,7 +410,66 @@
     .group-item {
       background: #f0f7ff;
       border-color: #c5d9f7;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      padding: 6px 6px 6px 8px;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       flex-wrap: nowrap;
+    }
+
+    .group-children {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-left: 14px;
+      border-left: 2px solid #c5d9f7;
+      margin-left: 4px;
+    }
+
+    .group-children .field-item {
+      background: #fafdff;
+    }
+
+    .ungroup-btn {
+      padding: 2px 8px;
+      font-size: 10px;
+      border: 1px solid #c5d9f7;
+      background: #fff;
+      color: #1a73e8;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .ungroup-btn:hover {
+      background: #e8f0fe;
+    }
+
+    .merge-btn {
+      padding: 0 4px;
+      font-size: 10px;
+      border: 1px solid #c5d9f7;
+      background: #f0f7ff;
+      color: #1a73e8;
+      border-radius: 3px;
+      cursor: pointer;
+      flex-shrink: 0;
+      height: 22px;
+    }
+
+    .merge-btn:hover:not(:disabled) {
+      background: #d6e6fc;
+    }
+
+    .merge-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
     }
 
     .insert-bar {
@@ -506,8 +565,9 @@
       gap: 4px;
       align-items: center;
       flex: 1;
-      flex-wrap: nowrap;
-      overflow: hidden;
+      flex-wrap: wrap;
+      row-gap: 4px;
+      min-width: 0;
     }
 
     .field-controls select {
@@ -590,6 +650,14 @@
       border-left: 1px solid #eee;
       padding-left: 4px;
       margin-left: 2px;
+    }
+
+    .field-item[data-field="price"] .affix-wrap,
+    .field-item[data-field="price_framed"] .affix-wrap {
+      flex-basis: 100%;
+      border-left: none;
+      padding-left: 0;
+      margin-left: 0;
     }
 
     .price-fmt select {
@@ -804,10 +872,16 @@
     <h1 style="font-size:1.3em; color:#1a73e8;">🖨️ Exhibition Caption Manager</h1>
     <p style="font-size:0.85em; color:#888; margin-top:4px;">Rohei Printer System</p>
     <a id="linkToRegister" href="#"
-      style="display:inline-block;margin-top:8px;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
       ⚙️ 作品登録フォームへ
     </a>
+    <a id="linkToReports" href="#"
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      📊 出力・レポートへ
+    </a>
   </div>
+
+  <div id="sandboxBadge" style="display:none;"></div>
 
   <div class="card">
     <div class="card-title">Exhibition</div>
@@ -832,18 +906,38 @@
     <div id="exError"></div>
   </div>
 
-  <!-- パスワード認証カード -->
+  <!-- 主催者ログインカード -->
   <div class="card" id="pwCard" style="display:none;">
-    <div class="card-title">管理者認証</div>
-    <div class="pw-row">
-      <input type="password" id="pwInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') verifyPassword()">
-      <button class="btn-load" id="btnPw" onclick="verifyPassword()">認証</button>
+    <div class="card-title">主催者ログイン</div>
+    <div id="operatorAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin-bottom:10px;"></div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この展覧会の主催者として登録されたメールアドレスを入力してください。</div>
+    <div class="pw-row" id="emailLinkRow">
+      <input type="email" id="operatorEmailInput" placeholder="主催者メールアドレス" autocomplete="email">
+      <button class="btn-load" id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
     </div>
-    <div class="msg-error" id="pwError"></div>
+    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <div class="card" id="notOrganizerCard" style="display:none;">
+    <div class="card-title" style="color:#d93025;">⚠ アクセス権限がありません</div>
+    <div style="font-size:0.9em; line-height:1.6;">
+      <code id="notOrganizerEmail" style="background:#f4f4f9; padding:2px 6px; border-radius:4px;"></code> はこの展覧会の主催者として登録されていません。
+    </div>
+    <div style="font-size:0.85em; color:#666; margin-top:12px;">この展覧会を編集できるのは、主催者として登録されたメールアドレスでログインした人だけです。</div>
+    <div style="margin-top:12px;">
+      <button onclick="signOutAndRetry()" style="padding:8px 16px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:14px; cursor:pointer;">別のアカウントでログインし直す</button>
+    </div>
+  </div>
+
+  <!-- ログイン状態バー (主催者本人ログイン時のみ表示) -->
+  <div id="loggedInBar" style="display:none; justify-content:space-between; align-items:center; gap:10px; padding:8px 14px; background:#e8f0fe; border-radius:8px; font-size:0.85em; max-width:700px; margin:0 auto 12px auto;">
+    <span style="color:#1565c0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔓 <span id="loggedInEmailLabel"></span> でログイン中</span>
+    <a href="#" onclick="signOutAndRetry();return false;" style="color:#1a73e8; text-decoration:underline; flex-shrink:0;">ログアウト</a>
   </div>
 
   <!-- メインタブ -->
-  <div class="main-tab-bar" id="mainTabs">
+  <div class="main-tab-bar" id="mainTabs" style="display:none;">
     <div class="main-tab-bar-inner">
       <button class="main-tab-btn active" id="mainTabCaption" onclick="switchMainTab('caption')">
         🖨️ Caption Print
@@ -1236,7 +1330,7 @@
       </p>
       <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
         <label style="display:flex; align-items:center; gap:6px; font-size:0.9em;">
-          <input type="checkbox" id="catForceRedo">
+          <input type="checkbox" id="catForceRedo" style="width:16px; height:16px; flex-shrink:0;">
           強制再分類（分類済みも上書き）
         </label>
         <button id="btnCategorize" class="btn-print" onclick="runCategorization()"
@@ -1326,7 +1420,10 @@
           { type: "field", name: "title_en", size: 11, bold: false, italic: false, align: "center", maxLines: 2, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" },
           { type: "divider" },
           { type: "spacer", size: "4mm" },
-          { type: "group", field1: "artist", field2: "artist_en", sep: "　　", size: 12, bold: false, italic: false, align: "left", currency: "", comma: false },
+          { type: "group", sep: "　　", align: "left", children: [
+            { type: "field", name: "artist",    size: 12, bold: false, italic: false, align: "inherit", maxLines: 1, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" },
+            { type: "field", name: "artist_en", size: 12, bold: false, italic: false, align: "inherit", maxLines: 1, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" }
+          ] },
         ]
       },
       print: {
@@ -1413,6 +1510,13 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       const ex = getUrlParam('ex');
+      // ex_code は英数字・ハイフン・アンダースコアのみ許可。それ以外 (@ 等) は不正な URL なので消す
+      if (ex && /[^A-Za-z0-9_-]/.test(ex)) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('ex');
+        window.history.replaceState({}, '', url.toString());
+        return;
+      }
       if (ex) {
         document.getElementById('exCodeInput').value = ex;
         loadExhibition();
@@ -1542,9 +1646,15 @@
       document.getElementById('settingsArea').style.display = 'none';
       document.getElementById('qrPrintArea').style.display = 'none';
       document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'none';
+      window._currentExEmail = '';
+      window._currentEx = ex;
 
-      gasCall({ action: 'verifyExCode', ex: ex })
-        .then(data => {
+      Promise.all([
+        gasCall({ action: 'verifyExCode', ex: ex }),
+        firebase.firestore().collection('exhibitions').doc(ex).get()
+      ])
+        .then(([data, exSnap]) => {
           document.getElementById('btnLoad').disabled = false;
           if (!data.success) {
             document.getElementById('exName').innerText = '';
@@ -1552,16 +1662,50 @@
             return;
           }
           document.getElementById('exName').innerText = '✅ ' + data.exName;
-          if (sessionStorage.getItem('auth_' + ex)) {
-            document.getElementById('pwCard').style.display = 'none';
-            loadAllData(ex);
-            return;
+          const exData = exSnap.exists ? exSnap.data() : {};
+          window._currentExEmail = ((exData.email || '') + '').trim().toLowerCase();
+          window._currentExData = exData;
+          if (window.sandboxBadge) {
+            window.sandboxBadge.render('sandboxBadge', exData, 'operator', { maxWidth: '700px' });
           }
-          document.getElementById('pwCard').style.display = 'block';
-          document.getElementById('pwInput').value = '';
-          document.getElementById('pwError').innerText = '';
-          setTimeout(() => document.getElementById('pwInput').focus(), 100);
+          applyAuthorizationUI();
+        })
+        .catch(err => {
+          console.error('loadExhibition failed:', err);
+          document.getElementById('btnLoad').disabled = false;
+          document.getElementById('exName').innerText = '';
+          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
         });
+    }
+
+    // 認証状態と主催者一致を見て pwCard / notOrganizerCard / mainArea (loadAllData) を切り替え
+    function applyAuthorizationUI() {
+      const ex = window._currentEx;
+      if (!ex) return;
+      const user = firebase.auth().currentUser;
+      const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
+      const loggedInBar = document.getElementById('loggedInBar');
+      if (!user) {
+        document.getElementById('pwCard').style.display = 'block';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        if (loggedInBar) loggedInBar.style.display = 'none';
+        setTimeout(() => document.getElementById('operatorEmailInput').focus(), 100);
+        return;
+      }
+      if (window._currentExEmail && userEmail === window._currentExEmail) {
+        document.getElementById('pwCard').style.display = 'none';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        const emailLabel = document.getElementById('loggedInEmailLabel');
+        if (emailLabel) emailLabel.innerText = user.email;
+        if (loggedInBar) loggedInBar.style.display = 'flex';
+        loadAllData(ex);
+        return;
+      }
+      // 認証済みだが主催者本人ではない
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'block';
+      document.getElementById('notOrganizerEmail').innerText = user.email;
+      if (loggedInBar) loggedInBar.style.display = 'none';
     }
 
     function loadAllData(ex) {
@@ -1576,33 +1720,14 @@
           artworkData = data;
           qrAllData = { artworks: data.qrList, exCode: ex };
           document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
-          document.getElementById('linkToRegister').href = 'https://rohei-printer-system.web.app/register.html?ex=' + ex;
+          document.getElementById('linkToRegister').href = 'register.html?ex=' + ex;
+          document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
           selectTemplate('standard');
           loadSavedTemplates();
           document.getElementById('mainTabs').style.display = 'block';
           switchMainTab('caption');
-        });
-    }
-
-    function verifyPassword() {
-      const ex = document.getElementById('exCodeInput').value.trim();
-      const pw = document.getElementById('pwInput').value;
-      if (!pw) return;
-      document.getElementById('btnPw').disabled = true;
-      document.getElementById('pwError').innerText = '';
-
-      gasCall({ action: 'verifyPassword', ex: ex, password: pw })
-        .then(res => {
-          document.getElementById('btnPw').disabled = false;
-          if (!res.success) {
-            document.getElementById('pwError').innerText = res.error;
-            return;
-          }
-          sessionStorage.setItem('auth_' + ex, '1');
-          document.getElementById('pwCard').style.display = 'none';
-          loadAllData(ex);
         });
     }
 
@@ -1630,29 +1755,73 @@
           artworkData.exName = newName;
           document.getElementById('exName').innerText = '✅ ' + newName + ' (' + artworkData.artworks.length + ' artworks)';
           cancelEditExName();
+          // Firestore exhibitions ドキュメントの ex_name も同期更新 (読み込み時に古い名前が出ないように)
+          fsDb.collection('exhibitions').doc(ex).set({
+            ex_name: newName,
+            updatedAt: new Date().toISOString()
+          }, { merge: true }).catch(e => console.warn('Firestore ex_name sync failed:', e));
         })
         .catch(err => { alert('通信エラー: ' + err.message); })
         .finally(() => { saveBtn.disabled = false; });
     }
 
+    // 親コンテナ直下の data-row のみを対象にするヘルパ
+    function topLevelRows(container) {
+      return Array.from(container.children).filter(el => el.hasAttribute('data-row'));
+    }
+
     function normalizeInsertBars() {
       const grid = document.getElementById('fieldsGrid');
-      grid.querySelectorAll('.insert-bar').forEach(b => b.remove());
+      // grid 直下の insert-bar のみ削除
+      Array.from(grid.children).filter(el => el.classList.contains('insert-bar')).forEach(b => b.remove());
+      const rows = topLevelRows(grid);
       grid.insertBefore(makeInsertBar(), grid.firstChild);
-      grid.querySelectorAll('[data-row]').forEach(row => row.after(makeInsertBar()));
-      const rows = Array.from(grid.querySelectorAll('[data-row]'));
+      rows.forEach(row => row.after(makeInsertBar()));
+
+      // 各レベルで up/down/merge ボタンの有効状態を更新
+      updateRowBtnStates(grid);
+      grid.querySelectorAll('.group-children').forEach(c => updateRowBtnStates(c, true));
+    }
+
+    function updateRowBtnStates(container, isInsideGroup) {
+      const rows = topLevelRows(container);
       rows.forEach((row, idx) => {
-        const up = row.querySelector('.btn-up');
-        const down = row.querySelector('.btn-down');
+        // 直接配下の move-btns のみ更新（孫の group-children 内のボタンは触らない）
+        const moveBtns = container === row.parentNode
+          ? row.querySelector(':scope > .move-btns, :scope > .group-header > .move-btns')
+          : null;
+        const up = moveBtns ? moveBtns.querySelector('.btn-up') : null;
+        const down = moveBtns ? moveBtns.querySelector('.btn-down') : null;
         if (up) up.disabled = (idx === 0);
         if (down) down.disabled = (idx === rows.length - 1);
+
+        // merge ボタン: field-item で、かつ直前の行が結合可能なときのみ有効
+        const mergeBtn = row.dataset.type === 'field'
+          ? row.querySelector(':scope > .merge-btn')
+          : null;
+        if (mergeBtn) {
+          if (isInsideGroup) {
+            // group 内の child は merge 不可（既に group 内）
+            mergeBtn.disabled = true;
+            mergeBtn.style.display = 'none';
+          } else {
+            mergeBtn.style.display = '';
+            const prev = rows[idx - 1];
+            const canMerge = prev && (
+              prev.dataset.type === 'field' ||
+              (prev.dataset.type === 'group' &&
+                topLevelRows(prev.querySelector('.group-children')).length < 3)
+            );
+            mergeBtn.disabled = !canMerge;
+          }
+        }
       });
     }
 
     function moveUp(btn) {
-      const grid = document.getElementById('fieldsGrid');
       const row = btn.closest('[data-row]');
-      const rows = Array.from(grid.querySelectorAll('[data-row]'));
+      const container = row.parentNode;
+      const rows = topLevelRows(container);
       const idx = rows.indexOf(row);
       if (idx <= 0) return;
       rows[idx - 1].before(row);
@@ -1660,9 +1829,9 @@
     }
 
     function moveDown(btn) {
-      const grid = document.getElementById('fieldsGrid');
       const row = btn.closest('[data-row]');
-      const rows = Array.from(grid.querySelectorAll('[data-row]'));
+      const container = row.parentNode;
+      const rows = topLevelRows(container);
       const idx = rows.indexOf(row);
       if (idx >= rows.length - 1) return;
       rows[idx + 1].after(row);
@@ -1683,7 +1852,6 @@
       <div class="insert-bar-line"></div>
       <button class="insert-btn" onclick="insertAt(this,'divider')">＋ divider</button>
       <button class="insert-btn" onclick="insertAt(this,'spacer')">＋ blank</button>
-      <button class="insert-btn" onclick="insertAt(this,'group')">＋ group</button>
       <div class="insert-bar-line"></div>`;
       return bar;
     }
@@ -1693,7 +1861,7 @@
       let el;
       if (type === 'divider') el = makeDividerEl();
       else if (type === 'spacer') el = makeSpacerEl();
-      else if (type === 'group') el = makeGroupEl();
+      else return;
       bar.before(el);
       normalizeInsertBars();
     }
@@ -1707,13 +1875,14 @@
       return html;
     }
 
-    function makeFieldEl(name, size, bold, italic, align, checked, maxLines, minSize, currency, comma, prefix, suffix) {
+    function makeFieldEl(name, size, bold, italic, align, checked, maxLines, minSize, currency, comma, prefix, suffix, affixScale) {
       maxLines = maxLines !== undefined ? maxLines : 2;
       minSize = minSize !== undefined ? minSize : (name === 'title' ? 8 : 7);
       currency = currency !== undefined ? currency : '';
       comma = comma !== undefined ? comma : false;
       prefix = prefix !== undefined ? prefix : '';
       suffix = suffix !== undefined ? suffix : '';
+      affixScale = affixScale !== undefined ? affixScale : 0.75;
 
       const el = document.createElement('div');
       el.className = 'field-item';
@@ -1727,6 +1896,7 @@
 
       el.innerHTML = `
       ${moveBtnsHtml()}
+      <button class="merge-btn" onclick="mergeWithAbove(this)" title="直前の行と結合">↥結</button>
       <input type="checkbox" id="field_${name}" ${checked ? 'checked' : ''}>
       <span class="field-name" title="${name}">${name}</span>
       <div class="field-controls">
@@ -1758,6 +1928,11 @@
           <input type="text" id="prefix_${name}" value="${prefix.replace(/"/g, '&quot;')}" placeholder="pre">
           <span class="affix-label">suf</span>
           <input type="text" id="suffix_${name}" value="${suffix.replace(/"/g, '&quot;')}" placeholder="suf">
+          <select id="affixScale_${name}" title="prefix/suffix の本体に対するサイズ" style="font-size:10px;padding:1px 2px;">
+            <option value="0.5"  ${String(affixScale) === '0.5' ? 'selected' : ''}>50%</option>
+            <option value="0.75" ${String(affixScale) === '0.75' ? 'selected' : ''}>75%</option>
+            <option value="1"    ${String(affixScale) === '1' || String(affixScale) === '1.0' ? 'selected' : ''}>100%</option>
+          </select>
         </div>
       </div>
       <button class="del-btn" onclick="removeRow(this)">✕</button>`;
@@ -1798,22 +1973,13 @@
       return el;
     }
 
-    function makeGroupEl(field1, field2, sep, size, bold, italic, align, currency, comma) {
+    // sep: 区切り文字 / align: 行全体の揃え
+    // children は別途 .group-children に append する（merge 時は既存 field-item を移動）
+    function makeGroupEl(sep, align) {
       groupCount++;
       const gid = groupCount;
-      field1 = field1 !== undefined ? field1 : '';
-      field2 = field2 !== undefined ? field2 : '';
       sep = sep !== undefined ? sep : '　';
-      size = size !== undefined ? size : 10;
-      bold = bold !== undefined ? bold : false;
-      italic = italic !== undefined ? italic : false;
       align = align !== undefined ? align : 'inherit';
-      currency = currency !== undefined ? currency : '';
-      comma = comma !== undefined ? comma : false;
-
-      const curOptions = ['', '¥', '€', '$', '£'].map(c =>
-        `<option value="${c}" ${c === currency ? 'selected' : ''}>${c || '—'}</option>`
-      ).join('');
 
       const el = document.createElement('div');
       el.className = 'group-item';
@@ -1821,36 +1987,77 @@
       el.dataset.id = gid;
       el.setAttribute('data-row', '');
       el.innerHTML = `
-      ${moveBtnsHtml()}
-      <span style="font-size:10px;color:#1a73e8;flex-shrink:0;font-weight:bold;">G</span>
-      <div class="group-controls">
-        <select id="gf1_${gid}">${fieldOptionsHtml(field1)}</select>
-        <span class="group-sep-label">+</span>
-        <input type="text" class="group-sep-input" id="gsep_${gid}" value="${sep}" title="Separator">
-        <span class="group-sep-label">+</span>
-        <select id="gf2_${gid}">${fieldOptionsHtml(field2)}</select>
-        <select id="galign_${gid}" title="Align">
+      <div class="group-header">
+        ${moveBtnsHtml()}
+        <span style="font-size:10px;color:#1a73e8;flex-shrink:0;font-weight:bold;">G</span>
+        <span class="group-sep-label">区切り</span>
+        <input type="text" class="group-sep-input" id="gsep_${gid}" value="${sep.replace(/"/g, '&quot;')}" title="Separator">
+        <select id="galign_${gid}" title="行全体の揃え">
           <option value="inherit" ${align === 'inherit' ? 'selected' : ''}>—</option>
           <option value="left"    ${align === 'left' ? 'selected' : ''}>L</option>
           <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
           <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
         </select>
-        <input type="number" id="gsize_${gid}" min="6" max="28" value="${size}" style="width:46px;">
-        <span>pt</span>
-        <button class="toggle-btn ${bold ? 'active' : ''}" id="gbold_${gid}"   onclick="this.classList.toggle('active')">B</button>
-        <button class="toggle-btn ${italic ? 'active' : ''}" id="gitalic_${gid}" onclick="this.classList.toggle('active')"><i>I</i></button>
-        <div class="price-fmt" title="Price format">
-          <select id="gcurrency_${gid}">${curOptions}</select>
-          <input type="checkbox" id="gcomma_${gid}" ${comma ? 'checked' : ''}>
-          <label for="gcomma_${gid}">&#44;</label>
-        </div>
+        <button class="ungroup-btn" onclick="ungroupRow(this)" title="グループを解除">解除</button>
+        <button class="del-btn" style="margin-left:auto;" onclick="removeRow(this)">✕</button>
       </div>
-      <button class="del-btn" onclick="removeRow(this)">✕</button>`;
+      <div class="group-children"></div>`;
       return el;
     }
 
+    // group の解除：children を group の前に展開して group を削除
+    function ungroupRow(btn) {
+      const group = btn.closest('[data-row]');
+      const childContainer = group.querySelector('.group-children');
+      const children = Array.from(childContainer.children).filter(el => el.hasAttribute('data-row'));
+      children.forEach(child => group.parentNode.insertBefore(child, group));
+      group.remove();
+      normalizeInsertBars();
+    }
+
+    // field-item を直前の行と結合する
+    function mergeWithAbove(btn) {
+      const row = btn.closest('[data-row]');
+      // 直前の行（insert-bar をスキップ）
+      let prev = row.previousElementSibling;
+      while (prev && !prev.hasAttribute('data-row')) {
+        prev = prev.previousElementSibling;
+      }
+      if (!prev) return;
+
+      if (prev.dataset.type === 'group') {
+        const childContainer = prev.querySelector('.group-children');
+        const childCount = Array.from(childContainer.children).filter(el => el.hasAttribute('data-row')).length;
+        if (childCount >= 3) return; // 上限
+        childContainer.appendChild(row);
+      } else if (prev.dataset.type === 'field') {
+        // prev の align を引き継いだ新規 group を prev の位置に挿入
+        const prevAlign = document.getElementById('align_' + prev.dataset.field);
+        const groupAlign = prevAlign ? prevAlign.value : 'inherit';
+        const group = makeGroupEl('　', groupAlign);
+        prev.parentNode.insertBefore(group, prev);
+        const childContainer = group.querySelector('.group-children');
+        childContainer.appendChild(prev);
+        childContainer.appendChild(row);
+      } else {
+        return; // divider/spacer とは結合しない
+      }
+      normalizeInsertBars();
+    }
+
     function removeRow(btn) {
-      btn.closest('[data-row]').remove();
+      const row = btn.closest('[data-row]');
+      const parent = row.parentNode;
+      row.remove();
+      // group の child を消した結果 1 個未満になったら group 自体も解除して残りを外に出す
+      if (parent.classList.contains('group-children')) {
+        const remaining = topLevelRows(parent);
+        if (remaining.length < 2) {
+          const group = parent.closest('[data-row]');
+          remaining.forEach(c => group.parentNode.insertBefore(c, group));
+          group.remove();
+        }
+      }
       normalizeInsertBars();
     }
 
@@ -1878,69 +2085,94 @@
           grid.appendChild(makeFieldEl(
             item.name, item.size, item.bold, item.italic, item.align, checked,
             item.maxLines, item.minSize, item.currency || '', item.comma || false,
-            item.prefix || '', item.suffix || ''
+            item.prefix || '', item.suffix || '',
+            item.affixScale !== undefined ? item.affixScale : 0.75
           ));
         } else if (item.type === 'divider') {
           grid.appendChild(makeDividerEl());
         } else if (item.type === 'spacer') {
           grid.appendChild(makeSpacerEl(item.size || '4mm'));
         } else if (item.type === 'group') {
-          grid.appendChild(makeGroupEl(
-            item.field1, item.field2, item.sep, item.size,
-            item.bold, item.italic, item.align, item.currency || '', item.comma || false
-          ));
+          const groupEl = makeGroupEl(item.sep, item.align);
+          const childContainer = groupEl.querySelector('.group-children');
+          (item.children || []).forEach(c => {
+            if (artworkData && !artworkData.headers.includes(c.name)) return;
+            if (regFieldNames && !regFieldNames.includes(c.name)) return;
+            usedFields.push(c.name);
+            childContainer.appendChild(makeFieldEl(
+              c.name, c.size, c.bold, c.italic, c.align, true,
+              c.maxLines, c.minSize, c.currency || '', c.comma || false,
+              c.prefix || '', c.suffix || '',
+              c.affixScale !== undefined ? c.affixScale : 0.75
+            ));
+          });
+          if (topLevelRows(childContainer).length > 0) grid.appendChild(groupEl);
         }
       });
 
       if (artworkData) {
-        artworkData.headers.forEach(h => {
-          if (!usedFields.includes(h)) {
-            if (regFieldNames && !regFieldNames.includes(h)) return;
-            const checked = capFieldNames ? capFieldNames.includes(h) : false;
-            grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
-          }
+        // 候補は既存作品に値があるフィールド (headers) + FORM_FIELD_DEFS の登録項目を合算する。
+        // 後者を含めることで「項目設定で有効化したがまだ未入力」のフィールドも customize に出せる。
+        const candidates = [...artworkData.headers];
+        FORM_FIELD_DEFS.forEach(def => { if (!candidates.includes(def.name)) candidates.push(def.name); });
+        candidates.forEach(h => {
+          if (usedFields.includes(h)) return;
+          if (regFieldNames && !regFieldNames.includes(h)) return;
+          const checked = capFieldNames ? capFieldNames.includes(h) : false;
+          grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
+          usedFields.push(h);
         });
       }
       normalizeInsertBars();
     }
 
+    // 1つの field-item 要素から保存形式オブジェクトを作る（top-level でも group child でも共通）
+    // requireChecked=true なら未チェックは null を返す（top-level 用）
+    function serializeFieldItem(item, requireChecked) {
+      const name = item.dataset.field;
+      if (requireChecked && !item.querySelector('input[type="checkbox"]').checked) return null;
+      const scaleEl = document.getElementById('affixScale_' + name);
+      return {
+        type: 'field', name,
+        size: parseInt(document.getElementById('size_' + name).value),
+        bold: document.getElementById('bold_' + name).classList.contains('active'),
+        italic: document.getElementById('italic_' + name).classList.contains('active'),
+        align: document.getElementById('align_' + name).value,
+        maxLines: parseInt(document.getElementById('maxLines_' + name).value),
+        minSize: parseInt(document.getElementById('minSize_' + name).value),
+        currency: document.getElementById('currency_' + name).value,
+        comma: document.getElementById('comma_' + name).checked,
+        prefix: document.getElementById('prefix_' + name).value,
+        suffix: document.getElementById('suffix_' + name).value,
+        affixScale: scaleEl ? parseFloat(scaleEl.value) : 0.75
+      };
+    }
+
     function collectItems() {
       const items = [];
-      document.querySelectorAll('#fieldsGrid [data-row]').forEach(item => {
+      const grid = document.getElementById('fieldsGrid');
+      topLevelRows(grid).forEach(item => {
         const type = item.dataset.type;
         if (type === 'field') {
-          const name = item.dataset.field;
-          if (!item.querySelector('input[type="checkbox"]').checked) return;
-          items.push({
-            type: 'field', name,
-            size: parseInt(document.getElementById('size_' + name).value),
-            bold: document.getElementById('bold_' + name).classList.contains('active'),
-            italic: document.getElementById('italic_' + name).classList.contains('active'),
-            align: document.getElementById('align_' + name).value,
-            maxLines: parseInt(document.getElementById('maxLines_' + name).value),
-            minSize: parseInt(document.getElementById('minSize_' + name).value),
-            currency: document.getElementById('currency_' + name).value,
-            comma: document.getElementById('comma_' + name).checked,
-            prefix: document.getElementById('prefix_' + name).value,
-            suffix: document.getElementById('suffix_' + name).value
-          });
+          const obj = serializeFieldItem(item, true);
+          if (obj) items.push(obj);
         } else if (type === 'divider') {
           items.push({ type: 'divider' });
         } else if (type === 'spacer') {
           items.push({ type: 'spacer', size: document.getElementById('spacer_' + item.dataset.id).value });
         } else if (type === 'group') {
           const gid = item.dataset.id;
+          const childContainer = item.querySelector('.group-children');
+          // group child もチェックボックス未選択は除外（top-level と同じ扱い）
+          const children = topLevelRows(childContainer)
+            .map(c => serializeFieldItem(c, true))
+            .filter(Boolean);
+          if (children.length === 0) return;
           items.push({
             type: 'group',
-            field1: document.getElementById('gf1_' + gid).value,
-            field2: document.getElementById('gf2_' + gid).value,
             sep: document.getElementById('gsep_' + gid).value,
-            size: parseInt(document.getElementById('gsize_' + gid).value),
-            bold: document.getElementById('gbold_' + gid).classList.contains('active'),
-            italic: document.getElementById('gitalic_' + gid).classList.contains('active'),
             align: document.getElementById('galign_' + gid).value,
-            currency: document.getElementById('gcurrency_' + gid).value,
-            comma: document.getElementById('gcomma_' + gid).checked
+            children: children
           });
         }
       });
@@ -2077,13 +2309,20 @@
       }
 
       function buildContent(art) {
+        // prefix / suffix は item.affixScale 倍のサイズで描画（デフォルト 0.75 = 75%）
+        // 1.0 にすると本体と同サイズに。
+        function affix(text, scale) {
+          if (!text) return '';
+          const s = (scale !== undefined && scale !== null && isFinite(scale) && scale > 0) ? scale : 0.75;
+          return `<span style="font-size:${s}em;">${text}</span>`;
+        }
         let html = '';
         s.items.forEach(item => {
           if (item.type === 'field') {
             let val = (art[item.name] || '').toString().trim();
             if (!val) return;
             val = formatValue(val, item.currency || '', item.comma || false);
-            val = (item.prefix || '') + val + (item.suffix || '');
+            val = affix(item.prefix, item.affixScale) + val + affix(item.suffix, item.affixScale);
             const align = item.align !== 'inherit' ? item.align : s.textAlign;
             const weight = item.bold ? 'bold' : 'normal';
             const fstyle = item.italic ? 'italic' : 'normal';
@@ -2094,18 +2333,21 @@
               + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
               + `${val}</div>`;
           } else if (item.type === 'group') {
-            const v1 = item.field1 ? (art[item.field1] || '').toString().trim() : '';
-            const v2 = item.field2 ? (art[item.field2] || '').toString().trim() : '';
-            if (!v1 && !v2) return;
-            const fv1 = v1 ? formatValue(v1, item.currency || '', item.comma || false) : '';
-            const fv2 = v2 ? formatValue(v2, item.currency || '', item.comma || false) : '';
-            const combined = (fv1 && fv2) ? fv1 + item.sep + fv2 : (fv1 || fv2);
-            const align = item.align !== 'inherit' ? item.align : s.textAlign;
-            const weight = item.bold ? 'bold' : 'normal';
-            const fstyle = item.italic ? 'italic' : 'normal';
-            html += `<div style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
-              + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
-              + `${combined}</div>`;
+            // 各 child を自身の書式で span に展開し、value が空のものは除外して sep で連結
+            const parts = (item.children || []).map(c => {
+              const raw = (art[c.name] || '').toString().trim();
+              if (!raw) return null;
+              const v = affix(c.prefix, c.affixScale) + formatValue(raw, c.currency || '', c.comma || false) + affix(c.suffix, c.affixScale);
+              const w = c.bold ? 'bold' : 'normal';
+              const fs = c.italic ? 'italic' : 'normal';
+              return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};">${v}</span>`;
+            }).filter(Boolean);
+            if (parts.length === 0) return;
+            const align = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
+            const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<div style="text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+              + parts.join(sepHtml)
+              + `</div>`;
           } else if (item.type === 'divider') {
             html += `<hr style="border:none;border-top:1px solid #ccc;margin:4px 0;">`;
           } else if (item.type === 'spacer') {
@@ -2265,10 +2507,15 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       }, 100);
     }
 
+    let savedTemplateNames = new Set();
     function loadSavedTemplates() {
       gasCall({ action: 'getCaptionTemplates' })
         .then(res => {
-          if (!res.success || res.templates.length === 0) return;
+          if (!res.success || res.templates.length === 0) {
+            savedTemplateNames = new Set();
+            return;
+          }
+          savedTemplateNames = new Set(res.templates.map(t => t.name));
           const section = document.getElementById('savedTemplatesSection');
           const grid = document.getElementById('savedTemplatesGrid');
           grid.innerHTML = '';
@@ -2339,30 +2586,50 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           spacerCount = 0;
           groupCount = 0;
           const usedFields = [];
+          const capFieldNames = artworkData && artworkData.captionFields
+            ? artworkData.captionFields.map(f => f.name)
+            : null;
+          const regFieldNames = artworkData && artworkData.registrationFields
+            ? artworkData.registrationFields.map(f => f.name)
+            : null;
           settings.items.forEach(item => {
             if (item.type === 'field') {
               if (artworkData && !artworkData.headers.includes(item.name)) return;
+              if (regFieldNames && !regFieldNames.includes(item.name)) return;
               usedFields.push(item.name);
               grid.appendChild(makeFieldEl(
                 item.name, item.size, item.bold, item.italic, item.align, true,
                 item.maxLines, item.minSize, item.currency || '', item.comma || false,
-                item.prefix || '', item.suffix || ''
+                item.prefix || '', item.suffix || '',
+                item.affixScale !== undefined ? item.affixScale : 0.75
               ));
             } else if (item.type === 'divider') {
               grid.appendChild(makeDividerEl());
             } else if (item.type === 'spacer') {
               grid.appendChild(makeSpacerEl(item.size || '4mm'));
             } else if (item.type === 'group') {
-              grid.appendChild(makeGroupEl(
-                item.field1, item.field2, item.sep, item.size,
-                item.bold, item.italic, item.align, item.currency || '', item.comma || false
-              ));
+              const groupEl = makeGroupEl(item.sep, item.align);
+              const childContainer = groupEl.querySelector('.group-children');
+              (item.children || []).forEach(c => {
+                if (artworkData && !artworkData.headers.includes(c.name)) return;
+                if (regFieldNames && !regFieldNames.includes(c.name)) return;
+                usedFields.push(c.name);
+                childContainer.appendChild(makeFieldEl(
+                  c.name, c.size, c.bold, c.italic, c.align, true,
+                  c.maxLines, c.minSize, c.currency || '', c.comma || false,
+                  c.prefix || '', c.suffix || '',
+                  c.affixScale !== undefined ? c.affixScale : 0.75
+                ));
+              });
+              if (topLevelRows(childContainer).length > 0) grid.appendChild(groupEl);
             }
           });
           if (artworkData) {
             artworkData.headers.forEach(h => {
-              if (!usedFields.includes(h))
-                grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
+              if (usedFields.includes(h)) return;
+              if (regFieldNames && !regFieldNames.includes(h)) return;
+              const checked = capFieldNames ? capFieldNames.includes(h) : false;
+              grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
             });
           }
           normalizeInsertBars();
@@ -2376,6 +2643,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function saveTemplate() {
       const name = document.getElementById('saveTemplateName').value.trim();
       if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
+      if (savedTemplateNames.has(name)) {
+        if (!confirm(`"${name}" は既に存在します。上書きしますか？`)) {
+          showSaveMsg('保存をキャンセルしました。', '#888');
+          return;
+        }
+      }
       const settings = getSettings();
       const json = JSON.stringify(settings);
       showSaveMsg('Saving...', '#888');
@@ -2428,6 +2701,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       { name: 'technique', label: '技法', required: false },
       { name: 'material', label: '素材・支持体', required: false },
       { name: 'size', label: 'サイズ', required: false },
+      { name: 'sheet_size', label: 'シートサイズ', required: false },
+      { name: 'image_size', label: 'イメージサイズ', required: false },
       { name: 'edition', label: 'エディション', required: false },
       { name: 'price', label: '価格', required: false },
       { name: 'price_framed', label: '額装価格', required: false },
@@ -2439,6 +2714,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       { name: 'birth_year', label: '生年', required: false },
       { name: 'death_year', label: '没年', required: false },
       { name: 'birthplace', label: '出身地', required: false },
+      { name: 'shop_url', label: '販売 / ショップ', required: false },
     ];
 
     let qrAllData = null;
@@ -2614,6 +2890,8 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
 
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
     firebase.initializeApp({
@@ -2631,6 +2909,11 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         caption_fields: fieldsJson,
         updatedAt: new Date().toISOString()
       }, { merge: true });
+      // SS にも反映（fire-and-forget）
+      if (typeof gasCall === 'function') {
+        gasCall({ action: 'saveCaptionFields', ex: exCode, fieldsJson: fieldsJson })
+          .catch(e => console.warn('SS saveCaptionFields sync failed:', e));
+      }
       return { success: true };
     };
     window.fsLoadAllData = async (exCode) => {
@@ -2673,6 +2956,72 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         return { success: false, error: err.message };
       }
     };
+  </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    // ===== Email Link 認証の起動処理 =====
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && statusEl) {
+          statusEl.innerText = '🔓 ' + user.email + ' でログイン中';
+          statusEl.style.display = 'block';
+        } else if (statusEl) {
+          statusEl.style.display = 'none';
+        }
+        // 既に展覧会を Load 済みなら表示判定をやり直す
+        if (window._currentEx && typeof applyAuthorizationUI === 'function') {
+          applyAuthorizationUI();
+        }
+      });
+
+      window.signOutAndRetry = function () {
+        window.operatorAuth.signOut().then(function () {
+          if (typeof applyAuthorizationUI === 'function') applyAuthorizationUI();
+        });
+      };
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        // 主催者メアドと一致しないなら送信前にエラー (主催者メアド自体は表示しない)
+        var normalized = email.toLowerCase();
+        if (window._currentExEmail && normalized !== window._currentExEmail) {
+          setMsg('このメールアドレスはこの展覧会の主催者として登録されていません。', '#d93025');
+          return;
+        }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
   </script>
 </body>
 

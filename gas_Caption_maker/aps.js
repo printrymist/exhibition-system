@@ -9,6 +9,10 @@ const MASTER_SS_ID = "1h0uSnoUBuQnEqWmFXIOUIRK2CvigmkOmucsWOnaS6xQ";
 // QRlikes_tot のデプロイURL（来場者が作品QRを読んだときに開く感想入力画面のURL）
 const VISITOR_QR_URL = "https://rohei-printer-system.web.app/";
 
+// exhibitions シートのスキーマ版数。ヘッダーや返り値の構造を変えたら必ず上げる。
+// バンプすると既存キャッシュが自動的に無視される。
+const EX_SCHEMA_VERSION = 'a3';
+
 // =========================================================
 // 🌟 キャッシュ管理
 // =========================================================
@@ -34,7 +38,7 @@ function clearAllCache(ex) {
 function getMasterData(ex) {
   var cache = CacheService.getScriptCache();
   var version = getCacheVersion(ex);
-  var cacheKey = 'master_data_' + ex + '_v' + version;
+  var cacheKey = 'master_data_' + EX_SCHEMA_VERSION + '_' + ex + '_v' + version;
   var cached = cache.get(cacheKey);
 
   if (cached) {
@@ -49,14 +53,26 @@ function getMasterData(ex) {
   const row = allData.find((r, i) => i > 0 && r[colIndex(headers, 'ex_code')].toString().trim() === ex.toString().trim());
   if (!row) return null;
 
+  function pick(name) {
+    const i = headers.indexOf(name);
+    return i === -1 ? '' : (row[i] === undefined || row[i] === null ? '' : row[i]);
+  }
+
   const masterObj = {
-    ex_code: row[colIndex(headers, 'ex_code')],
-    image_folder_id: row[colIndex(headers, 'image_folder_id')],
-    artwork_sheet_id: row[colIndex(headers, 'artwork_sheet_id')],
-    comment_sheet_id: row[colIndex(headers, 'comment_sheet_id')],
-    ex_name: row[colIndex(headers, 'ex_name')],
-    password: row[colIndex(headers, 'password')],
-    memo: row[colIndex(headers, 'memo')],
+    ex_code: pick('ex_code'),
+    ex_name: pick('ex_name'),
+    status: pick('status'),
+    organizer: pick('organizer'),
+    email: pick('email'),
+    venue: pick('venue'),
+    start_date: pick('start_date'),
+    password: pick('password'),
+    image_folder_id: pick('image_folder_id'),
+    artwork_sheet_id: pick('artwork_sheet_id'),
+    comment_sheet_id: pick('comment_sheet_id'),
+    created_at: pick('created_at'),
+    updated_at: pick('updated_at'),
+    memo: pick('memo'),
     updatedAt: new Date().getTime()
   };
 
@@ -205,10 +221,30 @@ function doPost(e) {
       return output;
     }
 
-    if (action === 'verifyPassword') {
-      output.setContent(JSON.stringify(
-        verifyPassword(ex, e.parameter.password)
-      ));
+    if (action === 'bumpArtworkCount') {
+      const dT = parseInt(e.parameter.dT || '0') || 0;
+      const dR = parseInt(e.parameter.dR || '0') || 0;
+      bumpArtworkCount(ex, dT, dR);
+      output.setContent(JSON.stringify({ success: true }));
+      return output;
+    }
+
+    if (action === 'setArtworkCount') {
+      const total = e.parameter.total === undefined || e.parameter.total === '' ? null : parseInt(e.parameter.total);
+      const registered = e.parameter.registered === undefined || e.parameter.registered === '' ? null : parseInt(e.parameter.registered);
+      output.setContent(JSON.stringify(setArtworkCount(ex, total, registered)));
+      return output;
+    }
+
+    if (action === 'appendInquiryToIndex') {
+      const payload = JSON.parse(e.parameter.payload || '{}');
+      output.setContent(JSON.stringify(appendInquiryToIndex(payload)));
+      return output;
+    }
+
+    if (action === 'updateInquiryInIndex') {
+      const payload = JSON.parse(e.parameter.payload || '{}');
+      output.setContent(JSON.stringify(updateInquiryInIndex(payload)));
       return output;
     }
 
@@ -260,6 +296,52 @@ function doPost(e) {
       return output;
     }
 
+    if (action === 'sendArtistGuide') {
+      output.setContent(JSON.stringify(
+        sendArtistGuide(ex, e.parameter.subject, e.parameter.body)
+      ));
+      return output;
+    }
+
+    if (action === 'graduateExhibition') {
+      output.setContent(JSON.stringify(
+        graduateExhibition(ex, e.parameter.email)
+      ));
+      return output;
+    }
+
+    if (action === 'getInquiryContext') {
+      output.setContent(JSON.stringify({
+        success: true,
+        context: getInquiryContext(ex)
+      }));
+      return output;
+    }
+
+    if (action === 'sendInquiryNotification') {
+      const payload = JSON.parse(e.parameter.payload || '{}');
+      output.setContent(JSON.stringify(
+        sendInquiryNotification(payload)
+      ));
+      return output;
+    }
+
+    if (action === 'sendInquiryReply') {
+      const payload = JSON.parse(e.parameter.payload || '{}');
+      output.setContent(JSON.stringify(
+        sendInquiryReply(payload)
+      ));
+      return output;
+    }
+
+    if (action === 'sendAdminFollowupNotification') {
+      const payload = JSON.parse(e.parameter.payload || '{}');
+      output.setContent(JSON.stringify(
+        sendAdminFollowupNotification(payload)
+      ));
+      return output;
+    }
+
     output.setContent(JSON.stringify({
       success: false, error: '不明なアクション: ' + action
     }));
@@ -273,25 +355,7 @@ function doPost(e) {
   }
 }
 
-// =========================================================
-// 🌟 マスターデータを取得
-// =========================================================
-function getMasterData(ex) {
-  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
-  const allData = ss.getSheetByName('exhibitions').getDataRange().getValues();
-  const headers = allData[0];
-  const row = allData.find((r, i) => i > 0 && r[colIndex(headers, 'ex_code')].toString().trim() === ex.toString().trim());
-  if (!row) return null;
-  return {
-    ex_code: row[colIndex(headers, 'ex_code')],
-    image_folder_id: row[colIndex(headers, 'image_folder_id')],
-    artwork_sheet_id: row[colIndex(headers, 'artwork_sheet_id')],
-    comment_sheet_id: row[colIndex(headers, 'comment_sheet_id')],
-    ex_name: row[colIndex(headers, 'ex_name')],
-    password: row[colIndex(headers, 'password')],
-    memo: row[colIndex(headers, 'memo')]
-  };
-}
+// （非キャッシュ版の getMasterData は削除：上のキャッシュ版に一本化）
 
 // =========================================================
 // 🌟 展覧会コードを検証
@@ -476,6 +540,11 @@ function updateExName(ex, newName) {
     const rowIdx = data.findIndex((r, i) => i > 0 && r[colIndex(headers, 'ex_code')].toString().trim() === ex.toString().trim());
     if (rowIdx === -1) return { success: false, error: '展覧会が見つかりません' };
     sheet.getRange(rowIdx + 1, colIndex(headers, 'ex_name') + 1).setValue(newName);
+    const updatedAtIdx = headers.indexOf('updated_at');
+    if (updatedAtIdx !== -1) {
+      sheet.getRange(rowIdx + 1, updatedAtIdx + 1)
+        .setValue(Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss'));
+    }
     clearAllCache(ex);
     return { success: true };
   } catch (e) {
@@ -491,7 +560,7 @@ function loadAllData(ex) {
     // キャッシュを確認
     const cache = CacheService.getScriptCache();
     const version = getCacheVersion(ex);
-    const cacheKey = 'loadAllData_' + ex + '_v' + version;
+    const cacheKey = 'loadAllData_' + EX_SCHEMA_VERSION + '_' + ex + '_v' + version;
     const cached = cache.get(cacheKey);
     if (cached) {
       console.log('loadAllData をキャッシュから読み込みました: ' + ex);
@@ -594,6 +663,7 @@ function addArtworks(exCode, addCount) {
 
     sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
     clearAllCache(exCode);
+    bumpArtworkCount(exCode, addCount, 0);
     return { success: true, addedCount: addCount };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -748,6 +818,60 @@ function categorizeArtwork(imageUrl) {
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
       usage: result.usage || null
     };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// =========================================================
+// 🌟 練習モードから本番運用に切替（卒業）
+// 主催者本人 (email 一致) のみ実行可能。master sheet の is_sandbox / expire_at をクリアする。
+// Firestore 側のフラグ更新と関連データ (artworks / likes / 画像) のクリアはクライアント側で行う。
+// =========================================================
+function graduateExhibition(exCode, requesterEmail) {
+  try {
+    if (!exCode) return { success: false, error: '展覧会コードが必要です。' };
+    if (!requesterEmail) return { success: false, error: 'リクエスト元のメールアドレスが必要です。' };
+
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sheet = ss.getSheetByName('exhibitions');
+    if (!sheet) return { success: false, error: 'exhibitions シートが見つかりません。' };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const exCodeIdx = headers.indexOf('ex_code');
+    const emailIdx = headers.indexOf('email');
+    const isSandboxIdx = headers.indexOf('is_sandbox');
+    const expireAtIdx = headers.indexOf('expire_at');
+    const updatedAtIdx = headers.indexOf('updated_at');
+
+    if (isSandboxIdx === -1 || expireAtIdx === -1) {
+      return { success: false, error: 'is_sandbox / expire_at 列が見つかりません。setup.html から作成された展覧会のみ卒業可能です。' };
+    }
+
+    const requesterNorm = String(requesterEmail).trim().toLowerCase();
+    let rowIdx = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][exCodeIdx].toString().trim() === exCode) {
+        const rowEmail = String(data[i][emailIdx] || '').trim().toLowerCase();
+        if (rowEmail !== requesterNorm) {
+          return { success: false, error: 'この展覧会の主催者ではありません。' };
+        }
+        rowIdx = i + 1; // 1-based
+        break;
+      }
+    }
+    if (rowIdx === -1) return { success: false, error: '展覧会が見つかりません: ' + exCode };
+
+    sheet.getRange(rowIdx, isSandboxIdx + 1).setValue('FALSE');
+    sheet.getRange(rowIdx, expireAtIdx + 1).setValue('');
+    if (updatedAtIdx !== -1) {
+      sheet.getRange(rowIdx, updatedAtIdx + 1).setValue(
+        Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd, HH:mm:ss')
+      );
+    }
+
+    return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
   }

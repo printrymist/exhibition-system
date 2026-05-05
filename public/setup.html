@@ -17,7 +17,7 @@
       padding: 20px;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: safe center;
       justify-content: center;
     }
 
@@ -209,6 +209,10 @@
       <p>Rohei Printer System</p>
     </div>
     <div id="applyView" style="display:none;">
+      <p style="color:#555; font-size:0.9em; line-height:1.6; margin:0 0 16px 0;">
+        展覧会運営のうち、キャプション印刷・QR いいね・問い合わせ受付を扱う補助ツールです。<br>
+        主催者の方は、こちらから展覧会のセットアップを申し込んでください。申請後、入力されたメールアドレスに確認メールをお送りします。
+      </p>
       <label>展覧会名
         <input type="text" id="applyExName" placeholder="e.g. Independent Tokyo 2026">
       </label>
@@ -225,6 +229,24 @@
         <input type="email" id="applyEmail" placeholder="your@email.com">
       </label>
       <div class="hint">確認メールが届きます。</div>
+      <div class="hint" style="font-size:0.78em; color:#888; margin-top:4px;">
+        ※ご入力いただいた主催者名・メールアドレスは、本サービスからのご連絡にのみ使用します。
+      </div>
+
+      <div style="margin-top:18px; padding:12px 14px; background:#fff8e1; border:1px solid #ffd54f; border-radius:8px;">
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="applySandbox" style="width:18px; height:18px; flex-shrink:0; margin-top:3px;">
+          <div style="font-size:0.9em;">
+            <div style="font-weight:bold; color:#7a5500;">🧪 練習モードで試す (おすすめ)</div>
+            <div style="font-size:0.85em; color:#666; margin-top:4px; line-height:1.5;">
+              いきなり本番運用に入る前に、練習用として試せます。<br>
+              ・<strong>14 日後に自動削除</strong>されるので気軽に試行錯誤できます<br>
+              ・案内メールは作家に届かず、運営者に届くだけになります<br>
+              ・気に入った設定はそのまま「本番運用に切替」できます
+            </div>
+          </div>
+        </label>
+      </div>
       <div id="applyError"
         style="display:none; background:#fff0f0; border:1px solid #f5c0c0; border-radius:8px; padding:12px 16px; margin-top:16px; color:#c0392b; font-size:0.88em;">
       </div>
@@ -274,8 +296,22 @@
       </label>
       <div class="hint">Setup details and artwork sheet URL will be sent here.</div>
 
+      <div id="firebaseAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin:12px 0;"></div>
+
+      <div id="firebaseAuthCard" style="display:none; padding:16px; background:#f7faff; border:1px solid #c5d9f7; border-radius:8px; margin:16px 0;">
+        <div style="font-weight:bold; margin-bottom:8px;">📧 セットアップ前にメールリンク認証が必要です</div>
+        <div style="font-size:0.85em; color:#666; margin-bottom:10px;">展覧会データを保存するため、上記の主催者メールアドレスでログインしてください。届いたリンクをクリックすると自動でログインします。</div>
+        <div style="display:flex; gap:8px;">
+          <input type="email" id="setupAuthEmailInput" placeholder="主催者メールアドレス" autocomplete="email"
+            style="flex:1; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+          <button id="btnSetupSendLink" onclick="requestSetupSignInLink()"
+            style="padding:10px 16px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">リンクを送信</button>
+        </div>
+        <div id="setupAuthMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
+      </div>
+
       <div id="errorMsg"></div>
-      <button class="btn-submit" onclick="submitForm()">Set up exhibition</button>
+      <button class="btn-submit" id="btnSetupSubmit" onclick="submitForm()" disabled>Set up exhibition</button>
     </div>
 
     <!-- ローディング -->
@@ -293,7 +329,9 @@
 
       <!-- 作品追加セクション -->
       <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
-        <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">Need more artworks?</p>
+        <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">
+          Need more artworks? <span id="currentCountLabel" style="color:#1a73e8; font-weight:bold;"></span>
+        </p>
         <div style="display:flex; gap:10px;">
           <input type="number" id="addCount" placeholder="e.g. 10" min="1" max="100"
             style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
@@ -349,6 +387,9 @@
             document.getElementById('formView').style.display = 'block';
             document.getElementById('exName').value = res.exName || '';
             document.getElementById('email').value = res.email || '';
+            // Firebase 認証用メアド欄に申請メアドを自動入力
+            const authInput = document.getElementById('setupAuthEmailInput');
+            if (authInput && res.email) authInput.value = res.email;
             // 認証済みメッセージを表示
             const msg = document.createElement('div');
             msg.style.cssText = 'background:#e6f4ea;border:1px solid #a8d5b5;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#2e7d32;font-size:0.88em;';
@@ -356,6 +397,12 @@
             document.getElementById('formView').insertBefore(msg, document.getElementById('formView').firstChild);
             // tokenを保持
             window._confirmedToken = res.token;
+            // GAS token でメール所有が確認済みなので Firebase Email Link は不要
+            // 認証カードを隠して submit を有効化
+            const authCardEl = document.getElementById('firebaseAuthCard');
+            if (authCardEl) authCardEl.style.display = 'none';
+            const submitBtnEl = document.getElementById('btnSetupSubmit');
+            if (submitBtnEl) submitBtnEl.disabled = false;
           });
       } else {
         // 通常アクセス → 申請フォームを表示
@@ -372,6 +419,7 @@
       const startDate = document.getElementById('applyStartDate').value;
       const organizer = document.getElementById('applyOrganizer').value.trim();
       const email = document.getElementById('applyEmail').value.trim();
+      const sandbox = document.getElementById('applySandbox').checked ? '1' : '';
 
       const errEl = document.getElementById('applyError');
       errEl.style.display = 'none';
@@ -386,7 +434,7 @@
       btn.disabled = true;
       btn.innerText = '送信中...';
 
-      gasCall({ action: 'submitApplication', exName, venue, startDate, organizer, email })
+      gasCall({ action: 'submitApplication', exName, venue, startDate, organizer, email, sandbox })
         .then(res => {
           if (!res.success) {
             errEl.innerText = 'Error: ' + res.error;
@@ -450,27 +498,53 @@
         showError('Error: ' + result.error);
         return;
       }
-      // 🟣 Firestore exhibitions と各 artwork ドキュメントを作成
-      if (window.fsDb && result.exCode) {
-        const exDoc = result.exhibitionDoc
-          ? { ...result.exhibitionDoc, createdAt: new Date().toISOString() }
-          : { ex_code: result.exCode, ex_name: result.exName, createdAt: new Date().toISOString() };
-        window.fsDb.collection('exhibitions').doc(result.exCode).set(exDoc, { merge: true })
-          .catch(e => console.error('Firestore exhibitions write failed:', e));
 
-        if (Array.isArray(result.artworks)) {
-          const ts = new Date().toISOString();
-          result.artworks.forEach(a => {
-            const docId = a.exCode + '_' + a.artwork_id;
-            window.fsDb.collection('artworks').doc(docId).set({
-              ...a,
-              artworkId: a.artwork_id,
-              createdAt: ts
-            }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
-          });
-        }
+      // exhibitions doc は Security Rules が Firebase Auth を要求するため、
+      // setup フロー (GAS token 認証のみ) では Cloud Function 経由で書き込む。
+      // canonical な doc 内容は Cloud Function が GAS から再取得するので、
+      // ここではクライアントから doc データを渡さない (クライアント値を信用しない方針)。
+      // artworks doc は security_key ベースのルールでクライアント書き込みが
+      // 通るため従来通り直接書き込む。
+      const finalizePromise = (window.fsDb && result.exCode)
+        ? firebase.app().functions('asia-northeast1')
+          .httpsCallable('finalizeExhibitionSetup')({
+            token: window._confirmedToken || '',
+            exCode: result.exCode
+          })
+          .then(() => null)
+          .catch(err => {
+            console.error('finalizeExhibitionSetup failed:', err);
+            return err;
+          })
+        : Promise.resolve(null);
+
+      if (window.fsDb && Array.isArray(result.artworks)) {
+        const ts = new Date().toISOString();
+        result.artworks.forEach(a => {
+          const docId = a.exCode + '_' + a.artwork_id;
+          window.fsDb.collection('artworks').doc(docId).set({
+            ...a,
+            artworkId: a.artwork_id,
+            createdAt: ts
+          }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
+        });
       }
-      showDone(result);
+
+      finalizePromise.then(err => {
+        showDone(result);
+        if (err) {
+          const box = document.getElementById('infoBox');
+          if (box) {
+            const warn = document.createElement('div');
+            warn.style.cssText = 'background:#fff3e0; border:1px solid #ffb74d; border-radius:8px; padding:10px 12px; margin-top:12px; color:#bf360c; font-size:0.85em; line-height:1.5;';
+            warn.innerText = '⚠ Firestore へのデータ登録に失敗しました ('
+              + (err.message || err) + ')。'
+              + 'GAS 側のセットアップは完了していますが、主催者ログインができない可能性があります。'
+              + 'サポートにお問い合わせください。';
+            box.parentNode.insertBefore(warn, box.nextSibling);
+          }
+        }
+      });
     }
 
     function onSetupError(err) {
@@ -482,6 +556,13 @@
     // =========================================================
     // 作品追加処理
     // =========================================================
+    let currentArtworkCount = 0;
+
+    function updateCurrentCountLabel() {
+      const el = document.getElementById('currentCountLabel');
+      if (el) el.innerText = '(現在: ' + currentArtworkCount + ' 件)';
+    }
+
     function submitAdd() {
       const addCount = parseInt(document.getElementById('addCount').value);
       if (!addCount || addCount < 1) return;
@@ -495,6 +576,8 @@
           if (!res.success) { addMsg.innerText = 'Error: ' + res.error; return; }
           addMsg.innerText = `✅ ${addCount} artworks added successfully.`;
           document.getElementById('addCount').value = '';
+          currentArtworkCount += addCount;
+          updateCurrentCountLabel();
           if (window.fsDb && Array.isArray(res.artworks)) {
             const ts = new Date().toISOString();
             res.artworks.forEach(a => {
@@ -518,11 +601,15 @@
       document.getElementById('infoBox').innerHTML = `
       <div class="row"><span class="key">Exhibition code</span><span class="val">${result.exCode}</span></div>
       <div class="row"><span class="key">Exhibition name</span><span class="val">${result.exName}</span></div>
-      <div class="row"><span class="key">Admin password</span><span class="val">${result.adminPass}</span></div>
     `;
+      currentArtworkCount = (Array.isArray(result.artworks) ? result.artworks.length : 0)
+        || parseInt(document.getElementById('workCount').value) || 0;
+      updateCurrentCountLabel();
     }
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
     firebase.initializeApp({
@@ -534,6 +621,72 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     window.fsDb = firebase.firestore();
+  </script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('setupAuthMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      // メールリンクから戻ってきたら sign-in を完了
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      // 認証状態に応じて Submit ボタンと Firebase 認証カードの表示を切り替え
+      // ただし GAS token で確認済みの場合は Firebase 認証は不要なので、その状態を尊重する
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('firebaseAuthCard');
+        var submitBtn = document.getElementById('btnSetupSubmit');
+        var statusEl = document.getElementById('firebaseAuthStatus');
+        // GAS token 確認済みなら、Firebase 認証カードは表示せず submit も常に有効
+        if (window._confirmedToken) {
+          if (statusEl) statusEl.style.display = 'none';
+          if (authCard) authCard.style.display = 'none';
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+        if (user && user.email) {
+          if (statusEl) {
+            statusEl.innerText = '🔓 ' + user.email + ' で認証済み';
+            statusEl.style.display = 'block';
+          }
+          if (authCard) authCard.style.display = 'none';
+          if (submitBtn) submitBtn.disabled = false;
+        } else {
+          if (statusEl) statusEl.style.display = 'none';
+          if (authCard) authCard.style.display = 'block';
+          if (submitBtn) submitBtn.disabled = true;
+        }
+      });
+
+      window.requestSetupSignInLink = function () {
+        var emailInput = document.getElementById('setupAuthEmailInput');
+        var btn = document.getElementById('btnSetupSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' に確認メールを送信しました。届かない場合は迷惑メールフォルダもご確認ください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
   </script>
 </body>
 

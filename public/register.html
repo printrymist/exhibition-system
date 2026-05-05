@@ -775,10 +775,16 @@
     <h1 style="font-size:1.3em; color:#1a73e8;">⚙️ Exhibition Register</h1>
     <p style="font-size:0.85em; color:#888; margin-top:4px;">作品登録・項目設定</p>
     <a id="linkToCaption" href="#"
-      style="display:inline-block;margin-top:8px;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
       🖨️ キャプション印刷へ
     </a>
+    <a id="linkToReports" href="#"
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      📊 出力・レポートへ
+    </a>
   </div>
+
+  <div id="sandboxBadge" style="display:none;"></div>
 
   <div class="card">
     <div class="card-title">Exhibition</div>
@@ -792,15 +798,33 @@
   </div>
 
   <div class="card" id="pwCard" style="display:none;">
-    <div class="card-title">管理者認証</div>
-    <div class="pw-row">
-      <input type="password" id="pwInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')verifyPassword()">
-      <button class="btn-primary" id="btnPw" onclick="verifyPassword()">認証</button>
+    <div class="card-title">主催者ログイン</div>
+    <div id="operatorAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin-bottom:10px;"></div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この展覧会の主催者として登録されたメールアドレスを入力してください。</div>
+    <div class="pw-row" id="emailLinkRow">
+      <input type="email" id="operatorEmailInput" placeholder="主催者メールアドレス" autocomplete="email">
+      <button class="btn-primary" id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
     </div>
-    <div class="msg-error" id="pwError"></div>
+    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
   </div>
 
-  <div id="mainArea">
+  <div class="card" id="notOrganizerCard" style="display:none;">
+    <div class="card-title" style="color:#d93025;">⚠ アクセス権限がありません</div>
+    <div style="font-size:0.9em; line-height:1.6;">
+      <code id="notOrganizerEmail" style="background:#f4f4f9; padding:2px 6px; border-radius:4px;"></code> はこの展覧会の主催者として登録されていません。
+    </div>
+    <div style="font-size:0.85em; color:#666; margin-top:12px;">この展覧会を編集できるのは、主催者として登録されたメールアドレスでログインした人だけです。</div>
+    <div style="margin-top:12px;">
+      <button onclick="signOutAndRetry()" style="padding:8px 16px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:14px; cursor:pointer;">別のアカウントでログインし直す</button>
+    </div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 14px; background:#e8f0fe; border-radius:8px; font-size:0.85em; max-width:660px; margin:0 auto 12px auto;">
+      <span style="color:#1565c0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔓 <span id="loggedInEmailLabel"></span> でログイン中</span>
+      <a href="#" onclick="signOutAndRetry();return false;" style="color:#1a73e8; text-decoration:underline; flex-shrink:0;">ログアウト</a>
+    </div>
     <div class="tabs">
       <button class="tab active" id="tabSetup" onclick="switchTab('setup')">⚙️ 項目設定</button>
       <button class="tab" id="tabInput" onclick="switchTab('input')">✏️ 作品入力</button>
@@ -811,6 +835,20 @@
     <div class="tab-content active" id="contentSetup">
       <div class="card" style="border-radius:0 0 12px 12px;">
         <div class="hint">☑ チェックで表示／非表示 &nbsp;·&nbsp; <b>⠿</b> ドラッグで並び替え &nbsp;·&nbsp; <b>必須／任意</b> で入力必須を設定</div>
+        <div style="margin:0 0 10px 0;">
+          <button type="button" id="btnImportToggle" onclick="toggleImportPanel()"
+            style="padding:6px 12px; background:#f0f7ff; color:#1a73e8; border:1px solid #c5d9f7; border-radius:6px; font-size:0.85em; cursor:pointer;">
+            📥 他の展覧会から項目設定を読み込む
+          </button>
+          <div id="importPanel" style="display:none; margin-top:8px; padding:10px; background:#fafdff; border:1px solid #c5d9f7; border-radius:8px;">
+            <input type="text" id="importSearch" placeholder="展覧会名で絞り込み..." oninput="renderImportList()"
+              style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:8px;">
+            <div id="importList" style="max-height:240px; overflow-y:auto;">
+              <div style="color:#aaa; font-size:0.85em; text-align:center; padding:12px;">読み込み中...</div>
+            </div>
+            <div style="color:#888; font-size:0.78em; margin-top:6px;">読み込み後、必要に応じて編集して「保存する」を押してください。</div>
+          </div>
+        </div>
         <div id="sortContainer"></div>
       </div>
       <div class="card">
@@ -823,6 +861,12 @@
         <button class="btn-wide" id="btnSaveSetup" onclick="saveSettings()">💾 保存する</button>
         <div class="save-msg" id="saveMsgSetup"></div>
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作家向け案内メール</p>
+          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">設定した項目の説明と入力URLを記載したメールを管理者宛に送信します。受信したメールをそのまま作家へ転送できます。</p>
+          <button class="btn-wide" id="btnSendGuide" onclick="sendArtistGuide()">📨 案内メールを送信</button>
+          <div class="save-msg" id="sendGuideMsg"></div>
+        </div>
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加</p>
           <div style="display:flex; gap:10px;">
             <input type="number" id="addArtworkCount" placeholder="追加数 (例: 10)" min="1" max="100"
@@ -833,6 +877,45 @@
             </button>
           </div>
           <div id="addArtworkMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
+        </div>
+
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">感想 (コメント) 受付期間</p>
+          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">指定すると期間外は来場者の感想入力欄が無効になります。空欄なら常時受付。</p>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <label style="font-size:0.85em; color:#444;">開始
+              <input type="datetime-local" id="commentsStartAt"
+                style="margin-left:6px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+            </label>
+            <label style="font-size:0.85em; color:#444;">終了
+              <input type="datetime-local" id="commentsEndAt"
+                style="margin-left:6px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+            </label>
+            <button onclick="saveCommentWindow()" id="btnSaveCommentWindow"
+              style="padding:8px 14px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8;
+                border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">
+              保存
+            </button>
+            <button onclick="clearCommentWindow()"
+              style="padding:8px 12px; background:white; color:#888; border:1px solid #ddd;
+                border-radius:6px; font-size:13px; cursor:pointer;">
+              クリア
+            </button>
+          </div>
+          <div id="commentWindowMsg" style="margin-top:6px; font-size:0.82em; min-height:18px;"></div>
+        </div>
+
+        <div id="graduateSection" style="margin-top:24px; padding:16px; border:1px solid #ffd54f; background:#fff8e1; border-radius:8px; display:none;">
+          <p style="color:#7a5500; font-size:0.95em; font-weight:bold; margin:0 0 6px 0;">🎓 練習モードを終了して本番運用に切替</p>
+          <p style="color:#666; font-size:0.85em; margin:0 0 12px 0; line-height:1.6;">
+            設定 (項目・テンプレート等) はそのまま残し、テストで作成した <strong>作品データ・コメント・いいね・画像ファイル</strong> を一括削除して本番運用を開始します。<br>
+            自動削除予定 (14 日後) は解除されます。
+          </p>
+          <button id="btnGraduate" onclick="graduateExhibition()"
+            style="padding:10px 18px; background:#1a73e8; color:white; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+            🎓 本番運用に切替 (テストデータをクリア)
+          </button>
+          <div id="graduateMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
         </div>
 
       </div>
@@ -919,6 +1002,13 @@
                 </div>
                 <input type="text" id="art_web" placeholder="https://...">
               </div>
+              <div class="input-field">
+                <div class="input-label-row">
+                  <label for="art_shop_url">販売 / ショップ</label><span class="badge-optional">任意</span><span
+                    class="field-name-hint">shop_url</span>
+                </div>
+                <input type="text" id="art_shop_url" placeholder="https://...">
+              </div>
             </div>
           </div>
         </div>
@@ -973,8 +1063,12 @@
       return new URLSearchParams(window.location.search).get(name) || '';
     }
     const ARTIST_FIELDS = ['artist', 'artist_en', 'birth_year', 'death_year', 'birthplace'];
-    const ARTIST_LABELS = { artist: '作家名', artist_en: '作家名（英語）', birth_year: '生年', death_year: '没年', birthplace: '出身地', insta: 'Instagram', x: 'X (Twitter)', facebook: 'Facebook', web: 'Web' };
+    const SNS_FIELDS = ['insta', 'x', 'facebook', 'web', 'shop_url'];
+    const ALL_ARTIST_FIELDS = [...ARTIST_FIELDS, ...SNS_FIELDS];
+    const ARTIST_LABELS = { artist: '作家名', artist_en: '作家名（英語）', birth_year: '生年', death_year: '没年', birthplace: '出身地', insta: 'Instagram', x: 'X (Twitter)', facebook: 'Facebook', web: 'Web', shop_url: '販売 / ショップ' };
+    const SNS_PLACEHOLDERS = { insta: '@username', x: '@username', facebook: 'URLまたはユーザー名', web: 'https://...', shop_url: 'https://...' };
     const FIELD_DEFS = [
+      { name: 'image_url', label: '作品画像', desc: '作品の写真（JPEG/PNG）', textarea: false, type: 'image' },
       { name: 'title', label: 'タイトル', desc: '作品名（日本語）', textarea: false },
       { name: 'title_en', label: 'タイトル（英語）', desc: '作品名（英語）', textarea: false },
       { name: 'year', label: '制作年', desc: '制作された年（例：2024）', textarea: false },
@@ -982,6 +1076,8 @@
       { name: 'technique', label: '技法', desc: '制作技法（例：油彩、版画）', textarea: false },
       { name: 'material', label: '素材・支持体', desc: '使用素材や支持体', textarea: false },
       { name: 'size', label: 'サイズ', desc: '作品の寸法（例：530×455mm）', textarea: false },
+      { name: 'sheet_size', label: 'シートサイズ', desc: '版画等の紙寸法（例：530×455mm）', textarea: false },
+      { name: 'image_size', label: 'イメージサイズ', desc: '版画等の刷り部分の寸法（例：300×220mm）', textarea: false },
       { name: 'edition', label: 'エディション', desc: '版画等のエディション番号（例：3/30）', textarea: false },
       { name: 'artist', label: '作家名', desc: '作家名（日本語）', textarea: false },
       { name: 'artist_en', label: '作家名（英語）', desc: '作家名（英語）', textarea: false },
@@ -989,18 +1085,20 @@
       { name: 'death_year', label: '没年', desc: '作家の没年。存命の場合は空欄', textarea: false },
       { name: 'birthplace', label: '出身地', desc: '作家の出身地（例：東京都、Paris）', textarea: false },
       { name: 'price', label: '価格', desc: '税込価格（数字のみ）', textarea: false },
-      { name: 'price_framed', label: '額装価格', desc: '額装込みの価格（数字のみ）', textarea: false },
+      { name: 'price_framed', label: '額装価格', desc: '額装込みの価格。数字なら自動でカンマ整形、「別途注文」等の文言もそのまま保存', textarea: false },
       { name: 'certificate', label: '証明書', desc: '真贋証明書・保証書の有無や種類', textarea: false },
       { name: 'collection', label: 'コレクション', desc: '所蔵先・コレクション名', textarea: false },
       { name: 'courtesy', label: 'クレジット', desc: '画廊・提供元のクレジット表記', textarea: false },
       { name: 'note', label: '備考', desc: 'キャプションに表示するその他の情報', textarea: true },
       { name: 'artist_note', label: '作家コメント', desc: '作家自身によるコメント・ステートメント', textarea: true },
+      { name: 'shop_url', label: '販売 / ショップ', desc: 'BASE / minne / Creema 等のショップ URL（作家単位、web 展覧会で使用）', textarea: false },
     ];
     const FIELD_MAP = {};
     FIELD_DEFS.forEach(d => { FIELD_MAP[d.name] = d; });
-    const DEFAULT_FIELDS = ['title', 'artist', 'year', 'technique', 'size', 'price'];
+    const DEFAULT_FIELDS = ['image_url', 'title', 'artist', 'year', 'technique', 'size', 'price'];
 
     let currentEx = getUrlParam('ex');
+    let currentExName = '';
     let activeFields = [];
     let sortableInst = null;
     let artistList = [];
@@ -1019,18 +1117,24 @@
     }
 
     // ── 展覧会ロード ──
+    let currentExEmail = '';
     function loadExhibition() {
       const ex = document.getElementById('exCodeInput').value.trim();
       if (!ex) return;
       currentEx = ex;
+      currentExEmail = '';
       document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
       document.getElementById('exError').innerText = '';
       document.getElementById('btnLoad').disabled = true;
       document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'none';
       document.getElementById('mainArea').style.display = 'none';
 
-      gasCall({ action: 'verifyExCode', ex: ex })
-        .then(res => {
+      Promise.all([
+        gasCall({ action: 'verifyExCode', ex: ex }),
+        firebase.firestore().collection('exhibitions').doc(ex).get()
+      ])
+        .then(([res, exSnap]) => {
           document.getElementById('btnLoad').disabled = false;
           if (!res.success) {
             document.getElementById('exName').innerText = '';
@@ -1038,49 +1142,78 @@
             return;
           }
           document.getElementById('exName').innerText = '✅ ' + res.exName;
-          document.getElementById('linkToCaption').href = 'https://rohei-printer-system.web.app/caption.html?ex=' + ex;
-          if (sessionStorage.getItem('auth_' + ex)) {
-            const savedFields = JSON.parse(sessionStorage.getItem('fields_' + ex) || 'null');
-            let af = savedFields;
-            if (!af || !Array.isArray(af) || af.length === 0) af = DEFAULT_FIELDS.map(n => ({name:n,required:false}));
-            activeFields = af;
-            document.getElementById('pwCard').style.display = 'none';
-            document.getElementById('mainArea').style.display = 'block';
-            buildFieldsGrid(af);
-            buildInputForm();
-            loadArtistList();
-            return;
+          currentExName = res.exName || '';
+          const exData = exSnap.exists ? exSnap.data() : {};
+          currentExEmail = ((exData.email || '') + '').trim().toLowerCase();
+          window._currentExData = exData;
+          if (window.sandboxBadge) {
+            window.sandboxBadge.render('sandboxBadge', exData, 'operator', { maxWidth: '660px' });
           }
-          document.getElementById('pwCard').style.display = 'block';
-          document.getElementById('pwInput').value = '';
-          document.getElementById('pwError').innerText = '';
-          setTimeout(() => document.getElementById('pwInput').focus(), 100);
+          // 練習モードなら卒業ボタンを表示
+          const gradSection = document.getElementById('graduateSection');
+          if (gradSection) {
+            gradSection.style.display = exData.is_sandbox ? 'block' : 'none';
+          }
+          document.getElementById('linkToCaption').href = 'caption.html?ex=' + ex;
+          document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
+          applyAuthorizationUI();
+        })
+        .catch(err => {
+          console.error('loadExhibition failed:', err);
+          document.getElementById('btnLoad').disabled = false;
+          document.getElementById('exName').innerText = '';
+          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
         });
     }
 
-    // ── パスワード認証 ──
-    function verifyPassword() {
-      const pw = document.getElementById('pwInput').value;
-      if (!pw) return;
-      document.getElementById('btnPw').disabled = true;
-      document.getElementById('pwError').innerText = '';
+    // 認証状態と主催者一致を見て pwCard / notOrganizerCard / mainArea を切り替え
+    function applyAuthorizationUI() {
+      const user = firebase.auth().currentUser;
+      const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
+      if (!user) {
+        document.getElementById('pwCard').style.display = 'block';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'none';
+        setTimeout(() => document.getElementById('operatorEmailInput').focus(), 100);
+        return;
+      }
+      if (currentExEmail && userEmail === currentExEmail) {
+        document.getElementById('pwCard').style.display = 'none';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'block';
+        const emailLabel = document.getElementById('loggedInEmailLabel');
+        if (emailLabel) emailLabel.innerText = user.email;
+        if (typeof loadFieldsAndUI === 'function') loadFieldsAndUI(currentEx);
+        return;
+      }
+      // 認証済みだが主催者本人ではない
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('mainArea').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'block';
+      document.getElementById('notOrganizerEmail').innerText = user.email;
+    }
 
-      gasCall({ action: 'verifyPassword', ex: currentEx, password: pw })
-        .then(res => {
-          document.getElementById('btnPw').disabled = false;
-          if (!res.success) { document.getElementById('pwError').innerText = res.error; return; }
-          document.getElementById('pwCard').style.display = 'none';
-          document.getElementById('mainArea').style.display = 'block';
-          let af = res.registrationFields;
-          if (!af || !Array.isArray(af) || af.length === 0) af = DEFAULT_FIELDS.map(n => ({ name: n, required: false }));
-          else if (typeof af[0] === 'string') af = af.map(n => ({ name: n, required: false }));
-          activeFields = af;
-          sessionStorage.setItem('auth_' + currentEx, '1');
-          sessionStorage.setItem('fields_' + currentEx, JSON.stringify(af));
-          buildFieldsGrid(af);
-          buildInputForm();
-          loadArtistList();
+    // 項目設定を Firestore 優先で読み込み、UI を組む
+    function loadFieldsAndUI(ex, serverFallback) {
+      window.fsGetRegistrationFields(ex)
+        .then(fetched => applyFields(ex, fetched, serverFallback))
+        .catch(err => {
+          console.warn('fsGetRegistrationFields failed:', err);
+          applyFields(ex, null, serverFallback);
         });
+    }
+    function applyFields(ex, fetched, serverFallback) {
+      let af = fetched;
+      if (!af || !Array.isArray(af) || af.length === 0) af = serverFallback;
+      if (!af || !Array.isArray(af) || af.length === 0) af = JSON.parse(sessionStorage.getItem('fields_' + ex) || 'null');
+      if (!af || !Array.isArray(af) || af.length === 0) af = DEFAULT_FIELDS.map(n => ({ name: n, required: false }));
+      if (typeof af[0] === 'string') af = af.map(n => ({ name: n, required: false }));
+      activeFields = af;
+      sessionStorage.setItem('fields_' + ex, JSON.stringify(af));
+      buildFieldsGrid(af);
+      buildInputForm();
+      loadArtistList();
+      loadCommentWindow();
     }
 
     // ── 作家一覧ロード ──
@@ -1115,7 +1248,7 @@
       if (val === '__new__') { clearArtistFields(); document.getElementById('art_artist').focus(); return; }
       const a = artistList[parseInt(val)];
       if (!a) return;
-      ['artist', 'artist_en', 'birth_year', 'death_year', 'insta', 'x', 'facebook', 'web'].forEach(f => {
+      ALL_ARTIST_FIELDS.forEach(f => {
         const el = document.getElementById('art_' + f);
         if (el) el.value = a[f] || '';
       });
@@ -1178,6 +1311,115 @@
       if (!r || !o) return;
       r.className = isReq ? 'on-required' : ''; o.className = !isReq ? 'on-optional' : '';
     }
+
+    // ── 感想受付期間 ──
+    function isoToLocalInput(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const pad = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+        + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    function localInputToISO(local) {
+      if (!local) return '';
+      const d = new Date(local);
+      return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+    function loadCommentWindow() {
+      if (!currentEx || !window.fsGetCommentWindow) return;
+      window.fsGetCommentWindow(currentEx)
+        .then(w => {
+          document.getElementById('commentsStartAt').value = isoToLocalInput(w.start);
+          document.getElementById('commentsEndAt').value = isoToLocalInput(w.end);
+        })
+        .catch(err => console.warn('loadCommentWindow failed:', err));
+    }
+    function saveCommentWindow() {
+      const start = localInputToISO(document.getElementById('commentsStartAt').value);
+      const end = localInputToISO(document.getElementById('commentsEndAt').value);
+      const msg = document.getElementById('commentWindowMsg');
+      msg.style.color = '#888'; msg.innerText = '保存中...';
+      document.getElementById('btnSaveCommentWindow').disabled = true;
+      window.fsSaveCommentWindow(currentEx, start, end)
+        .then(() => { msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。'; })
+        .catch(err => { msg.style.color = '#d93025'; msg.innerText = 'エラー: ' + err.message; })
+        .finally(() => { document.getElementById('btnSaveCommentWindow').disabled = false; });
+    }
+    function clearCommentWindow() {
+      document.getElementById('commentsStartAt').value = '';
+      document.getElementById('commentsEndAt').value = '';
+    }
+
+    let importExList = null;
+    function toggleImportPanel() {
+      const panel = document.getElementById('importPanel');
+      const open = panel.style.display === 'none';
+      panel.style.display = open ? 'block' : 'none';
+      if (open && importExList === null) {
+        window.fsListExhibitions()
+          .then(list => {
+            importExList = list.filter(e => e.ex_code !== currentEx);
+            renderImportList();
+          })
+          .catch(err => {
+            document.getElementById('importList').innerHTML =
+              `<div style="color:#d93025; font-size:0.85em; padding:8px;">読み込み失敗: ${err.message}</div>`;
+          });
+      } else if (open) {
+        renderImportList();
+      }
+    }
+    function renderImportList() {
+      const listEl = document.getElementById('importList');
+      if (!importExList) return;
+      const q = (document.getElementById('importSearch').value || '').toLowerCase().trim();
+      const items = q
+        ? importExList.filter(e => (e.ex_name + ' ' + e.ex_code).toLowerCase().includes(q))
+        : importExList;
+      if (items.length === 0) {
+        listEl.innerHTML = `<div style="color:#aaa; font-size:0.85em; text-align:center; padding:12px;">該当する展覧会がありません。</div>`;
+        return;
+      }
+      listEl.innerHTML = '';
+      items.forEach(e => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid #eee;';
+        const info = document.createElement('div');
+        info.style.cssText = 'flex:1; min-width:0;';
+        const dateText = e.start_date || (e.createdAt ? e.createdAt.slice(0, 10) : '');
+        info.innerHTML = `<div style="font-size:0.9em; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.ex_name}</div>
+          <div style="font-size:0.75em; color:#888;">${dateText} / ${e.ex_code}</div>`;
+        const btn = document.createElement('button');
+        btn.textContent = '読み込む';
+        btn.style.cssText = 'padding:4px 10px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:5px; font-size:0.8em; cursor:pointer; flex-shrink:0;';
+        btn.onclick = () => importFromExhibition(e.ex_code, e.ex_name, btn);
+        row.appendChild(info);
+        row.appendChild(btn);
+        listEl.appendChild(row);
+      });
+    }
+    function importFromExhibition(exCode, exName, btn) {
+      btn.disabled = true;
+      btn.textContent = '読込中...';
+      window.fsGetRegistrationFields(exCode)
+        .then(fields => {
+          btn.disabled = false;
+          btn.textContent = '読み込む';
+          if (!fields || fields.length === 0) {
+            alert(`"${exName}" には項目設定が保存されていません。`);
+            return;
+          }
+          buildFieldsGrid(fields);
+          document.getElementById('importPanel').style.display = 'none';
+          showMsg('saveMsgSetup', `📥 "${exName}" の項目設定を読み込みました。「保存する」を押すと反映されます。`, '#1a73e8');
+        })
+        .catch(err => {
+          btn.disabled = false;
+          btn.textContent = '読み込む';
+          alert('読み込み失敗: ' + err.message);
+        });
+    }
     function isRequiredField(name) { const r = document.getElementById('req_' + name); return r && r.classList.contains('on-required'); }
     function selectAll(state) { document.querySelectorAll('#sortContainer .field-card').forEach(c => { const chk = c.querySelector('input[type="checkbox"]'); chk.checked = state; c.classList.toggle('active', state); }); }
     function setAllRequired(state) { document.querySelectorAll('#sortContainer .field-card').forEach(c => setRequired(c.dataset.field, state)); }
@@ -1198,6 +1440,7 @@
           if (res.success) {
             showMsg('saveMsgSetup', '✅ 保存しました。入力フォームを更新しました。', '#1a73e8');
             activeFields = result;
+            sessionStorage.setItem('fields_' + currentEx, JSON.stringify(result));
             buildInputForm();
           } else {
             showMsg('saveMsgSetup', 'Error: ' + res.error, '#d93025');
@@ -1209,16 +1452,93 @@
         });
     }
 
+    // ── 作家向け案内メール送信 ──
+    function sendArtistGuide() {
+      if (!activeFields || activeFields.length === 0) {
+        showMsg('sendGuideMsg', '⚠️ 項目を1つ以上設定して保存してください。', '#d93025');
+        return;
+      }
+      const isSandbox = !!(window._currentExData && window._currentExData.is_sandbox);
+      const confirmMsg = isSandbox
+        ? '[練習モード]\n\n' +
+          '・このメールはあなた (運営者) のメアドにのみ届きます\n' +
+          '・実在の作家には絶対に転送しないでください\n' +
+          '・転送すると作家が登録した内容が 14 日後に消えます\n\n' +
+          '送信しますか?'
+        : '管理者メールアドレスに案内メールを送信します。よろしいですか？\n（受信後、内容を確認してから作家へ転送してください）';
+      if (!confirm(confirmMsg)) return;
+
+      const exName = currentExName || currentEx;
+      const inputUrl = 'https://rohei-printer-system.web.app/input.html?ex=' + currentEx;
+      const subjectPrefix = isSandbox ? '[練習モード - 転送禁止] ' : '';
+      const subject = subjectPrefix + `【作家向け】作品情報入力のご案内（${exName}）`;
+
+      const fieldsText = activeFields
+        .filter(f => FIELD_MAP[f.name])
+        .map(f => {
+          const def = FIELD_MAP[f.name];
+          const tag = f.required ? '【必須】' : '【任意】';
+          return `・${def.label}${tag}\n  ${def.desc}`;
+        })
+        .join('\n');
+
+      const sandboxWarning = isSandbox ? `[練習モード - 転送禁止]
+これは練習モードでの動作確認用メールです。
+このメールを実在の作家へ絶対に転送しないでください。
+転送して作家が登録した内容は 14 日後に削除されます。
+
+` : '';
+      const body = `${sandboxWarning}以下を作家の方へ転送してください。
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+件名：作品情報のご入力のお願い（${exName}）
+
+この度は展覧会へのご参加ありがとうございます。
+以下のURLより作品情報をご入力ください。
+
+▼ 作品情報入力フォーム
+${inputUrl}
+
+▼ 入力項目（事前にご準備ください）
+${fieldsText}
+
+入力の流れ：
+1. 上のURLにアクセス
+2. 作家名（日本語）を入力して「開始」をクリック
+3. 「＋ 作品を追加」から作品を登録
+
+ご不明な点は主催者までお問い合わせください。
+━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      document.getElementById('btnSendGuide').disabled = true;
+      showMsg('sendGuideMsg', '<span class="spinner-sm"></span> 送信中...', '#888');
+
+      gasCall({ action: 'sendArtistGuide', ex: currentEx, subject, body })
+        .then(res => {
+          document.getElementById('btnSendGuide').disabled = false;
+          if (res.success) {
+            showMsg('sendGuideMsg', `✅ ${res.to} に送信しました。メールを確認のうえ作家へ転送してください。`, '#1a73e8');
+          } else {
+            showMsg('sendGuideMsg', 'Error: ' + res.error, '#d93025');
+          }
+        })
+        .catch(err => {
+          document.getElementById('btnSendGuide').disabled = false;
+          showMsg('sendGuideMsg', 'Error: ' + err.message, '#d93025');
+        });
+    }
+
     // ── 入力フォーム構築 ──
     function buildInputForm() {
       const form = document.getElementById('inputForm');
       form.innerHTML = '';
-      const fields = activeFields.filter(f => FIELD_MAP[f.name] && !ARTIST_FIELDS.includes(f.name));
+      const fields = activeFields.filter(f => FIELD_MAP[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
       if (fields.length === 0) { form.innerHTML = '<p style="color:#aaa;font-size:0.9em;text-align:center;padding:20px 0;">項目設定タブで使用する項目を選択・保存してください。</p>'; return; }
       let gridOpen = false, gridEl = null;
       fields.forEach(f => {
         const def = FIELD_MAP[f.name];
-        if (def.textarea) { if (gridOpen) { form.appendChild(gridEl); gridOpen = false; gridEl = null; } form.appendChild(makeInputField(def, f.required)); }
+        const isBlock = def.textarea || def.type === 'image';
+        if (isBlock) { if (gridOpen) { form.appendChild(gridEl); gridOpen = false; gridEl = null; } form.appendChild(makeInputField(def, f.required)); }
         else { if (!gridOpen) { gridEl = document.createElement('div'); gridEl.className = 'input-grid'; gridOpen = true; } gridEl.appendChild(makeInputField(def, f.required)); }
       });
       if (gridOpen) form.appendChild(gridEl);
@@ -1232,18 +1552,126 @@
       const badge = document.createElement('span'); badge.className = required ? 'badge-required' : 'badge-optional'; badge.textContent = required ? '必須' : '任意'; labelRow.appendChild(badge);
       const hint = document.createElement('span'); hint.className = 'field-name-hint'; hint.textContent = def.name; labelRow.appendChild(hint);
       wrap.appendChild(labelRow);
+      if (def.type === 'image') {
+        const file = document.createElement('input');
+        file.type = 'file'; file.accept = 'image/*'; file.id = prefix + def.name; file.style.display = 'none';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = 'padding:10px 14px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer; margin-top:4px;';
+        btn.textContent = '📷 写真を選択';
+        btn.addEventListener('click', () => file.click());
+        const preview = document.createElement('img');
+        preview.id = prefix + def.name + '_preview';
+        preview.style.cssText = 'display:none; max-width:200px; max-height:200px; border-radius:8px; margin-top:8px; border:1px solid #eee;';
+        const existingHidden = document.createElement('input');
+        existingHidden.type = 'hidden'; existingHidden.id = prefix + def.name + '_existing';
+        if (currentVal) {
+          preview.src = currentVal; preview.style.display = 'block';
+          existingHidden.value = currentVal;
+        }
+        file.addEventListener('change', async (e) => {
+          if (!e.target.files || e.target.files.length === 0) return;
+          btn.disabled = true; btn.textContent = '🔄 読み込み中...';
+          try {
+            const dataUrl = await resizeImageToDataUrl(e.target.files[0], 1600);
+            preview.src = dataUrl; preview.style.display = 'block';
+            preview.dataset.pending = dataUrl;
+            btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
+          } catch (err) {
+            btn.textContent = '⚠️ 読み込み失敗';
+            alert('画像の読み込みに失敗しました: ' + err.message);
+          } finally { btn.disabled = false; }
+        });
+        wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);
+        return wrap;
+      }
       let input;
       if (def.textarea) { input = document.createElement('textarea'); input.rows = 4; }
       else { input = document.createElement('input'); input.type = 'text'; }
       input.id = prefix + def.name; input.placeholder = def.desc;
-      if (currentVal !== undefined) input.value = currentVal;
+      applyNumericBehavior(input, def.name);
+      if (currentVal !== undefined) input.value = formatInitialValue(def.name, currentVal);
       wrap.appendChild(input);
       return wrap;
     }
 
+    // 数字のみ許可: year / birth_year / death_year
+    // 数字 + カンマ自動挿入: price
+    // 数字なら整形・非数字ならそのまま: price_framed
+    const NUMERIC_INT_FIELDS = ['year', 'birth_year', 'death_year'];
+    const NUMERIC_PRICE_FIELDS = ['price'];
+    const FLEXIBLE_PRICE_FIELDS = ['price_framed'];
+    function applyNumericBehavior(input, name) {
+      if (NUMERIC_INT_FIELDS.indexOf(name) !== -1) {
+        input.inputMode = 'numeric';
+        input.setAttribute('pattern', '\\d*');
+        input.addEventListener('input', e => {
+          e.target.value = e.target.value.replace(/[^\d]/g, '');
+        });
+      } else if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        input.inputMode = 'numeric';
+        input.addEventListener('input', e => {
+          const digits = e.target.value.replace(/[^\d]/g, '');
+          e.target.value = digits ? Number(digits).toLocaleString('en-US') : '';
+        });
+      } else if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        input.addEventListener('input', e => {
+          const v = e.target.value;
+          if (/^[\d,]*$/.test(v)) {
+            const digits = v.replace(/,/g, '');
+            e.target.value = digits ? Number(digits).toLocaleString('en-US') : '';
+          }
+        });
+      }
+    }
+    function formatInitialValue(name, val) {
+      if (val === null || val === undefined) return '';
+      const s = String(val);
+      if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        const digits = s.replace(/[^\d]/g, '');
+        return digits ? Number(digits).toLocaleString('en-US') : '';
+      }
+      if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        if (/^[\d,]*$/.test(s)) {
+          const digits = s.replace(/,/g, '');
+          return digits ? Number(digits).toLocaleString('en-US') : '';
+        }
+        return s;
+      }
+      return s;
+    }
+    function stripCommasIfPrice(name, val) {
+      if (typeof val !== 'string') return val;
+      if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
+        return val.replace(/,/g, '');
+      }
+      if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
+        return /^[\d,]+$/.test(val) ? val.replace(/,/g, '') : val;
+      }
+      return val;
+    }
+
+    function resizeImageToDataUrl(file, maxEdge) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const longEdge = Math.max(img.width, img.height);
+          const scale = longEdge > maxEdge ? maxEdge / longEdge : 1;
+          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
+        img.src = url;
+      });
+    }
+
     // ── 作品登録 ──
-    function saveArtwork() {
-      // 全フィールドのerrorクラスを一括リセット
+    async function saveArtwork() {
       document.querySelectorAll('#contentInput .input-field input, #contentInput .input-field textarea')
         .forEach(el => el.classList.remove('error'));
       document.getElementById('inputError').innerText = '';
@@ -1251,43 +1679,77 @@
       let hasError = false;
       const artistEl = document.getElementById('art_artist');
       if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
-      activeFields.filter(f => !ARTIST_FIELDS.includes(f.name)).forEach(f => {
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_MAP[f.name]; if (!def) return;
+        if (def.type === 'image') {
+          if (!f.required) return;
+          const preview = document.getElementById('art_' + f.name + '_preview');
+          const pending = preview && preview.dataset ? preview.dataset.pending : '';
+          if (!pending) hasError = true;
+          return;
+        }
         const el = document.getElementById('art_' + f.name); if (!el) return;
         if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; }
       });
-      if (hasError) { document.getElementById('inputError').innerText = '⚠️ 必須項目を入力してください。'; return; }
+      if (hasError) { document.getElementById('inputError').innerText = '⚠️ 必須項目を入力してください（画像必須の場合は写真も）。'; return; }
 
       const data = {};
       ARTIST_FIELDS.forEach(f => { const el = document.getElementById('art_' + f); if (el) data[f] = el.value.trim(); });
-      activeFields.filter(f => !ARTIST_FIELDS.includes(f.name)).forEach(f => { const el = document.getElementById('art_' + f.name); if (el) data[f.name] = el.value.trim(); });
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_MAP[f.name]; if (!def || def.type === 'image') return;
+        const el = document.getElementById('art_' + f.name);
+        if (el) data[f.name] = stripCommasIfPrice(f.name, el.value.trim());
+      });
 
       document.getElementById('btnSaveArt').disabled = true;
 
       const snsData = {};
-      ['insta','x','facebook','web'].forEach(f => { const el = document.getElementById('art_'+f); if(el) snsData[f]=el.value.trim(); });
+      SNS_FIELDS.forEach(f => { const el = document.getElementById('art_'+f); if(el) snsData[f]=el.value.trim(); });
       const fullData = { ...data, ...snsData };
 
-      window.fsSaveArtwork(currentEx, fullData)
-        .then(res => {
+      try {
+        const res = await window.fsSaveArtwork(currentEx, fullData);
+        if (!res.success) {
           document.getElementById('btnSaveArt').disabled = false;
-          if (res.success) {
-            const banner = document.getElementById('saveBanner');
-            banner.innerText = '✅ ' + res.artworkId + ' を登録しました。';
-            banner.style.display = 'block';
-            activeFields.filter(f => !ARTIST_FIELDS.includes(f.name)).forEach(f => {
-              const el = document.getElementById('art_' + f.name);
-              if (el) { el.value = ''; el.classList.remove('error'); }
-            });
-            setTimeout(() => { banner.style.display = 'none'; }, 3000);
-            banner.scrollIntoView({ behavior: 'smooth' });
-          } else {
-            document.getElementById('inputError').innerText = 'Error: ' + res.error;
+          document.getElementById('inputError').innerText = 'Error: ' + res.error;
+          return;
+        }
+        const newId = res.artworkId;
+        const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
+        if (imageField) {
+          const preview = document.getElementById('art_' + imageField.name + '_preview');
+          const pending = preview && preview.dataset ? preview.dataset.pending : '';
+          if (pending) {
+            const url = await window.fsUploadArtworkImage(currentEx, newId, pending);
+            await window.fsSetArtwork(currentEx, newId, { image_url: url });
           }
-        })
-        .catch(err => {
-          document.getElementById('btnSaveArt').disabled = false;
-          document.getElementById('inputError').innerText = 'Error: ' + err.message;
+        }
+        document.getElementById('btnSaveArt').disabled = false;
+        const banner = document.getElementById('saveBanner');
+        banner.innerText = '✅ ' + newId + ' を登録しました。';
+        banner.style.display = 'block';
+        // 連続入力支援: 画像だけクリア、テキスト系は全部保持して次の作品入力を楽にする。
+        // タイトルもシリーズ作品では使い回せるよう保持する。
+        activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+          const def = FIELD_MAP[f.name]; if (!def) return;
+          if (def.type === 'image') {
+            const file = document.getElementById('art_' + f.name); if (file) file.value = '';
+            const prev = document.getElementById('art_' + f.name + '_preview');
+            if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); delete prev.dataset.pending; }
+            return;
+          }
+          const el = document.getElementById('art_' + f.name);
+          if (el) el.classList.remove('error');
         });
+        setTimeout(() => { banner.style.display = 'none'; }, 3000);
+        banner.scrollIntoView({ behavior: 'smooth' });
+        // 入力欄にフォーカスを戻す（必要なら手で書き換えやすいよう全選択）
+        const titleEl = document.getElementById('art_title');
+        if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
+      } catch (err) {
+        document.getElementById('btnSaveArt').disabled = false;
+        document.getElementById('inputError').innerText = 'Error: ' + err.message;
+      }
     }
 
     // ── 登録済み一覧 ──
@@ -1362,12 +1824,13 @@
       artLabel.textContent = '🖼️ 作品情報';
       panel.appendChild(artLabel);
 
-      const artFields = activeFields.filter(f => FIELD_MAP[f.name] && !ARTIST_FIELDS.includes(f.name));
+      const artFields = activeFields.filter(f => FIELD_MAP[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
       let gridOpen = false, gridEl = null;
       artFields.forEach(f => {
         const def = FIELD_MAP[f.name];
         const val = art[f.name] !== undefined ? art[f.name] : '';
-        if (def.textarea) {
+        const isBlock = def.textarea || def.type === 'image';
+        if (isBlock) {
           if (gridOpen) { panel.appendChild(gridEl); gridOpen = false; gridEl = null; }
           panel.appendChild(makeInputField(def, f.required, 'edit_' + art.artwork_id + '_', val));
         } else {
@@ -1402,8 +1865,8 @@
       panel.appendChild(snsLabel);
 
       const snsGrid = document.createElement('div'); snsGrid.className = 'sns-grid';
-      [['insta', 'Instagram'], ['x', 'X (Twitter)'], ['facebook', 'Facebook'], ['web', 'Web']].forEach(([name, label]) => {
-        const def = { name, label, desc: '', textarea: false };
+      SNS_FIELDS.forEach(name => {
+        const def = { name, label: ARTIST_LABELS[name] || name, desc: '', textarea: false };
         snsGrid.appendChild(makeInputField(def, false, 'edit_' + art.artwork_id + '_', art[name] || ''));
       });
       panel.appendChild(snsGrid);
@@ -1434,22 +1897,49 @@
     }
 
     // ── 作品更新 ──
-    function updateArtwork(artworkId, originalArtist) {
+    async function updateArtwork(artworkId, originalArtist) {
       const prefix = 'edit_' + artworkId + '_';
       const artworkData = {};
-      activeFields.filter(f => !ARTIST_FIELDS.includes(f.name)).forEach(f => {
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_MAP[f.name]; if (!def || def.type === 'image') return;
         const el = document.getElementById(prefix + f.name);
-        if (el) artworkData[f.name] = el.value.trim();
+        if (el) artworkData[f.name] = stripCommasIfPrice(f.name, el.value.trim());
       });
       const artistData = {};
-      ARTIST_FIELDS.forEach(f => {
+      ALL_ARTIST_FIELDS.forEach(f => {
         const el = document.getElementById(prefix + f);
         if (el) artistData[f] = el.value.trim();
       });
 
+      const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
+      if (imageField && imageField.required) {
+        const preview = document.getElementById(prefix + imageField.name + '_preview');
+        const existing = (document.getElementById(prefix + imageField.name + '_existing') || {}).value || '';
+        const pending = preview && preview.dataset ? preview.dataset.pending : '';
+        if (!pending && !existing) {
+          showEditMsg(artworkId, '⚠️ 作品画像は必須です。', '#d93025');
+          return;
+        }
+      }
+
       const btnUpdate = document.querySelector('#panel_' + artworkId + ' .btn-update');
       if (btnUpdate) btnUpdate.disabled = true;
       showEditMsg(artworkId, '<span class="spinner-sm"></span> 更新中...', '#888');
+
+      try {
+        if (imageField) {
+          const preview = document.getElementById(prefix + imageField.name + '_preview');
+          const pending = preview && preview.dataset ? preview.dataset.pending : '';
+          if (pending) {
+            const url = await window.fsUploadArtworkImage(currentEx, artworkId, pending);
+            artworkData.image_url = url;
+          }
+        }
+      } catch (err) {
+        if (btnUpdate) btnUpdate.disabled = false;
+        showEditMsg(artworkId, 'Error: ' + err.message, '#d93025');
+        return;
+      }
 
       window.fsUpdateArtwork(currentEx, artworkId, artworkData, artistData, originalArtist)
         .then(res => {
@@ -1539,11 +2029,87 @@
     document.addEventListener('DOMContentLoaded', () => {
       const ex = getUrlParam('ex');
       const exCodeInput = document.getElementById('exCodeInput');
+      // ex_code は英数字・ハイフン・アンダースコアのみ許可。それ以外 (@ 等) は不正な URL なので消す
+      if (ex && /[^A-Za-z0-9_-]/.test(ex)) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('ex');
+        window.history.replaceState({}, '', url.toString());
+        return;
+      }
       if (ex && exCodeInput) {
         exCodeInput.value = ex;
         loadExhibition();
       }
     });
+
+    // 🎓 練習モード卒業: テストデータをクリアして本番運用に切替
+    async function graduateExhibition() {
+      const ex = currentEx;
+      if (!ex) return;
+      if (!confirm('本番運用に切替えますか?\n\nテスト作品・コメント・いいね・画像ファイルがすべて削除されます。\n項目設定・キャプションテンプレート等の設定は残ります。')) return;
+
+      const user = firebase.auth().currentUser;
+      if (!user || !user.email) {
+        alert('ログインが必要です。');
+        return;
+      }
+
+      const btn = document.getElementById('btnGraduate');
+      const msgEl = document.getElementById('graduateMsg');
+      btn.disabled = true;
+      msgEl.style.color = '#888';
+      msgEl.innerText = '処理中...';
+
+      try {
+        // 1. GAS の master sheet を更新 (is_sandbox=FALSE, expire_at='')
+        const gasRes = await gasCall({
+          action: 'graduateExhibition',
+          ex: ex,
+          email: user.email
+        });
+        if (!gasRes || !gasRes.success) {
+          throw new Error(gasRes && gasRes.error ? gasRes.error : 'GAS 更新失敗');
+        }
+
+        // 2. Firestore artworks をすべて削除
+        const aSnap = await firebase.firestore().collection('artworks').where('exCode', '==', ex).get();
+        const aDeletes = aSnap.docs.map(d => d.ref.delete());
+        await Promise.all(aDeletes);
+
+        // 3. Firestore likes をすべて削除
+        const lSnap = await firebase.firestore().collection('likes').where('exCode', '==', ex).get();
+        const lDeletes = lSnap.docs.map(d => d.ref.delete());
+        await Promise.all(lDeletes);
+
+        // 4. Storage の画像を削除 (各 artwork の画像ファイル)
+        try {
+          const storageRef = firebase.storage().ref('artworks');
+          const listing = await storageRef.listAll();
+          const imageDeletes = listing.items
+            .filter(item => item.name.startsWith(ex + '_'))
+            .map(item => item.delete());
+          await Promise.all(imageDeletes);
+        } catch (e) {
+          console.warn('Storage cleanup partial failure:', e);
+        }
+
+        // 5. Firestore exhibitions ドキュメントの is_sandbox / expire_at をクリア
+        await firebase.firestore().collection('exhibitions').doc(ex).set({
+          is_sandbox: false,
+          expire_at: null,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        msgEl.style.color = '#1a73e8';
+        msgEl.innerText = '✅ 本番運用に切替えました。ページを再読み込みします...';
+        setTimeout(() => location.reload(), 1500);
+      } catch (err) {
+        console.error('graduate failed:', err);
+        msgEl.style.color = '#d93025';
+        msgEl.innerText = 'エラー: ' + (err && err.message ? err.message : err);
+        btn.disabled = false;
+      }
+    }
 
     function addArtworks() {
       const addCount = parseInt(document.getElementById('addArtworkCount').value);
@@ -1571,7 +2137,10 @@
 
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
@@ -1582,6 +2151,13 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
+    const fsStorage = firebase.storage();
+    window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
+      const blob = await (await fetch(dataUrl)).blob();
+      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
+      await ref.put(blob, { contentType: 'image/jpeg' });
+      return await ref.getDownloadURL();
+    };
     window.fsGetArtworkList = async (exCode) => {
       const snap = await fsDb.collection('artworks')
         .where('exCode', '==', exCode)
@@ -1598,7 +2174,51 @@
         registration_fields: fieldsJson,
         updatedAt: new Date().toISOString()
       }, { merge: true });
+      // SS にも反映（caption 側の参照向け、fire-and-forget）
+      gasCall({ action: 'saveRegistrationFields', ex: exCode, fieldsJson: fieldsJson })
+        .catch(e => console.warn('SS saveRegistrationFields sync failed:', e));
       return { success: true };
+    };
+    window.fsGetRegistrationFields = async (exCode) => {
+      const snap = await fsDb.collection('exhibitions').doc(exCode).get();
+      if (!snap.exists) return null;
+      const v = snap.data().registration_fields;
+      if (!v) return null;
+      try { return typeof v === 'string' ? JSON.parse(v) : v; }
+      catch (e) { console.warn('registration_fields parse failed:', e); return null; }
+    };
+    window.fsGetCommentWindow = async (exCode) => {
+      const snap = await fsDb.collection('exhibitions').doc(exCode).get();
+      if (!snap.exists) return { start: '', end: '' };
+      const d = snap.data();
+      return { start: d.comments_start_at || '', end: d.comments_end_at || '' };
+    };
+    window.fsSaveCommentWindow = async (exCode, start, end) => {
+      await fsDb.collection('exhibitions').doc(exCode).set({
+        comments_start_at: start || '',
+        comments_end_at: end || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return { success: true };
+    };
+    window.fsListExhibitions = async () => {
+      const snap = await fsDb.collection('exhibitions').get();
+      const out = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        out.push({
+          ex_code: doc.id,
+          ex_name: d.ex_name || '(名称未設定)',
+          start_date: d.start_date || '',
+          createdAt: d.createdAt || ''
+        });
+      });
+      out.sort((a, b) => {
+        const ka = a.start_date || a.createdAt || '';
+        const kb = b.start_date || b.createdAt || '';
+        return kb.localeCompare(ka);
+      });
+      return out;
     };
     window.fsSaveArtwork = async (exCode, data) => {
       const snap = await fsDb.collection('artworks').where('exCode', '==', exCode).get();
@@ -1613,6 +2233,8 @@
       if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
       const targetId = candidates[0].artwork_id;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
+      gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: 1 })
+        .catch(e => console.warn('bumpArtworkCount failed:', e));
       return { success: true, artworkId: targetId };
     };
     window.fsUpdateArtwork = async (exCode, artworkId, artworkData, artistData, originalArtist) => {
@@ -1647,17 +2269,9 @@
         const name = (d.artist || '').toString().trim();
         if (!name || seen.has(name)) return;
         seen.add(name);
-        artists.push({
-          artist: name,
-          artist_en: d.artist_en || '',
-          birth_year: d.birth_year || '',
-          death_year: d.death_year || '',
-          insta: d.insta || '',
-          x: d.x || '',
-          facebook: d.facebook || '',
-          web: d.web || '',
-          birthplace: d.birthplace || ''
-        });
+        const entry = { artist: name };
+        ALL_ARTIST_FIELDS.forEach(f => { if (f !== 'artist') entry[f] = d[f] || ''; });
+        artists.push(entry);
       });
       return { success: true, artists: artists };
     };
@@ -1675,9 +2289,86 @@
       // Security Rules で delete は禁止しているため、status を空文字に戻して論理削除に変更
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
       const snap = await docRef.get();
+      const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
       const sk = snap.exists ? snap.data().security_key : null;
       await docRef.set({ status: "", security_key: sk, updatedAt: new Date().toISOString() }, { merge: true });
+      if (wasRegistered) {
+        gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
+          .catch(e => console.warn('bumpArtworkCount failed:', e));
+      }
     };
+  </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    // ===== Email Link 認証の起動処理 =====
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      // ページ読み込み時: メールリンクから戻ってきていれば signin を完了
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) {
+            setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+          }
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      // 認証状態の変化を監視: 主催者本人なら mainArea、それ以外は notOrganizerCard / pwCard
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && statusEl) {
+          statusEl.innerText = '🔓 ' + user.email + ' でログイン中';
+          statusEl.style.display = 'block';
+        } else if (statusEl) {
+          statusEl.style.display = 'none';
+        }
+        // 既に展覧会を Load 済みなら表示判定をやり直す
+        if (typeof currentEx !== 'undefined' && currentEx && typeof applyAuthorizationUI === 'function') {
+          applyAuthorizationUI();
+        }
+      });
+
+      // 「別のアカウントでログインし直す」ボタンの処理
+      window.signOutAndRetry = function () {
+        window.operatorAuth.signOut().then(function () {
+          if (typeof applyAuthorizationUI === 'function') applyAuthorizationUI();
+        });
+      };
+
+      // 「リンクを送信」ボタンの処理
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        // 主催者メアドと一致しないなら送信前にエラー (主催者メアド自体は表示しない)
+        var normalized = email.toLowerCase();
+        if (currentExEmail && normalized !== currentExEmail) {
+          setMsg('このメールアドレスはこの展覧会の主催者として登録されていません。', '#d93025');
+          return;
+        }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
   </script>
 </body>
 
