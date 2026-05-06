@@ -575,6 +575,11 @@
             </div>
             <code class="qr-url">${escapeHtml(url)}</code>
             <div class="qr-actions">
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"
+                 style="padding:5px 12px; font-size:0.82em; background:#1a73e8; color:#fff;
+                        border:1px solid #1a73e8; border-radius:6px; text-decoration:none;">
+                🌐 ギャラリーを開く
+              </a>
               <button onclick="copyQrUrl('${url.replace(/'/g, "\\'")}')">URL をコピー</button>
               <button onclick="printQrPage('${url.replace(/'/g, "\\'")}')">印刷用ページを開く</button>
             </div>
