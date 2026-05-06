@@ -651,15 +651,15 @@ exports.galleryPage = onRequest(async (req, res) => {
 // =========================================================
 // Artwork access tokens (Plan 5-A: security_key の置換)
 //
-// 5 種類の認証経路をサポートする。
+// 4 種類の認証経路をサポートする。
 //   1. operator email (OPERATOR_EMAILS にあれば常時 OK)
 //   2. organizer email (exhibitions/{ex}.email と auth.token.email が一致)
 //   3. exhibition access token (input.html 招待 URL: ex 全体の作品に書ける)
 //   4. artwork QR token (index.html QR: 特定 artworkId にだけ書ける)
-//   5. legacy security_key (既発行 QR の互換、最終的に廃止)
 //
-// 1〜4 は Cloud Function 内で auth、admin SDK で書き込みするので、
-// Firestore Rules は将来的に書き込み禁止に閉じてよい (セッション 2 で対応)。
+// 全経路 admin SDK で書き込みする。Firestore Rules は artworks の
+// create/update を false にしてあり、Cloud Function 経由のみ通る。
+// security_key は doc に残置しているが認可には使わない (DB の遺物)。
 // =========================================================
 
 function computeExhibitionSig(secret, exCode, exp) {
@@ -794,6 +794,55 @@ exports.mintArtworkQrToken = onCall(
   },
 );
 
+// mintArtworkQrTokenFromGas:
+//   GAS から呼ばれる HTTP エンドポイント。GAS_ADMIN_SECRET で認証して、
+//   GAS の addArtworks / regenerateQrUrls から作品単位 HMAC を発行する。
+//   レスポンスは { success, exp, sig }。
+exports.mintArtworkQrTokenFromGas = onRequest(
+  { secrets: [ARTIST_TOKEN_SECRET, GAS_ADMIN_SECRET] },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ success: false, error: "POST only" });
+      return;
+    }
+    const body = req.body || {};
+    const adminSecret = String(body.adminSecret || "");
+    const expected = GAS_ADMIN_SECRET.value();
+    if (!expected || adminSecret !== expected) {
+      res.status(403).json({ success: false, error: "invalid admin secret" });
+      return;
+    }
+    const exCode = String(body.exCode || "").trim();
+    const artworkId = String(body.artworkId || "").trim();
+    if (!exCode || !artworkId) {
+      res.status(400).json({ success: false, error: "exCode/artworkId required" });
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      res.status(400).json({ success: false, error: "exCode/artworkId invalid" });
+      return;
+    }
+    const expDays = Number(body.expDays);
+    if (!Number.isFinite(expDays) || expDays < 1 || expDays > 730) {
+      res.status(400).json({ success: false, error: "expDays must be 1-730" });
+      return;
+    }
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      res.status(500).json({ success: false, error: "ARTIST_TOKEN_SECRET not configured" });
+      return;
+    }
+    const exp = Math.floor(Date.now() / 1000) + Math.floor(expDays) * 86400;
+    const sig = computeArtworkSig(secret, exCode, artworkId, exp);
+    logger.info("artwork QR token minted (from GAS)", {
+      exCode,
+      artworkId,
+      expDays: Math.floor(expDays),
+    });
+    res.status(200).json({ success: true, exp, sig });
+  },
+);
+
 exports.submitArtwork = onCall(
   { secrets: [ARTIST_TOKEN_SECRET] },
   async (request) => {
@@ -881,15 +930,9 @@ exports.submitArtwork = onCall(
         if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
           authMode = "artwork_token";
         }
-      } else if (tok.kind === "legacy") {
-        const legacyKey = String(tok.key || "");
-        if (existingSnap.exists) {
-          const existingKey = String((existingSnap.data() || {}).security_key || "");
-          if (existingKey && existingKey === legacyKey) {
-            authMode = "legacy_key";
-          }
-        }
       }
+      // legacy_key 経路は削除 (artwork doc が公開読み取り可なので key を取れて
+      // しまえば誰でも書ける状態だった。本来の安全性確保が目的なので閉じる)
     }
 
     if (!authMode) {
@@ -900,7 +943,7 @@ exports.submitArtwork = onCall(
     }
 
     if (!existingSnap.exists) {
-      if (authMode === "artwork_token" || authMode === "legacy_key") {
+      if (authMode === "artwork_token") {
         throw new HttpsError("not-found", "対象の作品枠が見つかりません");
       }
     }

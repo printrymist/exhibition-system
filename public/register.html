@@ -867,6 +867,12 @@
           <div class="save-msg" id="sendGuideMsg"></div>
         </div>
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作品 QR URL の再生成</p>
+          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">既存の作品スプレッドシートの qr_url を新形式 (HMAC) に再生成します。実行後は QR コードを印刷し直してください。</p>
+          <button class="btn-wide" id="btnRegenQr" onclick="regenerateQrUrls()">🔄 QR URL を再生成</button>
+          <div class="save-msg" id="regenQrMsg"></div>
+        </div>
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加</p>
           <div style="display:flex; gap:10px;">
             <input type="number" id="addArtworkCount" placeholder="追加数 (例: 10)" min="1" max="100"
@@ -1453,6 +1459,29 @@
     }
 
     // ── 作家向け案内メール送信 ──
+    function regenerateQrUrls() {
+      if (!currentEx) return;
+      if (!confirm('作品 QR URL を全件再生成しますか?\n\n旧 URL (?key=...) は無効になり、印刷済みの QR コードは使えなくなります。新しい QR を印刷し直してください。')) return;
+      const btn = document.getElementById('btnRegenQr');
+      btn.disabled = true;
+      showMsg('regenQrMsg', '<span class="spinner-sm"></span> 再生成中...', '#888');
+      gasCall({ action: 'regenerateQrUrls', ex: currentEx })
+        .then(res => {
+          btn.disabled = false;
+          if (res.success) {
+            showMsg('regenQrMsg', `✅ ${res.updated} 件の QR URL を再生成しました。`, '#1a73e8');
+          } else if (res.updated > 0) {
+            showMsg('regenQrMsg', `⚠ 一部失敗: 成功 ${res.updated} / 失敗 ${res.failed}`, '#d93025');
+          } else {
+            showMsg('regenQrMsg', 'Error: ' + (res.error || res.errors && res.errors.join(', ')), '#d93025');
+          }
+        })
+        .catch(err => {
+          btn.disabled = false;
+          showMsg('regenQrMsg', 'Error: ' + err.message, '#d93025');
+        });
+    }
+
     async function sendArtistGuide() {
       if (!activeFields || activeFields.length === 0) {
         showMsg('sendGuideMsg', '⚠️ 項目を1つ以上設定して保存してください。', '#d93025');

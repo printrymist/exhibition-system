@@ -54,6 +54,33 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// HMAC 検証 (Plan 5-A: artwork_token = HMAC over "artwork:exCode:artworkId:exp")
+function verifyArtworkAccessToken(ex, id, exp, sig) {
+  console.log('verifyArtworkAccessToken called', { ex: ex, id: id, exp: exp, hasSig: !!sig });
+  if (!exp || !sig) {
+    console.log('verifyArtworkAccessToken: missing exp or sig');
+    return false;
+  }
+  const expNum = Number(exp);
+  if (!Number.isFinite(expNum) || expNum <= Math.floor(Date.now() / 1000)) {
+    console.log('verifyArtworkAccessToken: exp invalid or past: ' + exp);
+    return false;
+  }
+  const secret = PropertiesService.getScriptProperties().getProperty('ARTIST_TOKEN_SECRET');
+  if (!secret) {
+    console.log('verifyArtworkAccessToken: ARTIST_TOKEN_SECRET not set');
+    return false;
+  }
+  const message = 'artwork:' + ex + ':' + id + ':' + expNum;
+  const computed = Utilities.computeHmacSha256Signature(message, secret);
+  const hex = computed.map(function(b) {
+    return ('0' + (b & 0xff).toString(16)).slice(-2);
+  }).join('');
+  console.log('verifyArtworkAccessToken result',
+    { message: message, secretLen: secret.length, computed: hex, received: sig, match: hex === String(sig) });
+  return hex === String(sig);
+}
+
 function doPost(e) {
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
@@ -64,10 +91,24 @@ function doPost(e) {
     const ex = e.parameter.ex;
     const id = e.parameter.id;
     const key = e.parameter.key;
+    const exp = e.parameter.exp;
+    const sig = e.parameter.sig;
 
-    // セキュリティチェック
+    console.log('doPost', {
+      action: action, ex: ex, id: id,
+      hasKey: !!key, hasExp: !!exp, hasSig: !!sig,
+      paramKeys: Object.keys(e.parameter || {}),
+    });
+
+    // セキュリティチェック: 新 HMAC (exp+sig) または旧 key のいずれかで認証
     const data = ansGetArtworkData(ex, id);
-    if (!data || data.securityKey !== key) {
+    if (!data) {
+      output.setContent(JSON.stringify({ success: false, error: 'アクセスエラー' }));
+      return output;
+    }
+    const okHmac = verifyArtworkAccessToken(ex, id, exp, sig);
+    const okLegacy = !!key && data.securityKey === key;
+    if (!okHmac && !okLegacy) {
       output.setContent(JSON.stringify({
         success: false, error: 'アクセスエラー'
       }));

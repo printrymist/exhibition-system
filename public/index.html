@@ -497,6 +497,8 @@
       postParams.append('ex', exVal);
       postParams.append('id', idVal);
       postParams.append('key', keyVal);
+      if (expVal) postParams.append('exp', expVal);
+      if (sigVal) postParams.append('sig', sigVal);
       if (extraParams) {
         Object.keys(extraParams).forEach(k => {
           postParams.append(k, typeof extraParams[k] === 'object'
@@ -734,12 +736,8 @@
           alert("エラー: " + (data.msg || "データ取得失敗"));
           return;
         }
-        // 旧 key= URL に対する UX ゲート (実 security は Cloud Function 側で担保)。
-        // 新 exp+sig URL は client-side チェック不要 (Cloud Function が HMAC 検証する)。
-        if (keyVal && data.securityKey && data.securityKey !== keyVal) {
-          alert("アクセスエラー: 不正な URL です");
-          return;
-        }
+        // セッション 3: keyVal チェックは撤去 (実 security は Cloud Function 側で
+        // HMAC 検証して担保する。security_key は URL に乗らない方針)。
         if (data.isRegistered) {
           document.getElementById('ansWrapper').style.display = 'block';
           ansInit(exVal, idVal, data);
@@ -1197,6 +1195,16 @@
           return;
         }
 
+        // GAS が { success: false, error: ... } 形式 (未認証等) で返した場合の保険。
+        // result.action が undefined のままだとボタンが「通信中」のまま固まるので、
+        // ここで明示的にハンドリングする。
+        if (result && result.success === false) {
+          alert((result.error || 'エラーが発生しました'));
+          btn.innerText = originalText;
+          btn.disabled = false;
+          return;
+        }
+
         if (result.action === "COUNT") {
           document.getElementById('ansInputView').style.display = 'none';
           var alreadyMsg = document.getElementById('ansAlreadyLikedMsg');
@@ -1221,7 +1229,16 @@
           }).catch(e => console.error('Firestore:', e));
           var nickname = document.getElementById('ansNicknameInput').value.trim();
           if (nickname) localStorage.setItem("nickname_" + exVal, nickname);
+          return;
         }
+
+        // どの action にも該当しないレスポンス (想定外の構造) のフォールバック。
+        // ここに来る = GAS 側のロジック変更で返り値構造が変わった可能性があるので、
+        // ボタンを戻して console にログしておく。
+        console.warn('ansProcessForm: unexpected response', result);
+        alert('予期しないレスポンスを受信しました。コンソールを確認してください。');
+        btn.innerText = originalText;
+        btn.disabled = false;
 
       }).catch(err => {
         alert("通信エラー: " + err.message);
@@ -1323,27 +1340,19 @@
     };
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
 
-    // index.html (QR スキャン経路) のアクセストークンを決定する。
-    // 1. URL に exp+sig があれば artwork_token (HMAC over exCode:artworkId:exp)
-    // 2. URL に key= があれば legacy_key (既発行 QR との互換)
-    // 3. それ以外は doc の security_key を取って legacy_key (再登録 / unlock 等)
-    async function _resolveArtworkAccessToken(exCode, artworkId) {
+    // index.html (QR スキャン経路) は URL の exp+sig (artwork_token) のみ受け付ける。
+    // legacy security_key 経路はセッション 3 で撤去済。
+    function _resolveArtworkAccessToken(exCode, artworkId) {
       if (expVal && sigVal && exCode === exVal && artworkId === idVal) {
         return { kind: 'artwork', exp: Number(expVal), sig: sigVal };
       }
-      if (keyVal && exCode === exVal && artworkId === idVal) {
-        return { kind: 'legacy', key: keyVal };
-      }
-      const snap = await fsDb.collection('artworks').doc(exCode + '_' + artworkId).get();
-      const sk = snap.exists ? (snap.data().security_key || '') : '';
-      if (sk) return { kind: 'legacy', key: sk };
       return null;
     }
 
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const accessToken = await _resolveArtworkAccessToken(exCode, artworkId);
+      const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
       if (!accessToken) {
-        console.warn('fsSetArtwork: no access token available for', exCode, artworkId, '- skipping write');
+        console.warn('fsSetArtwork: no access token in URL for', exCode, artworkId, '- skipping write');
         return;
       }
       const res = await _submitArtworkFn({

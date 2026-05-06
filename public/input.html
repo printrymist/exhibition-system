@@ -1034,17 +1034,15 @@
     const fsStorage = firebase.storage();
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
 
-    // 招待 URL に exp+sig があれば exhibition token を使う。無ければ既存 doc の
-    // security_key を読んで legacy 経路にフォールバックする。
+    // 招待 URL の exp+sig (exhibition token) のみ受け付ける。
+    // legacy security_key 経路はセッション 3 で撤去済 (誰でも doc を読めるため
+    // legacy_key は実質的な認証になっていなかった)。
     function _getUrlExp() { return new URLSearchParams(window.location.search).get('exp') || ''; }
     function _getUrlSig() { return new URLSearchParams(window.location.search).get('sig') || ''; }
-    async function _resolveAccessToken(exCode, artworkId) {
+    function _resolveAccessToken() {
       const exp = _getUrlExp();
       const sig = _getUrlSig();
       if (exp && sig) return { kind: 'exhibition', exp: Number(exp), sig: sig };
-      const snap = await fsDb.collection('artworks').doc(exCode + '_' + artworkId).get();
-      const sk = snap.exists ? (snap.data().security_key || '') : '';
-      if (sk) return { kind: 'legacy', key: sk };
       return null;
     }
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
@@ -1107,9 +1105,9 @@
       return { success: true, updatedArtistCount: updatedArtistCount };
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const accessToken = await _resolveAccessToken(exCode, artworkId);
+      const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('アクセストークンが取得できません (URL の exp/sig または既存 doc の security_key が必要)');
+        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
       }
       const res = await _submitArtworkFn({
         exCode: exCode,
