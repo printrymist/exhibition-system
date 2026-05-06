@@ -460,14 +460,10 @@ function ansGetArtworkData(ex, id) {
 }
 
 function ansProcessForm(formData) {
-  // --- A. 基本コマンド ---
-  if (formData.nickname === formData.workArtist) {
-    if (formData.comment === "ログイン" || formData.comment.toLowerCase() === "login") return { action: "PROMPT_PASSWORD" };
-    if (formData.comment === "ログアウト" || formData.comment.toLowerCase() === "logout") return { action: "LOGOUT_SUCCESS" };
-    if (formData.comment === "SNS同期" || formData.comment === "ＳＮＳ同期" || formData.comment === "sns同期" || formData.comment.toLowerCase() === "sns sync") {
-      return { action: "SNS_SYNC_REQUEST" };
-    }
-  }
+  // 旧パスワード認証 (ログイン/ログアウト) と SNS 同期コマンドは Phase 5-B で撤去:
+  //   - ログイン/ログアウト: Email Link 認証 (Phase 3) に移行済
+  //   - SNS 同期: input.html / register.html の作家伝播ロジックで代替
+  // unlock (登録解除) と reset (cache flush) は引き続き残置。
 
   // --- B. 展覧会設定の取得 ---
   var master = getMasterData(formData.ex);

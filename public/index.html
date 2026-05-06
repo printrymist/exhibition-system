@@ -1109,71 +1109,9 @@
 
       gasCall('ansProcessForm', formPayload).then(result => {
 
-        if (result.action === "SNS_SYNC_REQUEST") {
-          gasCall('ansGetArtworkData').then(res => {
-            document.getElementById('syncPreviewList').innerHTML =
-              "Instagram: " + (res.sns.insta || t('syncNotSet')) + "<br>" +
-              "X: " + (res.sns.x || t('syncNotSet')) + "<br>" +
-              "Web: " + (res.sns.web ? t('syncWebSet') : t('syncNotSet'));
-            document.getElementById('ansSnsSyncModal').style.display = 'flex';
-            document.getElementById('ansSnsSyncSubmitBtn').onclick = () => {
-              document.getElementById('ansSnsSyncModal').style.display = 'none';
-              btn.innerText = t('ansSubmitBtnSyncing');
-              gasCall('ansSyncSnsToAll', {
-                artist: res.artist,
-                sns: JSON.stringify(res.sns)
-              }).then(() => {
-                alert(t('syncDone'));
-                reloadApp();
-              });
-            };
-          });
-          document.getElementById('ansSnsSyncCancelBtn').onclick = () => {
-            document.getElementById('ansSnsSyncModal').style.display = 'none';
-            btn.innerText = originalText; btn.disabled = false;
-          };
-          return;
-        }
-
-        if (result.action === "PROMPT_PASSWORD") {
-          if (localStorage.getItem("isAdmin_" + exVal) === "true") {
-            alert(t('pwSuccess'));
-            reloadApp();
-            return;
-          }
-          document.getElementById('ansPwModal').style.display = 'flex';
-          document.getElementById('ansPwInput').value = '';
-          document.getElementById('ansPwInput').focus();
-          document.getElementById('ansPwSubmitBtn').onclick = function() {
-            var pw = document.getElementById('ansPwInput').value;
-            if (!pw) return;
-            document.getElementById('ansPwModal').style.display = 'none';
-            gasCall('verifyAdmin', { password: pw }).then(auth => {
-              if (auth.success) {
-                localStorage.setItem("isAdmin_" + exVal, "true");
-                alert(t('pwSuccess'));
-                reloadApp();
-              } else {
-                alert(t('pwFail'));
-                btn.innerText = originalText;
-                btn.disabled = false;
-              }
-            });
-          };
-          document.getElementById('ansPwCancelBtn').onclick = function() {
-            document.getElementById('ansPwModal').style.display = 'none';
-            btn.innerText = originalText;
-            btn.disabled = false;
-          };
-          return;
-        }
-
-        if (result.action === "LOGOUT_SUCCESS") {
-          localStorage.removeItem("isAdmin_" + exVal);
-          alert(t('alertLogout'));
-          reloadApp();
-          return;
-        }
+        // Phase 5-B: SNS_SYNC_REQUEST / PROMPT_PASSWORD / LOGOUT_SUCCESS は撤去済。
+        // それぞれ input.html の作家伝播ロジック / Email Link 認証 (Phase 3) に
+        // 移行されている。
 
         if (result.action === "UNLOCK_SUCCESS") {
           if (window.fsSetArtwork) {
@@ -1212,21 +1150,41 @@
           document.getElementById('ansThankYou').style.display = 'block';
           document.getElementById('ansThankYou').classList.add('fade-in');
           var isAdditional = (document.getElementById('ansIsLikeInput').value === "0");
+          // 仮表示は GAS の count、その後 Firestore 由来に上書きする
           document.getElementById('ansCountMsg').innerText = isAdditional
             ? t('ansCountMsgAdded') + result.count
             : t('ansCountMsg') + result.count;
           localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
-          if (window.fsAddLike) window.fsAddLike({
-            exCode: exVal,
-            ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
-            workId: idVal,
-            title: formPayload.workTitle,
-            artist: formPayload.workArtist,
-            sessionId: formPayload.sessionId,
-            nickname: formPayload.nickname,
-            comment: formPayload.comment,
-            isLike: formPayload.isLike === "1"
-          }).catch(e => console.error('Firestore:', e));
+          // Firestore に書き込み → その上で Firestore 集計値で再表示
+          // (dashboard.html / gallery.html と同じソースなので整合する)
+          (async () => {
+            try {
+              if (window.fsAddLike) {
+                await window.fsAddLike({
+                  exCode: exVal,
+                  ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
+                  workId: idVal,
+                  title: formPayload.workTitle,
+                  artist: formPayload.workArtist,
+                  sessionId: formPayload.sessionId,
+                  nickname: formPayload.nickname,
+                  comment: formPayload.comment,
+                  isLike: formPayload.isLike === "1"
+                });
+              }
+              const snap = await fsDb.collection('likes')
+                .where('exCode', '==', exVal)
+                .where('workId', '==', idVal)
+                .get();
+              let fsCount = 0;
+              snap.forEach(d => { if (d.data().isLike) fsCount++; });
+              document.getElementById('ansCountMsg').innerText = isAdditional
+                ? t('ansCountMsgAdded') + fsCount
+                : t('ansCountMsg') + fsCount;
+            } catch (e) {
+              console.error('Firestore count failed:', e);
+            }
+          })();
           var nickname = document.getElementById('ansNicknameInput').value.trim();
           if (nickname) localStorage.setItem("nickname_" + exVal, nickname);
           return;
