@@ -334,60 +334,8 @@ function doPost(e) {
 
 // （非キャッシュ版の getMasterData は削除：上のキャッシュ版に一本化）
 
-// =========================================================
-// 🌟 展覧会コードを検証
-// =========================================================
-function verifyExCode(ex) {
-  try {
-    const master = getMasterData(ex);
-    if (!master) return { success: false, error: `Exhibition code "${ex}" not found.` };
-    return { success: true, exName: master.ex_name };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// =========================================================
-// 🌟 作品台帳のヘッダーと作品データを取得
-// =========================================================
-function getCaptionData(ex) {
-  try {
-    const master = getMasterData(ex);
-    if (!master) return { success: false, error: 'Exhibition not found.' };
-
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(ex + '_artworks');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    // キャプションに不要な列を除外
-    const excludedCols = ['artwork_id', 'security_key', 'image_url', 'qr_url', 'status', 'insta', 'x', 'facebook', 'web'];
-    const captionHeaders = headers.filter(h => !excludedCols.includes(h) && h !== '');
-
-    // 登録済み作品のみ取得
-    const artworks = [];
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (row[colIndex(headers, 'status')].toString() !== '1') continue;
-      if (!row[colIndex(headers, 'artwork_id')]) continue;
-      const artwork = {};
-      headers.forEach((h, idx) => { artwork[h] = row[idx] || ''; });
-      artworks.push(artwork);
-    }
-
-
-    return {
-      success: true,
-      exCode: ex,
-      exName: master.ex_name,
-      headers: captionHeaders,
-      artworks: artworks,
-    };
-
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// Phase 6e: verifyExCode / getCaptionData は撤去 (Phase 6d でクライアント側を
+// Firestore exhibitions / artworks 直読みに移行済)。
 
 // =========================================================
 // 🌟 WorkSpaceフォルダを取得するユーティリティ
@@ -482,31 +430,7 @@ function deleteCaptionTemplate(name) {
   }
 }
 
-// =========================================================
-// 🌟 全作品のQRデータを取得（status=0含む）
-// =========================================================
-function getQrData(ex) {
-  try {
-    const master = getMasterData(ex);
-    if (!master) return { success: false, error: 'Exhibition not found.' };
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(ex + '_artworks');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const artworks = [];
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const artworkId = row[headers.indexOf('artwork_id')].toString();
-      const qrUrl = row[headers.indexOf('qr_url')].toString();
-      const status = row[headers.indexOf('status')].toString();
-      if (!artworkId || !qrUrl) continue;
-      artworks.push({ artwork_id: artworkId, qr_url: qrUrl, status: status });
-    }
-    return { success: true, artworks: artworks, exCode: ex };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// Phase 6e: getQrData は撤去 (caption.html は fsLoadAllData で Firestore 直読み)。
 
 function updateExName(ex, newName) {
   try {
@@ -529,76 +453,7 @@ function updateExName(ex, newName) {
   }
 }
 
-function loadAllData(ex) {
-  try {
-    const master = getMasterData(ex);
-    if (!master) return { success: false, error: `Exhibition code "${ex}" not found.` };
-
-    // キャッシュを確認
-    const cache = CacheService.getScriptCache();
-    const version = getCacheVersion(ex);
-    const cacheKey = 'loadAllData_' + EX_SCHEMA_VERSION + '_' + ex + '_v' + version;
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      console.log('loadAllData をキャッシュから読み込みました: ' + ex);
-      return JSON.parse(cached);
-    }
-
-    console.log('loadAllData をスプレッドシートから読み込みます: ' + ex);
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(ex + '_artworks');
-
-    // ② シートの存在チェック
-    if (!sheet) return { success: false, error: `Sheet "${ex}_artworks" not found.` };
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    const excludedCols = ['artwork_id', 'security_key', 'image_url', 'qr_url', 'status', 'insta', 'x', 'facebook', 'web'];
-    const captionHeaders = headers.filter(h => !excludedCols.includes(h) && h !== '');
-
-    // ① ループ外でインデックスを取得
-    const artworkIdIdx = headers.indexOf('artwork_id');
-    const qrUrlIdx = headers.indexOf('qr_url');
-    const statusIdx = headers.indexOf('status');
-
-    const artworks = [];
-    const qrList = [];
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const artworkId = row[artworkIdIdx].toString();
-      const qrUrl = row[qrUrlIdx].toString();
-      const status = row[statusIdx].toString();
-
-      // ③ 厳密な存在チェック
-      if (artworkId === '' || qrUrl === '') continue;
-
-      qrList.push({ artwork_id: artworkId, qr_url: qrUrl, status: status });
-      if (status !== '1') continue;
-      const artwork = {};
-      headers.forEach((h, idx) => { artwork[h] = row[idx] || ''; });
-      artworks.push(artwork);
-    }
-
-    const result = {
-      success: true,
-      exCode: ex,
-      exName: master.ex_name,
-      headers: captionHeaders,
-      artworks: artworks,
-      qrList: qrList,
-      registrationFields: getRegistrationFields(ex),
-      captionFields: getCaptionFields(ex)
-    };
-
-    // 6時間キャッシュ
-    cache.put(cacheKey, JSON.stringify(result), 21600);
-    return result;
-
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// Phase 6e: loadAllData は撤去 (caption.html の fsLoadAllData が Firestore 直読みで代替)。
 
 // =========================================================
 // 🌟 作品枠を追加
