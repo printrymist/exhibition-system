@@ -481,6 +481,7 @@ function addArtworks(exCode, addCount) {
     const totalCols = headers.length;
 
     const newRows = [];
+    const artworkSeeds = [];
     for (let i = 1; i <= addCount; i++) {
       const wId = "w" + ("00" + (lastNum + i)).slice(-3);
       const sKey = Math.random().toString(36).substring(2, 10);
@@ -491,12 +492,15 @@ function addArtworks(exCode, addCount) {
       row[qrUrlCol] = url;
       row[statusCol] = "0";
       newRows.push(row);
+      const seed = { exCode: exCode };
+      headers.forEach((h, idx) => { seed[h] = row[idx]; });
+      artworkSeeds.push(seed);
     }
 
     sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
     clearAllCache(exCode);
     bumpArtworkCount(exCode, addCount, 0);
-    return { success: true, addedCount: addCount };
+    return { success: true, addedCount: addCount, artworks: artworkSeeds };
   } catch (e) {
     return { success: false, error: e.toString() };
   }

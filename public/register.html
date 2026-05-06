@@ -873,7 +873,7 @@
           <div class="save-msg" id="regenQrMsg"></div>
         </div>
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
-          <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加</p>
+          <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加 <span id="currentArtworkCountLabel" style="color:#1a73e8; font-weight:bold;"></span></p>
           <div style="display:flex; gap:10px;">
             <input type="number" id="addArtworkCount" placeholder="追加数 (例: 10)" min="1" max="100"
               style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
@@ -1161,6 +1161,7 @@
           }
           document.getElementById('linkToCaption').href = 'caption.html?ex=' + ex;
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
+          refreshCurrentArtworkCount();
           applyAuthorizationUI();
         })
         .catch(err => {
@@ -2155,28 +2156,72 @@ ${fieldsText}
       }
     }
 
-    function addArtworks() {
+    async function refreshCurrentArtworkCount() {
+      const label = document.getElementById('currentArtworkCountLabel');
+      if (!label || !currentEx) return;
+      try {
+        const snap = await firebase.firestore()
+          .collection('artworks').where('exCode', '==', currentEx).get();
+        let total = 0;
+        let registered = 0;
+        snap.forEach(d => {
+          const data = d.data() || {};
+          if (!data.artwork_id) return;
+          total++;
+          if (String(data.status || '') === '1') registered++;
+        });
+        label.innerText = '(現在: ' + total + ' 件 / 登録済 ' + registered + ' 件)';
+      } catch (e) {
+        console.warn('refreshCurrentArtworkCount failed:', e);
+      }
+    }
+
+    async function addArtworks() {
       const addCount = parseInt(document.getElementById('addArtworkCount').value);
       if (!addCount || addCount < 1) return;
       const msg = document.getElementById('addArtworkMsg');
       msg.style.color = '#888';
       msg.innerText = '追加中...';
 
-      gasCall({ action: 'addArtworks', ex: currentEx, addCount: addCount })
-        .then(res => {
-          if (res.success) {
-            msg.style.color = '#1a73e8';
-            msg.innerText = `✅ ${addCount}件の作品枠を追加しました。`;
-            document.getElementById('addArtworkCount').value = '';
-          } else {
-            msg.style.color = '#d93025';
-            msg.innerText = 'Error: ' + res.error;
-          }
-        })
-        .catch(err => {
+      try {
+        const res = await gasCall({ action: 'addArtworks', ex: currentEx, addCount: addCount });
+        if (!res.success) {
           msg.style.color = '#d93025';
-          msg.innerText = '通信エラー: ' + err.message;
-        });
+          msg.innerText = 'Error: ' + res.error;
+          return;
+        }
+        // Firestore にも空きスロットを書く (organizer auth で submitArtwork)。
+        // GAS Master Sheet と Firestore の整合を取らないと register.html の現在件数や
+        // input.html の空き枠検索 (fsSaveArtwork) で齟齬が出る。
+        const seeds = Array.isArray(res.artworks) ? res.artworks : [];
+        if (seeds.length > 0) {
+          msg.innerText = `Firestore に同期中... (0/${seeds.length})`;
+          let synced = 0;
+          for (const seed of seeds) {
+            try {
+              await _submitArtworkFn({
+                exCode: currentEx,
+                artworkId: seed.artwork_id,
+                fields: {
+                  status: '0',
+                  qr_url: seed.qr_url || '',
+                },
+              });
+              synced++;
+              msg.innerText = `Firestore に同期中... (${synced}/${seeds.length})`;
+            } catch (e) {
+              console.error('artwork seed sync failed:', seed.artwork_id, e);
+            }
+          }
+        }
+        msg.style.color = '#1a73e8';
+        msg.innerText = `✅ ${addCount}件の作品枠を追加しました。`;
+        document.getElementById('addArtworkCount').value = '';
+        refreshCurrentArtworkCount();
+      } catch (err) {
+        msg.style.color = '#d93025';
+        msg.innerText = '通信エラー: ' + (err && err.message ? err.message : err);
+      }
     }
 
   </script>
