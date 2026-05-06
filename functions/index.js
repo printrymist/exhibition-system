@@ -64,6 +64,12 @@ const GALLERY_TOKEN_SECRET = defineSecret("GALLERY_TOKEN_SECRET");
 // 鍵ローテートすると既発行の招待 URL / QR が全失効するので、既存展覧会への影響を考慮して運用する。
 const ARTIST_TOKEN_SECRET = defineSecret("ARTIST_TOKEN_SECRET");
 
+// Claude API (Anthropic) の API key。caption.html の作品自動分類で使う。
+// 旧 GAS Script Property `CLAUDE_API_KEY` から移行 (Phase 6 後の整理)。
+// `firebase functions:secrets:set CLAUDE_API_KEY` で投入。trailing newline に注意
+// (feedback_firebase_secrets_set_newline.md)。
+const CLAUDE_API_KEY = defineSecret("CLAUDE_API_KEY");
+
 // 運営者メールアドレス。public/js/operator-auth.js の OPERATOR_EMAILS と
 // 一致させること。Cloud Function 側でも email auth を二重チェックする。
 const OPERATOR_EMAILS = ["rymist1@gmail.com"];
@@ -1099,5 +1105,127 @@ exports.submitArtwork = onCall(
       fieldKeys: Object.keys(cleanFields),
     });
     return { success: true, exCode, artworkId, authMode };
+  },
+);
+
+// =========================================================
+// categorizeArtwork
+//   Claude API による作品自動分類。caption.html (operator) から呼ぶ。
+//   旧 GAS gas_Caption_maker categorizeArtwork を CF 化したもの。
+//   GAS の 6 分制限を回避し、Anthropic SDK を Node で素直に使える。
+// =========================================================
+const CATEGORIZE_SYSTEM_PROMPT = "美術作品を分類するアシスタントです。\n" +
+  "画像を見て、以下の4層で分類してください。\n\n" +
+  "レイヤー1 メディア（複数選択可、形式）:\n" +
+  "[絵画, 版画, 写真, 彫刻, インスタレーション, 映像, テキスタイル, 陶芸, ドローイング]\n\n" +
+  "レイヤー2 モチーフ（複数選択可、内容）:\n" +
+  "[人物, 風景, 静物, 抽象, 動物, 都市, 自然]\n\n" +
+  "レイヤー3 スタイル（1つ選択）:\n" +
+  "[具象, 抽象, アニメ・イラスト系, コンセプチュアル]\n\n" +
+  "レイヤー4 キーワード（日本語で3〜5個、自由記述）\n\n" +
+  "JSON のみ返答してください。説明文・コードブロック不要。\n" +
+  "形式: {\"media\": [...], \"motif\": [...], \"style\": \"...\", \"keywords\": [...]}";
+
+exports.categorizeArtwork = onCall(
+  { secrets: [CLAUDE_API_KEY], timeoutSeconds: 120 },
+  async (request) => {
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+    }
+
+    const imageUrl = String((request.data || {}).imageUrl || "").trim();
+    if (!imageUrl) {
+      throw new HttpsError("invalid-argument", "imageUrl が必要です");
+    }
+    if (!/^https?:\/\//i.test(imageUrl)) {
+      throw new HttpsError("invalid-argument", "imageUrl は http(s) URL である必要があります");
+    }
+
+    const apiKey = CLAUDE_API_KEY.value();
+    if (!apiKey) {
+      throw new HttpsError("internal", "CLAUDE_API_KEY が未設定です");
+    }
+
+    const requestBody = {
+      model: "claude-sonnet-4-6",
+      max_tokens: 512,
+      system: [{
+        type: "text",
+        text: CATEGORIZE_SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" },
+      }],
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "url", url: imageUrl } },
+          { type: "text", text: "この作品を分類してください。" },
+        ],
+      }],
+    };
+
+    let response;
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(requestBody),
+      });
+    } catch (e) {
+      logger.error("Claude API fetch failed", { error: e.message });
+      throw new HttpsError("internal", "Claude API への通信に失敗しました: " + e.message);
+    }
+
+    const bodyText = await response.text();
+    if (!response.ok) {
+      logger.warn("Claude API error", { status: response.status, body: bodyText.slice(0, 500) });
+      throw new HttpsError("internal", "Claude API " + response.status + ": " + bodyText.slice(0, 500));
+    }
+
+    let result;
+    try {
+      result = JSON.parse(bodyText);
+    } catch (e) {
+      throw new HttpsError("internal", "Claude API のレスポンスが JSON ではありません");
+    }
+    const textBlock = (result.content || []).find((b) => b.type === "text");
+    if (!textBlock) {
+      throw new HttpsError("internal", "Claude のレスポンスに text ブロックがありません");
+    }
+
+    let jsonText = String(textBlock.text || "").trim();
+    jsonText = jsonText.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      throw new HttpsError(
+        "internal",
+        "Claude の出力が JSON parse できません: " + jsonText.substring(0, 200),
+      );
+    }
+
+    logger.info("categorizeArtwork success", {
+      caller: authEmail,
+      style: parsed.style,
+      mediaCount: Array.isArray(parsed.media) ? parsed.media.length : 0,
+      usage: result.usage || null,
+    });
+
+    return {
+      success: true,
+      media: Array.isArray(parsed.media) ? parsed.media : [],
+      motif: Array.isArray(parsed.motif) ? parsed.motif : [],
+      style: typeof parsed.style === "string" ? parsed.style : "",
+      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+      usage: result.usage || null,
+    };
   },
 );

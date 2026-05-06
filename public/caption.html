@@ -1574,14 +1574,15 @@
       let done = 0, ok = 0, ng = 0;
       catSetProgress(0, targets.length);
 
+      const _categorizeFn = firebase.app().functions('asia-northeast1').httpsCallable('categorizeArtwork');
+      const _submitFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
       for (const a of targets) {
         if (catStopFlag) { catLogMsg('--- 中断 ---'); break; }
         const id = a.artwork_id;
         try {
-          const res = await gasCall({ action: 'categorizeArtwork', imageUrl: a.image_url });
-          if (res.success) {
-            // Cloud Function 経由で書く (operator/organizer auth で通る)
-            await firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork')({
+          const res = (await _categorizeFn({ imageUrl: a.image_url })).data;
+          if (res && res.success) {
+            await _submitFn({
               exCode: ex,
               artworkId: id,
               fields: {
@@ -1596,7 +1597,7 @@
             catLogMsg('OK ' + id + ' [' + res.style + '] ' + (res.media || []).join(',') + ' / ' + (res.motif || []).join(','));
           } else {
             ng++;
-            catLogMsg('FAIL ' + id + ': ' + res.error);
+            catLogMsg('FAIL ' + id + ': ' + ((res && res.error) || 'unknown'));
           }
         } catch (e) {
           ng++;
