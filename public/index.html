@@ -787,38 +787,81 @@
       }
     }
 
-    function regInit(ex, id) {
+    // Phase 6b: regInit を Firestore 直接クエリに変更。masterPass による gate は撤去。
+    // (HMAC URL の sig 検証が submitArtwork 経由ですでに認証として機能している。)
+    async function regInit(ex, id) {
       regRawImgData = null;
       applyLang();
-      regLoadImageRequired(ex);
-      gasCall('regGetSetupData').then(async res => {
-        if (!res.success) return alert("エラー: " + res.error);
-        regConfig = res;
-        document.getElementById('regExName').innerText = res.exName;
-        document.getElementById('regArtistName').value = res.artistName || '';
-        document.getElementById('regWorkTitle').value = res.workTitle || '';
-        document.getElementById('regSnsInsta').value = (res.sns && res.sns.insta) || '';
-        document.getElementById('regSnsX').value = (res.sns && res.sns.x) || '';
-        document.getElementById('regSnsFb').value = (res.sns && res.sns.fb) || '';
-        document.getElementById('regSnsWeb').value = (res.sns && res.sns.web) || '';
-        if (res.imageUrl) {
-          document.getElementById('regLocalPreview').src = res.imageUrl;
+      try {
+        await regLoadImageRequired(ex);
+
+        const [exSnap, awSnap, artistsSnap] = await Promise.all([
+          fsDb.collection('exhibitions').doc(ex).get(),
+          fsDb.collection('artworks').doc(ex + '_' + id).get(),
+          fsDb.collection('artworks').where('exCode', '==', ex).get(),
+        ]);
+        if (!exSnap.exists) {
+          alert('エラー: 展覧会データが見つかりません');
+          return;
+        }
+        const exData = exSnap.data() || {};
+        const awData = awSnap.exists ? (awSnap.data() || {}) : {};
+
+        const artistsMap = new Map();
+        artistsSnap.forEach(d => {
+          const a = d.data() || {};
+          if (String(a.status || '') !== '1') return;
+          if (!a.artist || artistsMap.has(a.artist)) return;
+          artistsMap.set(a.artist, {
+            name: a.artist,
+            insta: a.insta || '',
+            x: a.x || '',
+            fb: a.facebook || '',
+            web: a.web || '',
+          });
+        });
+
+        regConfig = {
+          exName: exData.ex_name || ex,
+          artistName: awData.artist || '',
+          workTitle: awData.title || '',
+          imageUrl: awData.image_url || '',
+          sns: {
+            insta: awData.insta || '',
+            x: awData.x || '',
+            fb: awData.facebook || '',
+            web: awData.web || '',
+          },
+          registeredArtists: Array.from(artistsMap.values()),
+        };
+
+        document.getElementById('regExName').innerText = regConfig.exName;
+        document.getElementById('regArtistName').value = regConfig.artistName;
+        document.getElementById('regWorkTitle').value = regConfig.workTitle;
+        document.getElementById('regSnsInsta').value = regConfig.sns.insta;
+        document.getElementById('regSnsX').value = regConfig.sns.x;
+        document.getElementById('regSnsFb').value = regConfig.sns.fb;
+        document.getElementById('regSnsWeb').value = regConfig.sns.web;
+        if (regConfig.imageUrl) {
+          document.getElementById('regLocalPreview').src = regConfig.imageUrl;
           document.getElementById('regLocalPreview').style.display = 'block';
         }
-        if (res.registeredArtists && res.registeredArtists.length > 0) {
+        if (regConfig.registeredArtists.length > 0) {
           const sel = document.getElementById('regArtistSelect');
           sel.innerHTML = '<option value="" id="regSelectDefault">' + t('regSelectDefault') + '</option>';
-          res.registeredArtists.forEach((a, i) => {
+          regConfig.registeredArtists.forEach((a, i) => {
             const opt = document.createElement('option');
             opt.value = i; opt.textContent = a.name; sel.appendChild(opt);
           });
           document.getElementById('regQuickSelectArea').style.display = 'block';
         }
-        const savedHash = localStorage.getItem(regStorageKey);
-        const currentHash = await hashText(res.masterPass);
-        if (savedHash === currentHash) regChangeStep(1);
-        else regChangeStep(0);
-      }).catch(err => alert("通信エラー: " + err.message));
+
+        // パスワード gate (regStep0) は使わず常に regStep1 に進む。
+        regChangeStep(1);
+      } catch (err) {
+        console.error('regInit failed:', err);
+        alert('読み込みエラー: ' + (err && err.message ? err.message : err));
+      }
     }
 
     function regCleanSnsId(val) {
