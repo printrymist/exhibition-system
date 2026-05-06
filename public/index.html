@@ -485,6 +485,8 @@
     const exVal  = urlParams.get('ex')  || '';
     const idVal  = urlParams.get('id')  || '';
     const keyVal = urlParams.get('key') || '';
+    const expVal = urlParams.get('exp') || '';
+    const sigVal = urlParams.get('sig') || '';
 
     // =========================================================
     // 🌟 GAS通信共通関数（google.script.runの代替）
@@ -732,7 +734,9 @@
           alert("エラー: " + (data.msg || "データ取得失敗"));
           return;
         }
-        if (data.securityKey !== keyVal) {
+        // 旧 key= URL に対する UX ゲート (実 security は Cloud Function 側で担保)。
+        // 新 exp+sig URL は client-side チェック不要 (Cloud Function が HMAC 検証する)。
+        if (keyVal && data.securityKey && data.securityKey !== keyVal) {
           alert("アクセスエラー: 不正な URL です");
           return;
         }
@@ -1229,6 +1233,7 @@
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
@@ -1316,22 +1321,41 @@
     window.fsAddLike = async (data) => {
       await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
     };
-    window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const merged = { exCode, artworkId, artwork_id: artworkId, ...data };
-      if (!merged.security_key) {
-        const snap = await docRef.get();
-        if (snap.exists && snap.data().security_key) {
-          merged.security_key = snap.data().security_key;
-        } else if (typeof keyVal !== 'undefined' && keyVal && exCode === exVal && artworkId === idVal) {
-          merged.security_key = keyVal;
-        } else {
-          console.warn('fsSetArtwork: no security_key available for', exCode, artworkId, '- skipping write');
-          return;
-        }
+    const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+
+    // index.html (QR スキャン経路) のアクセストークンを決定する。
+    // 1. URL に exp+sig があれば artwork_token (HMAC over exCode:artworkId:exp)
+    // 2. URL に key= があれば legacy_key (既発行 QR との互換)
+    // 3. それ以外は doc の security_key を取って legacy_key (再登録 / unlock 等)
+    async function _resolveArtworkAccessToken(exCode, artworkId) {
+      if (expVal && sigVal && exCode === exVal && artworkId === idVal) {
+        return { kind: 'artwork', exp: Number(expVal), sig: sigVal };
       }
-      merged.updatedAt = new Date().toISOString();
-      await docRef.set(merged, { merge: true });
+      if (keyVal && exCode === exVal && artworkId === idVal) {
+        return { kind: 'legacy', key: keyVal };
+      }
+      const snap = await fsDb.collection('artworks').doc(exCode + '_' + artworkId).get();
+      const sk = snap.exists ? (snap.data().security_key || '') : '';
+      if (sk) return { kind: 'legacy', key: sk };
+      return null;
+    }
+
+    window.fsSetArtwork = async (exCode, artworkId, data) => {
+      const accessToken = await _resolveArtworkAccessToken(exCode, artworkId);
+      if (!accessToken) {
+        console.warn('fsSetArtwork: no access token available for', exCode, artworkId, '- skipping write');
+        return;
+      }
+      const res = await _submitArtworkFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        fields: data,
+        accessToken: accessToken,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data;
     };
   </script>
 </body>

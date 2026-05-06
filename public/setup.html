@@ -499,17 +499,17 @@
         return;
       }
 
-      // exhibitions doc は Security Rules が Firebase Auth を要求するため、
-      // setup フロー (GAS token 認証のみ) では Cloud Function 経由で書き込む。
-      // canonical な doc 内容は Cloud Function が GAS から再取得するので、
-      // ここではクライアントから doc データを渡さない (クライアント値を信用しない方針)。
-      // artworks doc は security_key ベースのルールでクライアント書き込みが
-      // 通るため従来通り直接書き込む。
+      // exhibition doc + artwork スロット をまとめて Cloud Function 経由で書き込む。
+      // setup フローは GAS token 認証のみ (Firebase Auth 無し) なので、
+      // Firestore Rules を満たすには Cloud Function 経由 (admin SDK) が必須。
+      // クライアントから渡す artworks は GAS が同じセットアップ実行で生成したものを
+      // そのままパススルー。Cloud Function 側で exCode 一致と shape を検証する。
       const finalizePromise = (window.fsDb && result.exCode)
         ? firebase.app().functions('asia-northeast1')
           .httpsCallable('finalizeExhibitionSetup')({
             token: window._confirmedToken || '',
-            exCode: result.exCode
+            exCode: result.exCode,
+            artworks: Array.isArray(result.artworks) ? result.artworks : [],
           })
           .then(() => null)
           .catch(err => {
@@ -517,18 +517,6 @@
             return err;
           })
         : Promise.resolve(null);
-
-      if (window.fsDb && Array.isArray(result.artworks)) {
-        const ts = new Date().toISOString();
-        result.artworks.forEach(a => {
-          const docId = a.exCode + '_' + a.artwork_id;
-          window.fsDb.collection('artworks').doc(docId).set({
-            ...a,
-            artworkId: a.artwork_id,
-            createdAt: ts
-          }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
-        });
-      }
 
       finalizePromise.then(err => {
         showDone(result);
@@ -578,16 +566,17 @@
           document.getElementById('addCount').value = '';
           currentArtworkCount += addCount;
           updateCurrentCountLabel();
-          if (window.fsDb && Array.isArray(res.artworks)) {
-            const ts = new Date().toISOString();
-            res.artworks.forEach(a => {
-              const docId = a.exCode + '_' + a.artwork_id;
-              window.fsDb.collection('artworks').doc(docId).set({
-                ...a,
-                artworkId: a.artwork_id,
-                createdAt: ts
-              }, { merge: true }).catch(e => console.error('Firestore artwork write failed:', a.artwork_id, e));
-            });
+          if (window.fsDb && Array.isArray(res.artworks) && res.artworks.length > 0) {
+            // 追加スロットの Firestore 書き込みも Cloud Function 経由 (admin SDK)。
+            // skipExhibitionWrite=true で exhibition doc を上書きしないようにする。
+            firebase.app().functions('asia-northeast1')
+              .httpsCallable('finalizeExhibitionSetup')({
+                token: window._confirmedToken || '',
+                exCode: exCode,
+                artworks: res.artworks,
+                skipExhibitionWrite: true,
+              })
+              .catch(e => console.error('Cloud Function artwork write failed:', e));
           }
         });
     }

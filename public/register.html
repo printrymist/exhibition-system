@@ -2168,6 +2168,7 @@ ${fieldsText}
     });
     const fsDb = firebase.firestore();
     const fsStorage = firebase.storage();
+    const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       const blob = await (await fetch(dataUrl)).blob();
       const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
@@ -2292,23 +2293,25 @@ ${fieldsText}
       return { success: true, artists: artists };
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const merged = { exCode, artworkId, artwork_id: artworkId, ...data };
-      if (!merged.security_key) {
-        const snap = await docRef.get();
-        if (snap.exists && snap.data().security_key) merged.security_key = snap.data().security_key;
+      // organizer の Email Link 認証 (request.auth) を使って submitArtwork を呼ぶ。
+      // Cloud Function が email を見て operator/organizer 経路で write する。
+      const res = await _submitArtworkFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        fields: data,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
       }
-      merged.updatedAt = new Date().toISOString();
-      await docRef.set(merged, { merge: true });
+      return res.data;
     };
     window.fsDeleteArtwork = async (exCode, artworkId) => {
       // 削除はスロットを空き枠 (status='0') に戻し、作家関連フィールドもクリアする。
-      // 論理削除のままだと artist で query するリスト系の関数で「削除済」が見えたままになる。
+      // Cloud Function 経由なので Firestore Rules を引き締めても通る。
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
       const snap = await docRef.get();
       const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
-      const sk = snap.exists ? snap.data().security_key : null;
-      await docRef.set({
+      await window.fsSetArtwork(exCode, artworkId, {
         status: "0",
         title: "", title_en: "",
         artist: "", artist_en: "",
@@ -2317,9 +2320,7 @@ ${fieldsText}
         courtesy: "", note: "", artist_note: "",
         image_url: "",
         insta: "", x: "", facebook: "", web: "", shop_url: "",
-        security_key: sk,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      });
       if (wasRegistered) {
         gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
           .catch(e => console.warn('bumpArtworkCount failed:', e));

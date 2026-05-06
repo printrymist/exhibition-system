@@ -1580,13 +1580,18 @@
         try {
           const res = await gasCall({ action: 'categorizeArtwork', imageUrl: a.image_url });
           if (res.success) {
-            await window.fsDb.collection('artworks').doc(ex + '_' + id).set({
-              category_media: res.media,
-              category_motif: res.motif,
-              category_style: res.style,
-              category_keywords: res.keywords,
-              categorized_at: new Date().toISOString()
-            }, { merge: true });
+            // Cloud Function 経由で書く (operator/organizer auth で通る)
+            await firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork')({
+              exCode: ex,
+              artworkId: id,
+              fields: {
+                category_media: res.media,
+                category_motif: res.motif,
+                category_style: res.style,
+                category_keywords: res.keywords,
+                categorized_at: new Date().toISOString(),
+              },
+            });
             ok++;
             catLogMsg('OK ' + id + ' [' + res.style + '] ' + (res.media || []).join(',') + ' / ' + (res.motif || []).join(','));
           } else {

@@ -16,12 +16,10 @@ service cloud.firestore {
     match /artworks/{docId} {
       // 来場者・作家フローで広く読める必要があるため公開読み取りは継続
       allow read: if true;
-      allow update: if
-        resource != null
-        && request.resource.data.security_key == resource.data.security_key;
-      allow create: if
-        request.resource.data.security_key != null
-        && request.resource.data.security_key != "";
+      // 書き込みはすべて Cloud Function (submitArtwork / finalizeExhibitionSetup)
+      // 経由で admin SDK から行う。クライアント直接書き込みは禁止。
+      // security_key は使われなくなったが、互換性のために doc には残置。
+      allow create, update: if false;
       allow delete: if isOperator();
     }
 

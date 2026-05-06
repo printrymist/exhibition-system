@@ -222,25 +222,67 @@ exports.finalizeExhibitionSetup = onCall(async (request) => {
 
   // Admin SDK で書き込み (Security Rules はバイパス)。
   // ex_code / email は GAS の authoritative 値で上書き。
+  // skipExhibitionWrite=true の場合は exhibition doc を再書き込みせず、
+  // artworks のみ書き込む (setup.html の追加スロット作成用)。
   const db = admin.firestore();
   const exRef = db.collection("exhibitions").doc(exCode);
   const ts = new Date().toISOString();
-  const exDoc = Object.assign({}, canonicalDoc, {
-    ex_code: exCode,
-    email: verifiedEmail,
-    createdAt: ts,
-  });
-  try {
-    await exRef.set(exDoc, { merge: true });
-  } catch (err) {
-    logger.error("exhibitions write failed", { exCode, error: err.message });
-    throw new HttpsError(
-      "internal",
-      "Firestore 書き込みに失敗しました: " + err.message,
-    );
+  if (!data.skipExhibitionWrite) {
+    const exDoc = Object.assign({}, canonicalDoc, {
+      ex_code: exCode,
+      email: verifiedEmail,
+      createdAt: ts,
+    });
+    try {
+      await exRef.set(exDoc, { merge: true });
+    } catch (err) {
+      logger.error("exhibitions write failed", { exCode, error: err.message });
+      throw new HttpsError(
+        "internal",
+        "Firestore 書き込みに失敗しました: " + err.message,
+      );
+    }
   }
-  logger.info("exhibition finalized", { exCode, email: verifiedEmail });
-  return { success: true, exCode };
+  // 空き artwork スロットも一緒に書き込む。クライアントから受け取った配列だが、
+  // 同じ setup フロー内で GAS から生成されたものが渡ってくる前提で、exCode 一致と
+  // artwork_id / security_key の非空だけ簡易検証する。
+  let artworkCount = 0;
+  if (Array.isArray(data.artworks) && data.artworks.length > 0) {
+    const writes = [];
+    for (const a of data.artworks) {
+      if (!a || typeof a !== "object") continue;
+      const aId = String(a.artwork_id || "").trim();
+      const aEx = String(a.exCode || "").trim();
+      const aSk = String(a.security_key || "").trim();
+      if (!aId || !aEx || aEx !== exCode || !aSk) continue;
+      if (!/^[A-Za-z0-9_-]+$/.test(aId)) continue;
+      const docId = exCode + "_" + aId;
+      const docData = Object.assign({}, a, {
+        artworkId: aId,
+        exCode: exCode,
+        createdAt: ts,
+      });
+      writes.push(
+        db.collection("artworks").doc(docId).set(docData, { merge: true }),
+      );
+    }
+    try {
+      await Promise.all(writes);
+      artworkCount = writes.length;
+    } catch (err) {
+      logger.warn("partial artwork write failed", {
+        exCode,
+        error: err.message,
+      });
+    }
+  }
+
+  logger.info("exhibition finalized", {
+    exCode,
+    email: verifiedEmail,
+    artworkCount,
+  });
+  return { success: true, exCode, artworkCount };
 });
 
 // =========================================================
