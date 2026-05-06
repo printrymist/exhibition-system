@@ -18,6 +18,7 @@
 
 const { setGlobalOptions } = require("firebase-functions");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -840,6 +841,129 @@ exports.mintArtworkQrTokenFromGas = onRequest(
       expDays: Math.floor(expDays),
     });
     res.status(200).json({ success: true, exp, sig });
+  },
+);
+
+// =========================================================
+// purgeExhibition / scheduledSandboxCleanup
+//
+// 展覧会単位で Firestore + Storage を完全削除する Cloud Function。
+//   - artworks / likes / exhibitions ドキュメント
+//   - Storage の artworks/{ex}_* と gallery/{ex}_* (admin SDK で
+//     Storage Rules をバイパス)
+// inquiries は意図的に残置 (運用ポリシー)。
+//
+// GAS の dailySandboxMaintenance は Master SS 行 / Drive フォルダ /
+// 通知メール担当でそのまま併存。
+// =========================================================
+
+async function purgeExhibitionInternal(exCode) {
+  const db = admin.firestore();
+  const bucket = admin.storage().bucket();
+  const stats = {
+    artworks: 0,
+    likes: 0,
+    exhibitionDeleted: false,
+    artworkImages: 0,
+    galleryImages: 0,
+  };
+
+  // artworks
+  const aSnap = await db.collection("artworks").where("exCode", "==", exCode).get();
+  await Promise.all(aSnap.docs.map((d) => d.ref.delete()));
+  stats.artworks = aSnap.size;
+
+  // likes
+  const lSnap = await db.collection("likes").where("exCode", "==", exCode).get();
+  await Promise.all(lSnap.docs.map((d) => d.ref.delete()));
+  stats.likes = lSnap.size;
+
+  // exhibitions
+  try {
+    const exDoc = await db.collection("exhibitions").doc(exCode).get();
+    if (exDoc.exists) {
+      await db.collection("exhibitions").doc(exCode).delete();
+      stats.exhibitionDeleted = true;
+    }
+  } catch (e) {
+    logger.warn("purgeExhibitionInternal: exhibition delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  // Storage artworks/{ex}_*
+  try {
+    const [files] = await bucket.getFiles({ prefix: "artworks/" + exCode + "_" });
+    await Promise.all(files.map((f) => f.delete()));
+    stats.artworkImages = files.length;
+  } catch (e) {
+    logger.warn("purgeExhibitionInternal: artwork storage delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  // Storage gallery/{ex}_*
+  try {
+    const [files] = await bucket.getFiles({ prefix: "gallery/" + exCode + "_" });
+    await Promise.all(files.map((f) => f.delete()));
+    stats.galleryImages = files.length;
+  } catch (e) {
+    logger.warn("purgeExhibitionInternal: gallery storage delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  return stats;
+}
+
+exports.purgeExhibition = onCall(async (request) => {
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  if (!authEmail || OPERATOR_EMAILS.indexOf(authEmail) === -1) {
+    throw new HttpsError("permission-denied", "運営者管理者の Firebase Auth が必要です");
+  }
+  const exCode = String((request.data || {}).exCode || "").trim();
+  if (!exCode) {
+    throw new HttpsError("invalid-argument", "exCode が必要です");
+  }
+  if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+    throw new HttpsError("invalid-argument", "exCode が不正です");
+  }
+  const stats = await purgeExhibitionInternal(exCode);
+  logger.info("purgeExhibition success", { exCode, caller: authEmail, stats });
+  return Object.assign({ success: true, exCode }, stats);
+});
+
+// 毎日 5:00 JST に sandbox 展覧会の Firestore + Storage 残骸を掃除。
+// GAS dailySandboxMaintenance (4:00 JST) で Master SS 行 / Drive が消えた直後に走る。
+exports.scheduledSandboxCleanup = onSchedule(
+  { schedule: "0 5 * * *", timeZone: "Asia/Tokyo" },
+  async () => {
+    const db = admin.firestore();
+    const now = new Date();
+    const snap = await db.collection("exhibitions")
+      .where("is_sandbox", "==", true).get();
+    let purged = 0;
+    let failed = 0;
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const expireAtStr = String(data.expire_at || "");
+      if (!expireAtStr) continue;
+      const expireAt = new Date(expireAtStr);
+      if (isNaN(expireAt.getTime()) || expireAt > now) continue;
+      try {
+        const stats = await purgeExhibitionInternal(doc.id);
+        logger.info("scheduledSandboxCleanup purged", { exCode: doc.id, stats });
+        purged++;
+      } catch (e) {
+        logger.error("scheduledSandboxCleanup failed", {
+          exCode: doc.id, error: e.message,
+        });
+        failed++;
+      }
+    }
+    logger.info("scheduledSandboxCleanup complete", { purged, failed });
   },
 );
 

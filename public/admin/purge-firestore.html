@@ -41,8 +41,8 @@
     <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
 
     <div class="warn">
-      <strong>用途:</strong> sandbox 削除 (dailySandboxMaintenance / 手動 purge) 後に Firestore に残った残骸を掃除します。<br>
-      <strong>削除対象:</strong> 指定 ex_code に紐づく <code>artworks</code> / <code>likes</code> / <code>exhibitions</code> ドキュメントと、Storage の <code>artworks/{ex_code}_*</code> 画像。<br>
+      <strong>用途:</strong> sandbox 削除 (dailySandboxMaintenance / 手動 purge) 後に Firestore に残った残骸を掃除します。Cloud Function 経由 (admin SDK) で Storage Rules もバイパス。<br>
+      <strong>削除対象:</strong> 指定 ex_code に紐づく <code>artworks</code> / <code>likes</code> / <code>exhibitions</code> ドキュメント、Storage の <code>artworks/{ex_code}_*</code> 画像、<code>gallery/{ex_code}_*</code> 画像。<br>
       <strong>削除しない:</strong> <code>inquiries</code> (お問い合わせ履歴は保護)、Master SS、Drive (これらは GAS purge.js / dailySandboxMaintenance で別途削除)。
     </div>
 
@@ -92,6 +92,8 @@
       return ex;
     }
 
+    // DRY RUN: 直接 Firestore 読み + Storage 一覧 (read は public なので問題なし)。
+    // 実削除は Cloud Function purgeExhibition (admin SDK で Storage Rules バイパス)。
     async function dryRun() {
       reset();
       var ex = getEx();
@@ -101,12 +103,19 @@
         var aSnap = await db.collection("artworks").where("exCode", "==", ex).get();
         var lSnap = await db.collection("likes").where("exCode", "==", ex).get();
         var exDoc = await db.collection("exhibitions").doc(ex).get();
-        var imgCount = 0;
+        var artworkImgCount = 0;
+        var galleryImgCount = 0;
         try {
-          var listing = await firebase.storage().ref("artworks").listAll();
-          imgCount = listing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; }).length;
+          var artListing = await firebase.storage().ref("artworks").listAll();
+          artworkImgCount = artListing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; }).length;
         } catch (e) {
-          append("Storage 一覧取得失敗: " + e.message);
+          append("Storage artworks 一覧取得失敗: " + e.message);
+        }
+        try {
+          var galListing = await firebase.storage().ref("gallery").listAll();
+          galleryImgCount = galListing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; }).length;
+        } catch (e) {
+          append("Storage gallery 一覧取得失敗: " + e.message);
         }
 
         previewEl.innerHTML =
@@ -115,16 +124,24 @@
           "<li>artworks: " + aSnap.size + " 件</li>" +
           "<li>likes: " + lSnap.size + " 件</li>" +
           "<li>exhibitions ドキュメント: " + (exDoc.exists ? "あり (削除する)" : "なし") + "</li>" +
-          "<li>Storage 画像 (artworks/" + ex + "_*): " + imgCount + " 件</li>" +
+          "<li>Storage artworks/" + ex + "_*: " + artworkImgCount + " 件</li>" +
+          "<li>Storage gallery/" + ex + "_*: " + galleryImgCount + " 件</li>" +
           "</ul>";
         previewEl.style.display = "block";
         logEl.textContent = "DRY RUN 完了。問題なければ「削除を実行」を押してください。";
 
-        var totalNonZero = aSnap.size + lSnap.size + (exDoc.exists ? 1 : 0) + imgCount;
+        var totalNonZero = aSnap.size + lSnap.size + (exDoc.exists ? 1 : 0) + artworkImgCount + galleryImgCount;
         if (totalNonZero === 0) {
           logEl.textContent += "\n⚠️ 削除対象が見つかりません。ex_code が正しいか確認してください。";
         } else {
-          lastDryRun = { ex: ex, artworks: aSnap.size, likes: lSnap.size, exhibition: exDoc.exists, images: imgCount };
+          lastDryRun = {
+            ex: ex,
+            artworks: aSnap.size,
+            likes: lSnap.size,
+            exhibition: exDoc.exists,
+            artworkImages: artworkImgCount,
+            galleryImages: galleryImgCount,
+          };
           btnPurge.disabled = false;
         }
       } catch (e) {
@@ -144,48 +161,29 @@
         "artworks: " + lastDryRun.artworks + " 件\n" +
         "likes: " + lastDryRun.likes + " 件\n" +
         "exhibitions ドキュメント: " + (lastDryRun.exhibition ? "削除" : "なし") + "\n" +
-        "Storage 画像: " + lastDryRun.images + " 件\n\n" +
+        "Storage artworks 画像: " + lastDryRun.artworkImages + " 件\n" +
+        "Storage gallery 画像: " + lastDryRun.galleryImages + " 件\n\n" +
         "この操作は取り消せません。本当に実行しますか?";
       if (!confirm(msg)) return;
       var typed = prompt("確認: 削除する ex_code を再度入力してください。", "");
       if (typed !== ex) { alert("ex_code が一致しません。中止します。"); return; }
 
       btnPurge.disabled = true;
-      logEl.textContent = "削除中...";
+      logEl.textContent = "削除中 (Cloud Function 経由)...";
       try {
-        // 1. artworks
-        var aSnap = await db.collection("artworks").where("exCode", "==", ex).get();
-        await Promise.all(aSnap.docs.map(function(d){ return d.ref.delete(); }));
-        append("artworks: " + aSnap.size + " 件削除");
-
-        // 2. likes
-        var lSnap = await db.collection("likes").where("exCode", "==", ex).get();
-        await Promise.all(lSnap.docs.map(function(d){ return d.ref.delete(); }));
-        append("likes: " + lSnap.size + " 件削除");
-
-        // 3. exhibitions doc
-        try {
-          await db.collection("exhibitions").doc(ex).delete();
-          append("exhibitions ドキュメント: 削除");
-        } catch (e) {
-          append("exhibitions ドキュメント削除失敗: " + e.message);
-        }
-
-        // 4. Storage images
-        try {
-          var listing = await firebase.storage().ref("artworks").listAll();
-          var targets = listing.items.filter(function(it){ return it.name.indexOf(ex + "_") === 0; });
-          await Promise.all(targets.map(function(it){ return it.delete(); }));
-          append("Storage 画像: " + targets.length + " 件削除");
-        } catch (e) {
-          append("Storage 削除部分失敗: " + e.message);
-        }
-
+        var fn = firebase.app().functions('asia-northeast1').httpsCallable('purgeExhibition');
+        var res = await fn({ exCode: ex });
+        var stats = res.data || {};
+        append("artworks: " + (stats.artworks || 0) + " 件削除");
+        append("likes: " + (stats.likes || 0) + " 件削除");
+        append("exhibitions ドキュメント: " + (stats.exhibitionDeleted ? "削除" : "なし"));
+        append("Storage artworks 画像: " + (stats.artworkImages || 0) + " 件削除");
+        append("Storage gallery 画像: " + (stats.galleryImages || 0) + " 件削除");
         append("=== purge 完了 ===");
         previewEl.style.display = "none";
         lastDryRun = null;
       } catch (e) {
-        append("ERROR: " + e.message);
+        append("ERROR: " + (e.message || e));
         btnPurge.disabled = false;
       }
     }
