@@ -217,38 +217,67 @@
     }
     .shop-link:hover { background: #1557b0; }
 
-    .like-row {
+    /* Phase D2 (Instagram-like): action bar + inline counts */
+    .action-bar {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
+      gap: 4px;
+      padding: 8px 0 12px;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 12px;
     }
-    .like-btn {
+    .icon-stat-btn {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 10px 18px;
-      background: white;
-      border: 1.5px solid #e91e63;
-      color: #e91e63;
-      border-radius: 999px;
-      font-size: 0.95em;
-      font-weight: 600;
+      gap: 5px;
+      padding: 6px 10px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      line-height: 1;
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      color: #1a2a4a;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
     }
-    .like-btn:hover:not(:disabled) { background: #fce4ec; }
-    .like-btn:disabled,
-    .like-btn.liked {
-      background: #e91e63;
-      color: white;
-      cursor: default;
+    .icon-stat-btn:hover:not(:disabled) { background: #f4f4f9; }
+    .icon-stat-btn:active:not(:disabled) { transform: scale(0.95); }
+    .icon-stat-btn .heart { font-size: 1.4em; transition: color 0.2s; }
+    .icon-stat-btn .stat-count {
+      font-size: 0.92em;
+      color: #555;
+      font-weight: 600;
     }
-    .like-btn .heart { font-size: 1.1em; line-height: 1; }
-    .like-count-display {
-      font-size: 0.88em;
-      color: #888;
+    .icon-stat-btn.like-btn.liked .heart { color: #e91e63; }
+    .icon-stat-btn.active { background: #e8f0fe; color: #1a73e8; }
+    .icon-btn-share { margin-left: auto; color: #555; }
+    .icon-btn-share svg { display: block; }
+
+    .details-section {
+      padding: 10px 12px;
+      background: #f7f9fc;
+      border-radius: 8px;
+      margin-bottom: 12px;
     }
+    .details-section .detail-row {
+      font-size: 0.92em;
+      color: #444;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+    .details-section .detail-row:empty { display: none; }
+    .details-section .sns-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      font-size: 0.92em;
+    }
+    .details-section .sns-row:empty { display: none; }
+    .details-section .sns-row a {
+      color: #1a73e8;
+      text-decoration: none;
+    }
+    .details-section .sns-row a:hover { text-decoration: underline; }
 
     .comment-section {
       margin-top: 6px;
@@ -294,6 +323,8 @@
     }
     .comment-list {
       margin-top: 16px;
+      max-height: 400px;
+      overflow-y: auto;
     }
     .comment-list-title {
       font-size: 0.82em;
@@ -329,6 +360,7 @@
       color: #aaa;
       padding: 6px 0;
     }
+    /* (comment-expand-btn は Phase D2 で撤去。コメントは 💬 アイコンで全件展開) */
 
     .share-fab {
       position: fixed;
@@ -408,14 +440,31 @@
       <div class="modal-meta">
         <div class="title" id="modalTitle"></div>
         <div class="artist" id="modalArtist"></div>
-        <div class="like-row" id="modalLikeRow" style="display:none;">
-          <button type="button" class="like-btn" id="modalLikeBtn" onclick="onLikeClick()">
+        <div class="action-bar" id="modalActionBar" style="display:none;">
+          <button type="button" class="icon-stat-btn like-btn" id="modalLikeBtn" onclick="onLikeClick()" aria-label="いいね" style="display:none;">
             <span class="heart" id="modalLikeHeart">♡</span>
-            <span id="modalLikeLabel">いいね</span>
+            <span class="stat-count" id="modalLikeCountInline"></span>
           </button>
-          <span class="like-count-display" id="modalLikeCount"></span>
+          <button type="button" class="icon-stat-btn" id="modalCommentIconBtn" onclick="onToggleComments()" aria-label="コメントを表示" style="display:none;">
+            <span aria-hidden="true">💬</span>
+            <span class="stat-count" id="modalCommentCountInline"></span>
+          </button>
+          <button type="button" class="icon-stat-btn" id="modalDetailsToggle" onclick="onToggleDetails()" aria-label="作品情報" style="display:none;">
+            <span aria-hidden="true">ⓘ</span>
+          </button>
+          <button type="button" class="icon-stat-btn icon-btn-share" onclick="onModalShareClick()" aria-label="シェア">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+              <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+          </button>
         </div>
         <div id="modalShopLink"></div>
+        <div class="details-section" id="modalDetailsSection" style="display:none;">
+          <div class="detail-row" id="modalArtworkDetail"></div>
+          <div class="sns-row" id="modalSnsRow"></div>
+        </div>
         <div class="comment-section" id="modalCommentSection" style="display:none;">
           <div class="comment-form">
             <input type="text" id="modalNicknameInput" placeholder="ニックネーム (任意)" maxlength="40">
@@ -525,6 +574,8 @@
     const likedLocally = new Set();             // 既にいいね済の workId
     let currentModalIdx = null;
     let unsubLikes = null;
+    let commentsExpanded = false;               // モーダルを閉じるとリセット
+    let detailsExpanded = false;                // モーダルを閉じるとリセット
 
     function applyAppearance(d) {
       if (!d) return;
@@ -783,28 +834,120 @@
         ? `<a class="shop-link" href="${escapeHtml(shopUrl)}" target="_blank" rel="noopener noreferrer">ショップを見る →</a>`
         : '';
       updateModalLikeUI();
+      updateModalDetailsUI();
       updateModalCommentUI();
       document.getElementById('modal').classList.add('show');
       document.body.style.overflow = 'hidden';
     }
 
     function updateModalLikeUI() {
-      const row = document.getElementById('modalLikeRow');
-      if (interactionsMode === 'none' || currentModalIdx == null) {
-        row.style.display = 'none';
+      const actionBar = document.getElementById('modalActionBar');
+      if (currentModalIdx == null) {
+        actionBar.style.display = 'none';
         return;
       }
       const a = artworksCache[currentModalIdx];
-      if (!a) { row.style.display = 'none'; return; }
-      row.style.display = 'flex';
+      if (!a) { actionBar.style.display = 'none'; return; }
+
+      actionBar.style.display = 'flex';
+
+      const showLike = interactionsMode !== 'none';
+      const showComment = interactionsMode === 'likes_and_comments';
+
+      const likeBtn = document.getElementById('modalLikeBtn');
+      const commentIconBtn = document.getElementById('modalCommentIconBtn');
+      likeBtn.style.display = showLike ? 'inline-flex' : 'none';
+      commentIconBtn.style.display = showComment ? 'inline-flex' : 'none';
+
       const isLiked = likedLocally.has(a.artwork_id);
-      const btn = document.getElementById('modalLikeBtn');
-      btn.classList.toggle('liked', isLiked);
-      btn.disabled = isLiked;
+      likeBtn.classList.toggle('liked', isLiked);
+      likeBtn.disabled = isLiked;
       document.getElementById('modalLikeHeart').innerText = isLiked ? '♥' : '♡';
-      document.getElementById('modalLikeLabel').innerText = isLiked ? 'ありがとうございます' : 'いいね';
-      const cnt = likesByWork[a.artwork_id] || 0;
-      document.getElementById('modalLikeCount').innerText = cnt > 0 ? cnt + ' いいね' : '';
+      const likeCount = likesByWork[a.artwork_id] || 0;
+      document.getElementById('modalLikeCountInline').innerText = likeCount > 0 ? String(likeCount) : '';
+
+      const commentCount = (commentsByWork[a.artwork_id] || []).length;
+      document.getElementById('modalCommentCountInline').innerText = commentCount > 0 ? String(commentCount) : '';
+      commentIconBtn.classList.toggle('active', commentsExpanded);
+    }
+
+    function focusCommentInput() {
+      const el = document.getElementById('modalCommentInput');
+      if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
+
+    async function onModalShareClick() {
+      const a = artworksCache[currentModalIdx];
+      const url = window.location.href;
+      const title = (document.getElementById('exTitle').innerText || 'Web 展覧会').trim();
+      const text = a ? ((a.title || '') + (a.artist ? ' / ' + a.artist : '')) : '';
+      if (navigator.share) {
+        try { await navigator.share({ title, text, url }); }
+        catch (e) { if (e && e.name !== 'AbortError') console.warn('share failed:', e); }
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        showShareToast('URL をコピーしました');
+      } catch (e) {
+        showShareToast('コピーに失敗しました');
+      }
+    }
+
+    function updateModalDetailsUI() {
+      const a = artworksCache[currentModalIdx];
+      const toggle = document.getElementById('modalDetailsToggle');
+      const sec = document.getElementById('modalDetailsSection');
+      if (!a) { toggle.style.display = 'none'; sec.style.display = 'none'; return; }
+
+      const detailParts = [];
+      if (a.year) detailParts.push(escapeHtml(a.year));
+      if (a.technique) detailParts.push(escapeHtml(a.technique));
+      if (a.size) detailParts.push(escapeHtml(a.size));
+      if (a.price) detailParts.push(escapeHtml(a.price));
+      const detailRow = detailParts.length > 0 ? detailParts.join(' · ') : '';
+
+      const snsLinks = [];
+      const insta = (a.insta || '').toString().trim();
+      const x = (a.x || '').toString().trim();
+      const fb = (a.facebook || '').toString().trim();
+      const web = safeHttpUrl(a.web || '');
+      if (insta) snsLinks.push(`<a href="https://www.instagram.com/${encodeURIComponent(insta.replace(/^@/, ''))}" target="_blank" rel="noopener noreferrer">📷 Instagram</a>`);
+      if (x) snsLinks.push(`<a href="https://x.com/${encodeURIComponent(x.replace(/^@/, ''))}" target="_blank" rel="noopener noreferrer">𝕏 X</a>`);
+      if (fb) snsLinks.push(`<a href="${/^https?:\/\//i.test(fb) ? escapeHtml(fb) : 'https://www.facebook.com/' + encodeURIComponent(fb)}" target="_blank" rel="noopener noreferrer">f Facebook</a>`);
+      if (web) snsLinks.push(`<a href="${escapeHtml(web)}" target="_blank" rel="noopener noreferrer">🌐 Web</a>`);
+
+      const hasAny = !!detailRow || snsLinks.length > 0;
+      if (!hasAny) {
+        toggle.style.display = 'none';
+        sec.style.display = 'none';
+        return;
+      }
+
+      // ⓘ アイコンを action bar に表示。クリックで折り畳み開閉。
+      toggle.style.display = 'inline-flex';
+      toggle.classList.toggle('active', detailsExpanded);
+      sec.style.display = detailsExpanded ? 'block' : 'none';
+      document.getElementById('modalArtworkDetail').innerHTML = detailRow;
+      document.getElementById('modalSnsRow').innerHTML = snsLinks.join(' · ');
+    }
+
+    function onToggleDetails() {
+      detailsExpanded = !detailsExpanded;
+      updateModalDetailsUI();
+    }
+
+    function onToggleComments() {
+      commentsExpanded = !commentsExpanded;
+      updateModalCommentUI();
+      // 開いた瞬間に入力欄にフォーカス
+      if (commentsExpanded) {
+        setTimeout(() => {
+          const el = document.getElementById('modalCommentInput');
+          if (el) el.focus();
+        }, 50);
+      }
+      updateModalLikeUI(); // active 表示の更新
     }
 
     function formatTs(ts) {
@@ -824,9 +967,13 @@
       }
       const a = artworksCache[currentModalIdx];
       if (!a) { sec.style.display = 'none'; return; }
+      // 💬 アイコンを押した時だけ表示 (デフォルト非表示)
+      if (!commentsExpanded) {
+        sec.style.display = 'none';
+        return;
+      }
       sec.style.display = 'block';
 
-      // ニックネームは展覧会単位で復元 (index.html と同じキー)
       const nickInput = document.getElementById('modalNicknameInput');
       if (!nickInput.dataset.userEdited) {
         const saved = localStorage.getItem('nickname_' + exCodeCache);
@@ -834,19 +981,18 @@
       }
       nickInput.oninput = () => { nickInput.dataset.userEdited = '1'; };
 
-      // 既存コメント描画
       const list = document.getElementById('modalCommentList');
       const items = commentsByWork[a.artwork_id] || [];
       if (items.length === 0) {
         list.innerHTML = '<div class="comment-empty">まだコメントはありません。最初の感想を投稿してみよう。</div>';
       } else {
-        list.innerHTML = '<div class="comment-list-title">' + items.length + '件のコメント</div>'
-          + items.map(c => `
+        const renderItem = (c) => `
               <div class="comment-item">
                 <div class="who">${escapeHtml(c.nickname || '匿名')}<span class="when">${escapeHtml(formatTs(c.ts))}</span></div>
                 <div class="body">${escapeHtml(c.comment)}</div>
-              </div>
-            `).join('');
+              </div>`;
+        list.innerHTML = '<div class="comment-list-title">' + items.length + '件のコメント</div>'
+          + items.map(renderItem).join('');
       }
     }
 
@@ -937,6 +1083,8 @@
 
     function closeModal() {
       currentModalIdx = null;
+      commentsExpanded = false;
+      detailsExpanded = false;
       // 次に開く作品でニックネームを再フェッチできるようにフラグだけクリア
       const nickInput = document.getElementById('modalNicknameInput');
       if (nickInput) delete nickInput.dataset.userEdited;
