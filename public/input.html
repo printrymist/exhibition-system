@@ -1018,6 +1018,7 @@
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
@@ -1031,6 +1032,21 @@
     });
     const fsDb = firebase.firestore();
     const fsStorage = firebase.storage();
+    const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+
+    // 招待 URL に exp+sig があれば exhibition token を使う。無ければ既存 doc の
+    // security_key を読んで legacy 経路にフォールバックする。
+    function _getUrlExp() { return new URLSearchParams(window.location.search).get('exp') || ''; }
+    function _getUrlSig() { return new URLSearchParams(window.location.search).get('sig') || ''; }
+    async function _resolveAccessToken(exCode, artworkId) {
+      const exp = _getUrlExp();
+      const sig = _getUrlSig();
+      if (exp && sig) return { kind: 'exhibition', exp: Number(exp), sig: sig };
+      const snap = await fsDb.collection('artworks').doc(exCode + '_' + artworkId).get();
+      const sk = snap.exists ? (snap.data().security_key || '') : '';
+      if (sk) return { kind: 'legacy', key: sk };
+      return null;
+    }
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       const blob = await (await fetch(dataUrl)).blob();
       const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
@@ -1091,22 +1107,39 @@
       return { success: true, updatedArtistCount: updatedArtistCount };
     };
     window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const merged = { exCode, artworkId, artwork_id: artworkId, ...data };
-      if (!merged.security_key) {
-        const snap = await docRef.get();
-        if (snap.exists && snap.data().security_key) merged.security_key = snap.data().security_key;
+      const accessToken = await _resolveAccessToken(exCode, artworkId);
+      if (!accessToken) {
+        throw new Error('アクセストークンが取得できません (URL の exp/sig または既存 doc の security_key が必要)');
       }
-      merged.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-      await docRef.set(merged, { merge: true });
+      const res = await _submitArtworkFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        fields: data,
+        accessToken: accessToken,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data;
     };
     window.fsDeleteArtwork = async (exCode, artworkId) => {
-      // Security Rules で delete は禁止しているため、status を空文字に戻して論理削除に変更
+      // 削除はスロットを空き枠 (status='0') に戻し、作家関連フィールドもクリアする。
+      // こうしないと artist で query するリスト系の関数 (fsGetArtworksByArtist 等) で
+      // 「削除済」が見えたままになる。Firestore は merge でフィールドを「消す」操作が
+      // 弱いので、空文字を上書きすることで実質的にクリアする。
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
       const snap = await docRef.get();
       const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
-      const sk = snap.exists ? snap.data().security_key : null;
-      await docRef.set({ status: "", security_key: sk, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await window.fsSetArtwork(exCode, artworkId, {
+        status: "0",
+        title: "", title_en: "",
+        artist: "", artist_en: "",
+        birth_year: "", death_year: "", birthplace: "",
+        year: "", technique: "", size: "", price: "",
+        courtesy: "", note: "", artist_note: "",
+        image_url: "",
+        insta: "", x: "", facebook: "", web: "", shop_url: "",
+      });
       if (wasRegistered) {
         gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
           .catch(e => console.warn('bumpArtworkCount failed:', e));

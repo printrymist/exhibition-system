@@ -57,6 +57,12 @@ const GAS_ADMIN_SECRET = defineSecret("GAS_ADMIN_SECRET");
 // 個別失効は不要、運用は visibility=closed への切替でカバー)。
 const GALLERY_TOKEN_SECRET = defineSecret("GALLERY_TOKEN_SECRET");
 
+// 作品書き込みアクセストークン用の HMAC 鍵 (Plan 5-A: artworks security_key の置換)。
+// mintExhibitionAccessToken / mintArtworkQrToken で発行 → submitArtwork で検証。
+// 32 バイト相当のランダム hex を `firebase functions:secrets:set ARTIST_TOKEN_SECRET` で投入。
+// 鍵ローテートすると既発行の招待 URL / QR が全失効するので、既存展覧会への影響を考慮して運用する。
+const ARTIST_TOKEN_SECRET = defineSecret("ARTIST_TOKEN_SECRET");
+
 // 運営者メールアドレス。public/js/operator-auth.js の OPERATOR_EMAILS と
 // 一致させること。Cloud Function 側でも email auth を二重チェックする。
 const OPERATOR_EMAILS = ["rymist1@gmail.com"];
@@ -599,3 +605,290 @@ exports.galleryPage = onRequest(async (req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8");
   res.status(200).send(html);
 });
+
+// =========================================================
+// Artwork access tokens (Plan 5-A: security_key の置換)
+//
+// 5 種類の認証経路をサポートする。
+//   1. operator email (OPERATOR_EMAILS にあれば常時 OK)
+//   2. organizer email (exhibitions/{ex}.email と auth.token.email が一致)
+//   3. exhibition access token (input.html 招待 URL: ex 全体の作品に書ける)
+//   4. artwork QR token (index.html QR: 特定 artworkId にだけ書ける)
+//   5. legacy security_key (既発行 QR の互換、最終的に廃止)
+//
+// 1〜4 は Cloud Function 内で auth、admin SDK で書き込みするので、
+// Firestore Rules は将来的に書き込み禁止に閉じてよい (セッション 2 で対応)。
+// =========================================================
+
+function computeExhibitionSig(secret, exCode, exp) {
+  return crypto.createHmac("sha256", secret)
+    .update("exhibition:" + exCode + ":" + exp)
+    .digest("hex");
+}
+
+function computeArtworkSig(secret, exCode, artworkId, exp) {
+  return crypto.createHmac("sha256", secret)
+    .update("artwork:" + exCode + ":" + artworkId + ":" + exp)
+    .digest("hex");
+}
+
+async function isOrganizerForEx(authEmail, exCode) {
+  if (!authEmail || !exCode) return false;
+  const exSnap = await admin.firestore()
+    .collection("exhibitions").doc(exCode).get();
+  if (!exSnap.exists) return false;
+  const exEmail = String((exSnap.data() || {}).email || "").trim().toLowerCase();
+  return !!exEmail && exEmail === authEmail;
+}
+
+exports.mintExhibitionAccessToken = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+    }
+
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    if (!exCode) {
+      throw new HttpsError("invalid-argument", "exCode が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (!isOperator) {
+      const ok = await isOrganizerForEx(authEmail, exCode);
+      if (!ok) {
+        throw new HttpsError(
+          "permission-denied",
+          "この展覧会の主催者または運営者の Firebase Auth が必要です",
+        );
+      }
+    }
+
+    const expDays = Number(data.expDays);
+    if (!Number.isFinite(expDays) || expDays < 1 || expDays > 365) {
+      throw new HttpsError(
+        "invalid-argument",
+        "expDays は 1〜365 の整数で指定してください",
+      );
+    }
+
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+
+    const exp = Math.floor(Date.now() / 1000) + Math.floor(expDays) * 86400;
+    const sig = computeExhibitionSig(secret, exCode, exp);
+    logger.info("exhibition access token minted", {
+      exCode,
+      caller: authEmail,
+      role: isOperator ? "operator" : "organizer",
+      expDays: Math.floor(expDays),
+    });
+    return { exCode, exp, sig };
+  },
+);
+
+exports.mintArtworkQrToken = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+    }
+
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    if (!exCode || !artworkId) {
+      throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (!isOperator) {
+      const ok = await isOrganizerForEx(authEmail, exCode);
+      if (!ok) {
+        throw new HttpsError(
+          "permission-denied",
+          "この展覧会の主催者または運営者の Firebase Auth が必要です",
+        );
+      }
+    }
+
+    const expDays = Number(data.expDays);
+    if (!Number.isFinite(expDays) || expDays < 1 || expDays > 365) {
+      throw new HttpsError(
+        "invalid-argument",
+        "expDays は 1〜365 の整数で指定してください",
+      );
+    }
+
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+
+    const exp = Math.floor(Date.now() / 1000) + Math.floor(expDays) * 86400;
+    const sig = computeArtworkSig(secret, exCode, artworkId, exp);
+    logger.info("artwork QR token minted", {
+      exCode,
+      artworkId,
+      caller: authEmail,
+      role: isOperator ? "operator" : "organizer",
+    });
+    return { exCode, artworkId, exp, sig };
+  },
+);
+
+exports.submitArtwork = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const fields = data.fields || {};
+    const tok = data.accessToken || {};
+
+    if (!exCode || !artworkId) {
+      throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+    if (typeof fields !== "object" || Array.isArray(fields)) {
+      throw new HttpsError("invalid-argument", "fields は object である必要があります");
+    }
+
+    // クライアントが上書き不可のフィールド (システム管理) を除外。
+    const FORBIDDEN = new Set([
+      "security_key", "exCode", "artworkId", "artwork_id",
+      "createdAt", "migratedAt", "backfilledAt", "updatedAt",
+    ]);
+    const cleanFields = {};
+    for (const k of Object.keys(fields)) {
+      if (FORBIDDEN.has(k)) continue;
+      const v = fields[k];
+      if (typeof v === "string" && v.length > 5000) {
+        throw new HttpsError("invalid-argument", k + " が長すぎます");
+      }
+      cleanFields[k] = v;
+    }
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    let authMode = null;
+
+    if (authEmail) {
+      if (OPERATOR_EMAILS.indexOf(authEmail) !== -1) {
+        authMode = "operator";
+      } else if (await isOrganizerForEx(authEmail, exCode)) {
+        authMode = "organizer";
+      }
+    }
+
+    const docRef = admin.firestore()
+      .collection("artworks").doc(exCode + "_" + artworkId);
+    const existingSnap = await docRef.get();
+
+    if (!authMode && tok.kind) {
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret && (tok.kind === "exhibition" || tok.kind === "artwork")) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+
+      if (tok.kind === "exhibition") {
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "exhibition token に exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeExhibitionSig(secret, exCode, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "exhibition_token";
+        }
+      } else if (tok.kind === "artwork") {
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "artwork token に exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeArtworkSig(secret, exCode, artworkId, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "artwork_token";
+        }
+      } else if (tok.kind === "legacy") {
+        const legacyKey = String(tok.key || "");
+        if (existingSnap.exists) {
+          const existingKey = String((existingSnap.data() || {}).security_key || "");
+          if (existingKey && existingKey === legacyKey) {
+            authMode = "legacy_key";
+          }
+        }
+      }
+    }
+
+    if (!authMode) {
+      throw new HttpsError(
+        "permission-denied",
+        "書き込み権限がありません (operator / organizer auth または有効なアクセストークンが必要)",
+      );
+    }
+
+    if (!existingSnap.exists) {
+      if (authMode === "artwork_token" || authMode === "legacy_key") {
+        throw new HttpsError("not-found", "対象の作品枠が見つかりません");
+      }
+    }
+
+    if (existingSnap.exists) {
+      const existingEx = String((existingSnap.data() || {}).exCode || "");
+      if (existingEx && existingEx !== exCode) {
+        throw new HttpsError("failed-precondition", "doc の exCode が一致しません");
+      }
+    }
+
+    const writePayload = Object.assign({}, cleanFields, {
+      exCode: exCode,
+      artworkId: artworkId,
+      artwork_id: artworkId,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!existingSnap.exists) {
+      writePayload.security_key = writePayload.security_key || "";
+    }
+
+    await docRef.set(writePayload, { merge: true });
+
+    logger.info("artwork submitted", {
+      exCode,
+      artworkId,
+      authMode,
+      caller: authEmail || "(anon)",
+      fieldKeys: Object.keys(cleanFields),
+    });
+    return { success: true, exCode, artworkId, authMode };
+  },
+);

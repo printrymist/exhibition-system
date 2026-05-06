@@ -1453,7 +1453,7 @@
     }
 
     // ── 作家向け案内メール送信 ──
-    function sendArtistGuide() {
+    async function sendArtistGuide() {
       if (!activeFields || activeFields.length === 0) {
         showMsg('sendGuideMsg', '⚠️ 項目を1つ以上設定して保存してください。', '#d93025');
         return;
@@ -1468,8 +1468,24 @@
         : '管理者メールアドレスに案内メールを送信します。よろしいですか？\n（受信後、内容を確認してから作家へ転送してください）';
       if (!confirm(confirmMsg)) return;
 
+      // 作家招待 URL に exhibition access token (HMAC) を埋め込んで発行する。
+      // expDays は会期の余裕を含めて 180 日を既定値とする。期限切れ後は再発行が必要。
+      let exp, sig;
+      try {
+        const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintExhibitionAccessToken');
+        const res = await fn({ exCode: currentEx, expDays: 180 });
+        exp = res.data && res.data.exp;
+        sig = res.data && res.data.sig;
+        if (!exp || !sig) throw new Error('Cloud Function から exp/sig が返りませんでした');
+      } catch (e) {
+        showMsg('sendGuideMsg', 'アクセストークン発行失敗: ' + (e && e.message ? e.message : e), '#d93025');
+        return;
+      }
+
       const exName = currentExName || currentEx;
-      const inputUrl = 'https://rohei-printer-system.web.app/input.html?ex=' + currentEx;
+      const inputUrl = 'https://rohei-printer-system.web.app/input.html?ex='
+        + encodeURIComponent(currentEx)
+        + '&exp=' + exp + '&sig=' + sig;
       const subjectPrefix = isSandbox ? '[練習モード - 転送禁止] ' : '';
       const subject = subjectPrefix + `【作家向け】作品情報入力のご案内（${exName}）`;
 
@@ -2286,12 +2302,24 @@ ${fieldsText}
       await docRef.set(merged, { merge: true });
     };
     window.fsDeleteArtwork = async (exCode, artworkId) => {
-      // Security Rules で delete は禁止しているため、status を空文字に戻して論理削除に変更
+      // 削除はスロットを空き枠 (status='0') に戻し、作家関連フィールドもクリアする。
+      // 論理削除のままだと artist で query するリスト系の関数で「削除済」が見えたままになる。
       const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
       const snap = await docRef.get();
       const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
       const sk = snap.exists ? snap.data().security_key : null;
-      await docRef.set({ status: "", security_key: sk, updatedAt: new Date().toISOString() }, { merge: true });
+      await docRef.set({
+        status: "0",
+        title: "", title_en: "",
+        artist: "", artist_en: "",
+        birth_year: "", death_year: "", birthplace: "",
+        year: "", technique: "", size: "", price: "",
+        courtesy: "", note: "", artist_note: "",
+        image_url: "",
+        insta: "", x: "", facebook: "", web: "", shop_url: "",
+        security_key: sk,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
       if (wasRegistered) {
         gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
           .catch(e => console.warn('bumpArtworkCount failed:', e));
