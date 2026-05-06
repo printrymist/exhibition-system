@@ -584,10 +584,15 @@
         document.getElementById('btnSearch').disabled = true;
         return;
       }
-      gasCall({ action: 'verifyExCode', ex: ex })
-        .then(res => {
-          if (res.success) document.getElementById('exNameHeader').textContent = res.exName;
-        });
+      // Phase 6d: verifyExCode は Firestore から ex_name を取得して代替
+      fsDb.collection('exhibitions').doc(ex).get()
+        .then(snap => {
+          if (snap.exists) {
+            const exName = (snap.data() || {}).ex_name || '';
+            if (exName) document.getElementById('exNameHeader').textContent = exName;
+          }
+        })
+        .catch(e => console.warn('exhibition lookup failed:', e));
       window.fsGetRegistrationFields(ex)
         .then(res => {
           activeFields = (res && res.length > 0) ? res

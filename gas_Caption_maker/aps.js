@@ -175,10 +175,10 @@ function doPost(e) {
     const action = e.parameter.action;
     const ex = e.parameter.ex || '';
 
-    if (action === 'loadAllData') {
-      output.setContent(JSON.stringify(loadAllData(ex)));
-      return output;
-    }
+    // Phase 6d: dead handlers (loadAllData / getQrData / saveActiveFields /
+    // verifyExCode / getArtworksByArtist / saveArtwork / updateArtwork /
+    // deleteArtwork) を撤去。Cloud Function (submitArtwork 等) または
+    // Firestore 直接読みに移行済。
 
     if (action === 'updateExName') {
       output.setContent(JSON.stringify(updateExName(ex, e.parameter.newName)));
@@ -200,56 +200,6 @@ function doPost(e) {
     if (action === 'deleteCaptionTemplate') {
       output.setContent(JSON.stringify(
         deleteCaptionTemplate(e.parameter.name)
-      ));
-      return output;
-    }
-
-    if (action === 'getQrData') {
-      output.setContent(JSON.stringify(getQrData(ex)));
-      return output;
-    }
-
-    if (action === 'saveActiveFields') {
-      output.setContent(JSON.stringify(
-        saveActiveFields(ex, e.parameter.activeFields)
-      ));
-      return output;
-    }
-
-    if (action === 'verifyExCode') {
-      output.setContent(JSON.stringify(verifyExCode(ex)));
-      return output;
-    }
-
-    if (action === 'getArtworksByArtist') {
-      output.setContent(JSON.stringify(
-        getArtworksByArtist(ex, e.parameter.artistName)
-      ));
-      return output;
-    }
-
-    if (action === 'saveArtwork') {
-      const data = JSON.parse(e.parameter.data || '{}');
-      output.setContent(JSON.stringify(saveArtwork(ex, data)));
-      return output;
-    }
-
-    if (action === 'updateArtwork') {
-      output.setContent(JSON.stringify(
-        updateArtwork(
-          ex,
-          e.parameter.artworkId,
-          JSON.parse(e.parameter.artworkData || '{}'),
-          JSON.parse(e.parameter.artistData || '{}'),
-          e.parameter.originalArtist
-        )
-      ));
-      return output;
-    }
-
-    if (action === 'deleteArtwork') {
-      output.setContent(JSON.stringify(
-        deleteArtwork(ex, e.parameter.artworkId)
       ));
       return output;
     }
@@ -281,20 +231,9 @@ function doPost(e) {
       return output;
     }
 
-    if (action === 'getArtistList') {
-      output.setContent(JSON.stringify(getArtistList(ex)));
-      return output;
-    }
-
-    if (action === 'getArtworkList') {
-      output.setContent(JSON.stringify(getArtworkList(ex)));
-      return output;
-    }
-
-    if (action === 'getRegistrationFields') {
-      output.setContent(JSON.stringify(getRegistrationFields(ex)));
-      return output;
-    }
+    // Phase 6d: getArtistList / getArtworkList / getRegistrationFields は
+    // 撤去 (クライアントは Firestore 直読み)。saveRegistrationFields は
+    // Master SS への mirror として残置。
 
     if (action === 'saveRegistrationFields') {
       output.setContent(JSON.stringify(

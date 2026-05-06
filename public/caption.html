@@ -1655,19 +1655,18 @@
       window._currentExEmail = '';
       window._currentEx = ex;
 
-      Promise.all([
-        gasCall({ action: 'verifyExCode', ex: ex }),
-        firebase.firestore().collection('exhibitions').doc(ex).get()
-      ])
-        .then(([data, exSnap]) => {
+      // Phase 6d: verifyExCode は Firestore から取得 (exhibitions get は public read)
+      firebase.firestore().collection('exhibitions').doc(ex).get()
+        .then(exSnap => {
           document.getElementById('btnLoad').disabled = false;
-          if (!data.success) {
+          if (!exSnap.exists) {
             document.getElementById('exName').innerText = '';
-            document.getElementById('exError').innerText = data.error;
+            document.getElementById('exError').innerText = `Exhibition code "${ex}" not found.`;
             return;
           }
-          document.getElementById('exName').innerText = '✅ ' + data.exName;
-          const exData = exSnap.exists ? exSnap.data() : {};
+          const exData = exSnap.data() || {};
+          const exName = exData.ex_name || ex;
+          document.getElementById('exName').innerText = '✅ ' + exName;
           window._currentExEmail = ((exData.email || '') + '').trim().toLowerCase();
           window._currentExData = exData;
           if (window.sandboxBadge) {

@@ -1136,20 +1136,19 @@
       document.getElementById('notOrganizerCard').style.display = 'none';
       document.getElementById('mainArea').style.display = 'none';
 
-      Promise.all([
-        gasCall({ action: 'verifyExCode', ex: ex }),
-        firebase.firestore().collection('exhibitions').doc(ex).get()
-      ])
-        .then(([res, exSnap]) => {
+      // Phase 6d: verifyExCode は Firestore から取得して代替 (exhibitions の get は public read)
+      firebase.firestore().collection('exhibitions').doc(ex).get()
+        .then(exSnap => {
           document.getElementById('btnLoad').disabled = false;
-          if (!res.success) {
+          if (!exSnap.exists) {
             document.getElementById('exName').innerText = '';
-            document.getElementById('exError').innerText = res.error;
+            document.getElementById('exError').innerText = `Exhibition code "${ex}" not found.`;
             return;
           }
-          document.getElementById('exName').innerText = '✅ ' + res.exName;
-          currentExName = res.exName || '';
-          const exData = exSnap.exists ? exSnap.data() : {};
+          const exData = exSnap.data() || {};
+          const exName = exData.ex_name || ex;
+          document.getElementById('exName').innerText = '✅ ' + exName;
+          currentExName = exName;
           currentExEmail = ((exData.email || '') + '').trim().toLowerCase();
           window._currentExData = exData;
           if (window.sandboxBadge) {
