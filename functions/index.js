@@ -17,12 +17,14 @@
  */
 
 const { setGlobalOptions } = require("firebase-functions");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
 admin.initializeApp();
 
@@ -509,3 +511,91 @@ exports.issueGalleryToken = onCall(
     };
   },
 );
+
+
+// =========================================================
+// galleryPage:
+//   Hosting rewrite で /gallery.html へのリクエストを受け、
+//   exhibitions/{ex} を読んで OG meta タグを差し替えた HTML を返す。
+//   テンプレート (gallery.template.html) はビルド時に functions/ に
+//   同梱され、起動時にメモリにキャッシュ。Cache-Control で CDN にも
+//   5 分置く (cold start 低減)。
+//
+//   gallery 本体の動的処理 (auth / 作品取得 / likes / コメント) は
+//   従来通りクライアント側で動く。SSR するのは OG タグだけ。
+// =========================================================
+
+let _galleryTemplate = null;
+function loadGalleryTemplate() {
+  if (_galleryTemplate) return _galleryTemplate;
+  _galleryTemplate = fs.readFileSync(
+    path.join(__dirname, "gallery.template.html"),
+    "utf8",
+  );
+  return _galleryTemplate;
+}
+
+function escapeAttr(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+const GALLERY_DEFAULT_TITLE = "Web 展覧会 - My Art Fair";
+const GALLERY_DEFAULT_DESC = "オンラインで作品を観覧できるバーチャル展覧会です。";
+const HOSTING_ORIGIN = "https://rohei-printer-system.web.app";
+
+exports.galleryPage = onRequest(async (req, res) => {
+  const exRaw = String((req.query && req.query.ex) || "").trim();
+  const ex = /^[A-Za-z0-9_-]+$/.test(exRaw) ? exRaw : "";
+
+  let title = GALLERY_DEFAULT_TITLE;
+  let description = GALLERY_DEFAULT_DESC;
+  let image = "";
+
+  if (ex) {
+    try {
+      const snap = await admin.firestore()
+        .collection("exhibitions").doc(ex).get();
+      if (snap.exists) {
+        const d = snap.data() || {};
+        const t = (d.gallery_title || d.ex_name || "").toString().trim();
+        if (t) title = t;
+        const desc = (d.gallery_subtitle || "").toString().trim();
+        if (desc) description = desc;
+        const img = (d.gallery_hero_url || "").toString().trim();
+        if (/^https?:\/\//i.test(img)) image = img;
+      }
+    } catch (e) {
+      logger.warn("galleryPage exhibition lookup failed", {
+        ex,
+        msg: e && e.message,
+      });
+    }
+  }
+
+  // 共有 URL: クエリ込みでないと別の展覧会と判別できないので ex を含める。
+  // exp / sig は visitor 用の一時パラメータなので OG URL からは外す。
+  const ogUrl = ex ?
+    `${HOSTING_ORIGIN}/gallery.html?ex=${encodeURIComponent(ex)}` :
+    `${HOSTING_ORIGIN}/gallery.html`;
+
+  let html = loadGalleryTemplate()
+    .replace(/__OG_TITLE__/g, escapeAttr(title))
+    .replace(/__OG_DESCRIPTION__/g, escapeAttr(description))
+    .replace(/__OG_URL__/g, escapeAttr(ogUrl));
+
+  if (image) {
+    html = html.replace(/__OG_IMAGE__/g, escapeAttr(image));
+  } else {
+    // 画像が無いときは og:image / twitter:image 行を丸ごと削除。
+    // 空 URL を返すと一部クローラが警告を出すため。
+    html = html.replace(/^.*__OG_IMAGE__.*\r?\n?/gm, "");
+  }
+
+  res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.status(200).send(html);
+});

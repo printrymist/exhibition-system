@@ -201,6 +201,63 @@
     @media (min-width: 1400px) {
       body { font-size: 18px; }
     }
+
+    .ended-banner {
+      background: rgba(255, 240, 180, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(218, 165, 32, 0.5);
+      border-radius: 14px;
+      padding: 16px 22px;
+      margin-bottom: 20px;
+      position: relative;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 20px rgba(218, 165, 32, 0.18);
+    }
+    .ended-banner.show { display: flex; }
+    .ended-banner-icon { font-size: 1.8em; flex-shrink: 0; }
+    .ended-banner-text { flex: 1; min-width: 220px; }
+    .ended-banner-title {
+      font-weight: 700;
+      font-size: 1.1em;
+      color: #5b4500;
+    }
+    .ended-banner-body {
+      font-size: 0.95em;
+      color: #6b5400;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .ended-banner-btn {
+      padding: 10px 20px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 0.95em;
+      flex-shrink: 0;
+    }
+    .ended-banner-btn:hover { background: #1557b0; color: white; }
+    .ended-banner-dismiss {
+      position: absolute;
+      top: 6px;
+      right: 10px;
+      background: transparent;
+      border: none;
+      font-size: 1.4em;
+      color: #888;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+    }
+    .ended-banner-dismiss:hover { color: #333; }
   </style>
 </head>
 
@@ -211,6 +268,18 @@
   </div>
 
   <div id="sandboxBadge" style="display:none;"></div>
+
+  <div class="ended-banner" id="endedBanner">
+    <div class="ended-banner-icon" aria-hidden="true">📦</div>
+    <div class="ended-banner-text">
+      <div class="ended-banner-title">会期終了から <span id="endedDays">―</span> 日経過しています</div>
+      <div class="ended-banner-body">
+        現在の公開状態は <strong><span id="endedVisibility">―</span></strong> です。Web 展覧会をアーカイブとして公開する場合は、設定画面で公開状態を切り替えてください。
+      </div>
+    </div>
+    <a class="ended-banner-btn" id="endedBannerLink" href="#">Web 展覧会の設定を開く →</a>
+    <button class="ended-banner-dismiss" onclick="dismissEndedBanner()" aria-label="閉じる" title="このセッション中は閉じる">×</button>
+  </div>
 
   <div class="big-numbers">
     <div class="stat-card">
@@ -263,6 +332,40 @@
       return div.innerHTML;
     }
 
+    // 会期終了バナー: comments_end_at が設定されていて、終了から
+    // ENDED_BANNER_THRESHOLD_DAYS 以上経過し、かつ gallery_visibility が
+    // public でないときに「設定画面を開く」リンクを出す。
+    const ENDED_BANNER_THRESHOLD_DAYS = 1;
+    const VISIBILITY_LABEL = {
+      closed: '非公開 (closed)',
+      visitor_only: '来場者のみ (visitor_only)',
+      public: '公開 (public)',
+    };
+    function evaluateEndedBanner(exData) {
+      const banner = document.getElementById('endedBanner');
+      if (!banner) return;
+      banner.classList.remove('show');
+      if (sessionStorage.getItem('endedBanner_dismissed_' + exVal)) return;
+      const visibility = (exData.gallery_visibility || 'closed').trim();
+      if (visibility === 'public') return;
+      const endStr = (exData.comments_end_at || '').trim();
+      if (!endStr) return;
+      const end = new Date(endStr);
+      if (isNaN(end.getTime())) return;
+      const days = Math.floor((Date.now() - end.getTime()) / 86400000);
+      if (days < ENDED_BANNER_THRESHOLD_DAYS) return;
+      document.getElementById('endedDays').innerText = String(days);
+      document.getElementById('endedVisibility').innerText =
+        VISIBILITY_LABEL[visibility] || visibility;
+      document.getElementById('endedBannerLink').href =
+        'web-exhibition.html?ex=' + encodeURIComponent(exVal);
+      banner.classList.add('show');
+    }
+    function dismissEndedBanner() {
+      sessionStorage.setItem('endedBanner_dismissed_' + exVal, '1');
+      document.getElementById('endedBanner').classList.remove('show');
+    }
+
     if (!exVal) {
       document.getElementById('exName').textContent = '展覧会コードが指定されていません（?ex=...）';
     } else {
@@ -280,8 +383,10 @@
           if (window.sandboxBadge) {
             window.sandboxBadge.render('sandboxBadge', exData, 'operator');
           }
+          evaluateEndedBanner(exData);
         } else {
           document.getElementById('exName').textContent = exVal + ' (展覧会未登録)';
+          document.getElementById('endedBanner').classList.remove('show');
         }
       });
 

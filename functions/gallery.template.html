@@ -4,7 +4,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web 展覧会</title>
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="__OG_TITLE__">
+  <meta property="og:description" content="__OG_DESCRIPTION__">
+  <meta property="og:url" content="__OG_URL__">
+  <meta property="og:site_name" content="My Art Fair">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:image" content="__OG_IMAGE__">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="__OG_TITLE__">
+  <meta name="twitter:description" content="__OG_DESCRIPTION__">
+  <meta name="twitter:image" content="__OG_IMAGE__">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -318,6 +330,41 @@
       padding: 6px 0;
     }
 
+    .share-fab {
+      position: fixed;
+      bottom: 22px;
+      right: 22px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .share-fab:hover { background: #1557b0; }
+    .share-fab.show { display: flex; }
+    .share-toast {
+      position: fixed;
+      bottom: 90px;
+      right: 22px;
+      background: rgba(20,30,50,0.92);
+      color: white;
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 0.88em;
+      z-index: 60;
+      display: none;
+    }
+    .share-toast.show { display: block; }
+
     .info-card {
       max-width: 480px;
       margin: 60px auto;
@@ -342,6 +389,11 @@
   <div id="heroBanner"></div>
 
   <div id="sandboxBadge"></div>
+
+  <button id="shareFab" class="share-fab" type="button" onclick="onShareClick()" aria-label="この展覧会をシェア" title="シェア">
+    <span aria-hidden="true">⤴</span>
+  </button>
+  <div id="shareToast" class="share-toast"></div>
 
   <main>
     <div id="status"><span class="spinner"></span> 読み込み中...</div>
@@ -431,6 +483,37 @@
           <div class="body">${escapeHtml(body)}</div>
         </div>
       `;
+      const fab = document.getElementById('shareFab');
+      if (fab) fab.classList.remove('show');
+    }
+
+    function showShareToast(text) {
+      const el = document.getElementById('shareToast');
+      el.innerText = text;
+      el.classList.add('show');
+      clearTimeout(showShareToast._t);
+      showShareToast._t = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    async function onShareClick() {
+      const url = window.location.href;
+      const title = (document.getElementById('exTitle').innerText || 'Web 展覧会').trim();
+      const text = (document.getElementById('exSubtitle').innerText || '').trim();
+      if (navigator.share) {
+        try {
+          await navigator.share({ title, text, url });
+        } catch (e) {
+          if (e && e.name !== 'AbortError') console.warn('share failed:', e);
+        }
+        return;
+      }
+      // Fallback: clipboard
+      try {
+        await navigator.clipboard.writeText(url);
+        showShareToast('URL をコピーしました');
+      } catch (e) {
+        showShareToast('コピーに失敗しました');
+      }
     }
 
     let artworksCache = [];
@@ -667,6 +750,7 @@
         return;
       }
       grid.style.display = 'grid';
+      document.getElementById('shareFab').classList.add('show');
       grid.innerHTML = artworks.map((a, idx) => {
         const img = getArtworkImageUrl(a, 'thumb');
         return `
