@@ -474,12 +474,7 @@
 
   <script>
     // =========================================================
-    // 🌟 GAS URL設定
-    // =========================================================
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzMbHtoC-bmGQQIYFKFkCsxjoKKFue0_HZB3En24Z9H2awkuWDQL1SBYeOQOfnt4OdT/exec';
-
-    // =========================================================
-    // 🌟 URLパラメータ取得（GASのテンプレート変数を置き換え）
+    // 🌟 URL パラメータ取得
     // =========================================================
     const urlParams = new URLSearchParams(window.location.search);
     const exVal  = urlParams.get('ex')  || '';
@@ -488,30 +483,8 @@
     const expVal = urlParams.get('exp') || '';
     const sigVal = urlParams.get('sig') || '';
 
-    // =========================================================
-    // 🌟 GAS通信共通関数（google.script.runの代替）
-    // =========================================================
-    function gasCall(action, extraParams) {
-      const postParams = new URLSearchParams();
-      postParams.append('action', action);
-      postParams.append('ex', exVal);
-      postParams.append('id', idVal);
-      postParams.append('key', keyVal);
-      if (expVal) postParams.append('exp', expVal);
-      if (sigVal) postParams.append('sig', sigVal);
-      if (extraParams) {
-        Object.keys(extraParams).forEach(k => {
-          postParams.append(k, typeof extraParams[k] === 'object'
-            ? JSON.stringify(extraParams[k])
-            : extraParams[k]);
-        });
-      }
-      return fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: postParams
-      }).then(res => res.json());
-    }
+    // Phase 6c: gas_QRlikes 経路を完全撤去。GAS_URL / gasCall は不要に。
+    // すべての write は Cloud Function (submitArtwork) 経由、read は Firestore 直接。
 
     // =========================================================
     // 🌟 多言語辞書
@@ -1248,50 +1221,23 @@
       await ref.put(blob, { contentType: 'image/jpeg' });
       return await ref.getDownloadURL();
     };
+    // Phase 6c: GAS バックフィル経路を撤去。Firestore のみが artwork データのソース。
+    // (rules も Phase 5-A で固めてあり、anon クライアントから artworks の create/update は
+    // できないので、そもそも backfill は silent fail していた経路。)
     window.fsGetArtworkData = async (exCode, artworkId) => {
       try {
         const [aSnap, eSnap] = await Promise.all([
           fsDb.collection('artworks').doc(exCode + '_' + artworkId).get(),
           fsDb.collection('exhibitions').doc(exCode).get()
         ]);
-        // 練習モードバッジを表示 (来場者向け)
         if (eSnap.exists && window.sandboxBadge) {
           window.sandboxBadge.render('sandboxBadge', eSnap.data(), 'visitor', { maxWidth: '600px' });
         }
-        let a = aSnap.exists ? aSnap.data() : null;
-
-        // Firestore に未登録の作品の場合、GAS から取得してバックフィル
-        let backfillExName = null;
-        if (!a) {
-          const gasRes = await gasCall('ansGetArtworkData');
-          if (!gasRes || !gasRes.success) {
-            return { success: false, msg: (gasRes && gasRes.msg) || '作品IDが見つかりません' };
-          }
-          a = {
-            exCode: exCode,
-            artwork_id: artworkId,
-            security_key: gasRes.securityKey,
-            status: gasRes.isRegistered ? "1" : "",
-            title: gasRes.title || '',
-            artist: gasRes.artist || '',
-            image_url: gasRes.image || '',
-            insta: (gasRes.sns && gasRes.sns.insta) || '',
-            x: (gasRes.sns && gasRes.sns.x) || '',
-            facebook: (gasRes.sns && gasRes.sns.fb) || '',
-            web: (gasRes.sns && gasRes.sns.web) || ''
-          };
-          backfillExName = gasRes.exName || '';
-          fsDb.collection('artworks').doc(exCode + '_' + artworkId)
-            .set({ ...a, backfilledAt: new Date().toISOString() }, { merge: true })
-            .catch(e => console.error('backfill artwork failed:', e));
-          if (!eSnap.exists && backfillExName) {
-            fsDb.collection('exhibitions').doc(exCode)
-              .set({ ex_code: exCode, ex_name: backfillExName, backfilledAt: new Date().toISOString() }, { merge: true })
-              .catch(e => console.error('backfill exhibition failed:', e));
-          }
+        if (!aSnap.exists) {
+          return { success: false, msg: '作品IDが見つかりません' };
         }
-
-        const e = eSnap.exists ? eSnap.data() : { ex_name: backfillExName || '' };
+        const a = aSnap.data() || {};
+        const e = eSnap.exists ? eSnap.data() : {};
         return {
           success: true,
           securityKey: a.security_key,
