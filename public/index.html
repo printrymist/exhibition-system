@@ -1089,7 +1089,12 @@
       }
     }
 
-    document.getElementById('ansLikeForm').addEventListener('submit', function(e) {
+    // Phase 6a: visitor の comment/like は GAS を経由せず直接 Firestore に書く。
+    // 旧 ansProcessForm 経由の二重書き (GAS comments シート + Firestore likes) を
+    // 廃止して、Firestore likes コレクションを唯一のソースにする。
+    // 作家本人によるロック解除 (UNLOCK) のみ submitArtwork 経由で artwork status
+    // をクリア。RESET (旧 GAS キャッシュ flush) は GAS 依存が消えるので不要。
+    document.getElementById('ansLikeForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       var btn = document.getElementById('ansSubmitBtn');
       var originalText = btn.innerText;
@@ -1107,102 +1112,74 @@
         comment: document.getElementById('ansCommentInput').value
       };
 
-      gasCall('ansProcessForm', formPayload).then(result => {
+      try {
+        const nicknameTrim = (formPayload.nickname || '').trim();
+        const artistTrim = (formPayload.workArtist || '').trim();
+        const commentTrim = (formPayload.comment || '').trim();
+        const isArtistSelf = nicknameTrim.length > 0 && nicknameTrim === artistTrim;
 
-        // Phase 5-B: SNS_SYNC_REQUEST / PROMPT_PASSWORD / LOGOUT_SUCCESS は撤去済。
-        // それぞれ input.html の作家伝播ロジック / Email Link 認証 (Phase 3) に
-        // 移行されている。
-
-        if (result.action === "UNLOCK_SUCCESS") {
-          if (window.fsSetArtwork) {
-            window.fsSetArtwork(exVal, idVal, { status: "" }).catch(e => console.error('Firestore unlock mirror failed:', e));
-          }
-          alert(t('alertUnlock'));
-          reloadApp();
-          return;
-        }
-
-        if (result.action === "ERROR") {
-          alert(result.msg);
-          if (result.msg.includes("リセット") || result.msg.includes("reset")) {
+        if (isArtistSelf) {
+          // 作家自身が自作品に投稿しようとしている: UNLOCK だけ許可、それ以外はエラー。
+          const cl = commentTrim.toLowerCase();
+          if (commentTrim === '登録解除' || cl === 'unlock') {
+            if (!window.fsSetArtwork) {
+              throw new Error('fsSetArtwork が利用できません');
+            }
+            await window.fsSetArtwork(exVal, idVal, { status: "" });
+            alert(t('alertUnlock'));
             reloadApp();
-          } else {
-            btn.innerText = originalText;
-            btn.disabled = false;
+            return;
           }
-          return;
-        }
-
-        // GAS が { success: false, error: ... } 形式 (未認証等) で返した場合の保険。
-        // result.action が undefined のままだとボタンが「通信中」のまま固まるので、
-        // ここで明示的にハンドリングする。
-        if (result && result.success === false) {
-          alert((result.error || 'エラーが発生しました'));
+          alert('入力エラー：作家本人のお名前での投稿はできません。');
           btn.innerText = originalText;
           btn.disabled = false;
           return;
         }
 
-        if (result.action === "COUNT") {
-          document.getElementById('ansInputView').style.display = 'none';
-          var alreadyMsg = document.getElementById('ansAlreadyLikedMsg');
-          if (alreadyMsg) alreadyMsg.style.display = 'none';
-          document.getElementById('ansThankYou').style.display = 'block';
-          document.getElementById('ansThankYou').classList.add('fade-in');
-          var isAdditional = (document.getElementById('ansIsLikeInput').value === "0");
-          // 仮表示は GAS の count、その後 Firestore 由来に上書きする
-          document.getElementById('ansCountMsg').innerText = isAdditional
-            ? t('ansCountMsgAdded') + result.count
-            : t('ansCountMsg') + result.count;
-          localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
-          // Firestore に書き込み → その上で Firestore 集計値で再表示
-          // (dashboard.html / gallery.html と同じソースなので整合する)
-          (async () => {
-            try {
-              if (window.fsAddLike) {
-                await window.fsAddLike({
-                  exCode: exVal,
-                  ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
-                  workId: idVal,
-                  title: formPayload.workTitle,
-                  artist: formPayload.workArtist,
-                  sessionId: formPayload.sessionId,
-                  nickname: formPayload.nickname,
-                  comment: formPayload.comment,
-                  isLike: formPayload.isLike === "1"
-                });
-              }
-              const snap = await fsDb.collection('likes')
-                .where('exCode', '==', exVal)
-                .where('workId', '==', idVal)
-                .get();
-              let fsCount = 0;
-              snap.forEach(d => { if (d.data().isLike) fsCount++; });
-              document.getElementById('ansCountMsg').innerText = isAdditional
-                ? t('ansCountMsgAdded') + fsCount
-                : t('ansCountMsg') + fsCount;
-            } catch (e) {
-              console.error('Firestore count failed:', e);
-            }
-          })();
-          var nickname = document.getElementById('ansNicknameInput').value.trim();
-          if (nickname) localStorage.setItem("nickname_" + exVal, nickname);
-          return;
+        // 通常の visitor フロー: Firestore likes に直接書き込み。
+        if (window.fsAddLike) {
+          await window.fsAddLike({
+            exCode: exVal,
+            ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
+            workId: idVal,
+            title: formPayload.workTitle,
+            artist: formPayload.workArtist,
+            sessionId: formPayload.sessionId,
+            nickname: formPayload.nickname,
+            comment: formPayload.comment,
+            isLike: formPayload.isLike === "1"
+          });
         }
 
-        // どの action にも該当しないレスポンス (想定外の構造) のフォールバック。
-        // ここに来る = GAS 側のロジック変更で返り値構造が変わった可能性があるので、
-        // ボタンを戻して console にログしておく。
-        console.warn('ansProcessForm: unexpected response', result);
-        alert('予期しないレスポンスを受信しました。コンソールを確認してください。');
-        btn.innerText = originalText;
-        btn.disabled = false;
+        document.getElementById('ansInputView').style.display = 'none';
+        var alreadyMsg = document.getElementById('ansAlreadyLikedMsg');
+        if (alreadyMsg) alreadyMsg.style.display = 'none';
+        document.getElementById('ansThankYou').style.display = 'block';
+        document.getElementById('ansThankYou').classList.add('fade-in');
 
-      }).catch(err => {
-        alert("通信エラー: " + err.message);
+        var isAdditional = (formPayload.isLike === "0");
+        let fsCount = 0;
+        try {
+          const snap = await fsDb.collection('likes')
+            .where('exCode', '==', exVal)
+            .where('workId', '==', idVal)
+            .get();
+          snap.forEach(d => { if (d.data().isLike) fsCount++; });
+        } catch (e) {
+          console.error('Firestore count failed:', e);
+        }
+        document.getElementById('ansCountMsg').innerText = isAdditional
+          ? t('ansCountMsgAdded') + fsCount
+          : t('ansCountMsg') + fsCount;
+
+        localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
+        if (nicknameTrim) localStorage.setItem("nickname_" + exVal, nicknameTrim);
+      } catch (err) {
+        console.error('submit failed:', err);
+        alert('送信エラー: ' + (err && err.message ? err.message : err));
         btn.innerText = originalText;
         btn.disabled = false;
-      });
+      }
     });
 
   </script>
@@ -1310,8 +1287,7 @@
     window.fsSetArtwork = async (exCode, artworkId, data) => {
       const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
       if (!accessToken) {
-        console.warn('fsSetArtwork: no access token in URL for', exCode, artworkId, '- skipping write');
-        return;
+        throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
       }
       const res = await _submitArtworkFn({
         exCode: exCode,
