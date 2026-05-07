@@ -895,16 +895,19 @@
       cursor: not-allowed;
     }
 
-    #previewArea {
-      display: none;
-    }
-
     #previewFrame {
       width: 100%;
       height: 440px;
       border: 1px solid #ddd;
       border-radius: 8px;
       background: white;
+    }
+
+    @media (max-width: 768px) {
+      #previewFrame {
+        height: 360px;
+        max-height: 60vh;
+      }
     }
 
     .spinner-sm {
@@ -1060,6 +1063,28 @@
 
   <!-- キャプション印刷エリア -->
   <div id="settingsArea" style="display:none;">
+
+    <!-- C-2 Phase 1: プレビューを最上部に。設定変更で自動更新されるので Refresh ボタンは
+         「強制再生成」用 (普段は押さなくて済む) -->
+    <div id="previewArea" class="card" style="position:relative;">
+      <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span>🖨️ Preview</span>
+        <span id="previewStatus" style="font-size:0.75em;color:#888;font-weight:normal;"></span>
+      </div>
+      <div id="previewPlaceholder"
+        style="padding:50px 16px;text-align:center;color:#888;background:#f7f7f9;border:1px dashed #ccc;border-radius:8px;font-size:0.92em;line-height:1.6;">
+        設定を調整すると、印刷物のプレビューがここに表示されます。<br>
+        <span style="font-size:0.85em;color:#aaa;">(下のレイアウト・テンプレ設定を変更すると自動で更新されます)</span>
+      </div>
+      <iframe id="previewFrame" scrolling="auto" style="display:none;"></iframe>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn-preview" onclick="generatePreview()" title="設定を反映してプレビューを再生成">🔄 Refresh</button>
+        <button class="btn-print" id="btnPrint" onclick="openPrint()" disabled>🖨️ Print</button>
+      </div>
+      <!-- D-6: 入りきらないフィールドの警告パネル -->
+      <div id="overflowWarning"
+        style="display:none; margin-top:12px; background:#fff3e0; border:1px solid #ffb74d; padding:12px; border-radius:8px;"></div>
+    </div>
 
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
       <div class="card-title">Page layout</div>
@@ -1346,22 +1371,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="btn-row">
-        <button class="btn-preview" onclick="generatePreview()">Preview</button>
-        <button class="btn-print" id="btnPrint" onclick="openPrint()" disabled>Print</button>
-      </div>
-    </div>
-
-    <!-- D-6: 入りきらないフィールドの警告パネル (Preview 後に表示) -->
-    <div id="overflowWarning" class="card"
-         style="display:none; background:#fff3e0; border:1px solid #ffb74d;"></div>
-
-    <div id="previewArea" class="card">
-      <div class="card-title">Preview</div>
-      <iframe id="previewFrame" scrolling="auto"></iframe>
-    </div>
-
   </div>
 
   <!-- QR Print エリア -->
@@ -1550,6 +1559,25 @@
       });
 
     document.addEventListener('DOMContentLoaded', () => {
+      // C-2: 設定エリア内の input / change / toggle クリックで自動プレビューを debounce 発火。
+      //   テンプレ名入力 (saveTemplateName) は印刷物に影響しないので除外。
+      const sa = document.getElementById('settingsArea');
+      if (sa) {
+        sa.addEventListener('input', e => {
+          if (e.target && e.target.id === 'saveTemplateName') return;
+          schedulePreviewUpdate();
+        });
+        sa.addEventListener('change', e => {
+          if (e.target && e.target.id === 'saveTemplateName') return;
+          schedulePreviewUpdate();
+        });
+        sa.addEventListener('click', e => {
+          if (e.target.closest('.toggle-btn, .ftoggle-btn')) {
+            schedulePreviewUpdate();
+          }
+        });
+      }
+
       const ex = getUrlParam('ex');
       // ex_code は英数字・ハイフン・アンダースコアのみ許可。それ以外 (@ 等) は不正な URL なので消す
       if (ex && /[^A-Za-z0-9_-]/.test(ex)) {
@@ -1672,10 +1700,12 @@
       document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
       document.getElementById('tpl_' + name).classList.add('selected');
       const p = PRESETS[name];
+      if (!p) return;  // 起動直後 PRESETS 未ロードのケース
       document.getElementById('qrPosition').value = p.qrPosition;
       document.getElementById('qrOffset').value = p.qrOffset || 0;
       document.getElementById('textAlign').value = p.textAlign;
       onQrPositionChange();
+      schedulePreviewUpdate();
     }
 
     function customizeTemplate() {
@@ -1869,6 +1899,8 @@
       // 各レベルで up/down/merge ボタンの有効状態を更新
       updateRowBtnStates(grid);
       grid.querySelectorAll('.group-children').forEach(c => updateRowBtnStates(c, true));
+      // C-2: 構造変更 (追加/削除/移動/結合) ごとにプレビュー再生成
+      schedulePreviewUpdate();
     }
 
     function updateRowBtnStates(container, isInsideGroup) {
@@ -2413,12 +2445,30 @@
       artworkData = tempData;
 
       const frame = document.getElementById('previewFrame');
+      const placeholder = document.getElementById('previewPlaceholder');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
         const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
         showOverflowWarning(overflow);
+        // 初回 generate 後、placeholder を消して iframe を表示
+        if (placeholder) placeholder.style.display = 'none';
+        frame.style.display = 'block';
+        const status = document.getElementById('previewStatus');
+        if (status) status.innerText = '✓ 最新';
       }, { once: true });
-      document.getElementById('previewArea').style.display = 'block';
+    }
+
+    // C-2: 設定変更で自動プレビューを発火 (debounce 350ms)
+    let _previewDebounceId = null;
+    function schedulePreviewUpdate() {
+      if (!artworkData) return;  // exhibition 未ロード時は何もしない
+      const status = document.getElementById('previewStatus');
+      if (status) status.innerText = '更新中...';
+      if (_previewDebounceId) clearTimeout(_previewDebounceId);
+      _previewDebounceId = setTimeout(() => {
+        _previewDebounceId = null;
+        generatePreview();
+      }, 350);
     }
 
     // D-6: 入りきらないフィールド一覧を画面に出し、Print ボタンを警告 ack で gate
