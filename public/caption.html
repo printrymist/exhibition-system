@@ -525,6 +525,17 @@
       background: #fafdff;
     }
 
+    .group-count {
+      font-size: 10px;
+      color: #1a73e8;
+      background: #e8f0fe;
+      padding: 1px 5px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      cursor: help;
+      font-weight: bold;
+    }
+
     .ungroup-btn {
       padding: 2px 8px;
       font-size: 10px;
@@ -1319,6 +1330,7 @@
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" id="saveTemplateName" placeholder="Template name..."
+              oninput="onTemplateNameInput()"
               style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
             <button id="btnSaveTemplate" onclick="saveTemplate()"
               style="padding:8px 16px;background:#1a73e8;color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;white-space:nowrap;">
@@ -1809,6 +1821,7 @@
             // group 内の child は merge 不可（既に group 内）
             mergeBtn.disabled = true;
             mergeBtn.style.display = 'none';
+            mergeBtn.title = 'このフィールドは既にグループ内です';
           } else {
             mergeBtn.style.display = '';
             const prev = rows[idx - 1];
@@ -1818,6 +1831,28 @@
                 topLevelRows(prev.querySelector('.group-children')).length < 3)
             );
             mergeBtn.disabled = !canMerge;
+            // D-2: 不可理由をツールチップで明示
+            if (!canMerge) {
+              if (!prev) {
+                mergeBtn.title = '直前に結合できる行がありません';
+              } else if (prev.dataset.type === 'group') {
+                mergeBtn.title = '直前のグループは満杯です (最大3項目)';
+              } else {
+                mergeBtn.title = '直前の行とは結合できません (区切り線・空白行は対象外)';
+              }
+            } else {
+              mergeBtn.title = '直前の行と結合';
+            }
+          }
+        }
+
+        // D-2: グループ要素数 [N/3] の表示更新
+        if (row.dataset.type === 'group') {
+          const childContainer = row.querySelector('.group-children');
+          if (childContainer) {
+            const childCount = topLevelRows(childContainer).length;
+            const countEl = row.querySelector(':scope > .group-header > .group-count');
+            if (countEl) countEl.textContent = `[${childCount}/3]`;
           }
         }
       });
@@ -2033,6 +2068,8 @@
       <div class="group-header">
         ${moveBtnsHtml()}
         <span style="font-size:10px;color:#1a73e8;flex-shrink:0;font-weight:bold;">G</span>
+        <span class="group-count" id="gcount_${gid}"
+          title="現在のグループ要素数 / 最大3。残り1個になると自動でグループが解除されます。">[—]</span>
         <span class="group-sep-label">区切り</span>
         <input type="text" class="group-sep-input" id="gsep_${gid}" value="${sep.replace(/"/g, '&quot;')}" title="Separator">
         <select id="galign_${gid}" title="行全体の揃え">
@@ -2716,16 +2753,34 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       }
     }
 
+    // 入力中の名前が既存テンプレと重複するかをリアルタイムでフィードバック。
+    // ボタンラベルと saveMsg を切り替えるだけで confirm は出さない (D-1)。
+    function onTemplateNameInput() {
+      const name = document.getElementById('saveTemplateName').value.trim();
+      const btn = document.getElementById('btnSaveTemplate');
+      const msg = document.getElementById('saveMsg');
+      if (!btn || !msg) return;
+      if (!name) {
+        btn.innerHTML = '💾 Save';
+        msg.innerText = '';
+        return;
+      }
+      if (savedTemplateNames.has(name)) {
+        btn.innerHTML = '⚠ 上書き保存';
+        msg.style.color = '#c08400';
+        msg.innerText = `既存の「${name}」を上書きします。`;
+      } else {
+        btn.innerHTML = '💾 Save';
+        msg.style.color = '#888';
+        msg.innerText = '';
+      }
+    }
+
     function saveTemplate() {
       const name = document.getElementById('saveTemplateName').value.trim();
       if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
       const overwriting = savedTemplateNames.has(name);
-      if (overwriting) {
-        if (!confirm(`"${name}" は既に存在します。上書きしますか？`)) {
-          showSaveMsg('保存をキャンセルしました。', '#888');
-          return;
-        }
-      }
+      // D-1: confirm は撤廃。oninput で「⚠ 上書き保存」を明示済。
       const settings = getSettings();
       const json = JSON.stringify(settings);
       showSaveMsg('Saving...', '#888');
@@ -2743,8 +2798,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         updatedAt: new Date().toISOString()
       }, { merge: true })
         .then(() => {
-          showSaveMsg(overwriting ? `"${name}" updated.` : `"${name}" saved.`, '#1a73e8');
+          showSaveMsg(overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`, '#1a73e8');
           document.getElementById('saveTemplateName').value = '';
+          if (saveBtn) saveBtn.innerHTML = '💾 Save';  // ラベルを元に戻す
           loadSavedTemplates();
         })
         .catch(err => showSaveMsg('Error: ' + err.message, '#d93025'))
