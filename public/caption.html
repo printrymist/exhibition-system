@@ -1449,27 +1449,69 @@
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+    // =========================================================
+    // 設定値 (Config) — チューニング可能な定数を一箇所に集約
+    // PRESETS は data/caption-presets.json (B-3)、PAPER_DIMS は印刷ヘルパ (B-1) に
+    // それぞれ別れているのでここには出さない。LIKE_* SVG パスは可視化用データなので
+    // 描画ロジックの近くに残す。
+    // =========================================================
+    const GAS_URL          = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+    const GAS_TIMEOUT_MS   = 25000;  // GAS の通常応答は数秒。25秒を超えたらタイムアウト判定
+    const GAS_RETRY_MAX    = 2;      // 初回 + 最大 2 リトライ = 計 3 回
+    const GAS_RETRY_DELAY  = 2000;   // リトライ前の待機ミリ秒
+    const QR_CELL_SIZE     = 10;     // QR 1モジュールあたりの canvas pixel
+    const QR_MARGIN        = 4;      // QR 周囲の quiet zone (モジュール単位)
 
-    function gasCall(params, retries = 3) {
+    // gasCall: GAS Web App (doPost) を叩く共通関数
+    // - AbortController でタイムアウト検出
+    // - timeout / network 系の一時的エラーのみ retry (HTTP 4xx/5xx は即座に失敗)
+    // - ユーザー向けの分かりやすいメッセージを `error` に詰めて返す
+    function gasCall(params, retries) {
+      retries = (retries === undefined) ? GAS_RETRY_MAX : retries;
       const body = new URLSearchParams(params);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), GAS_TIMEOUT_MS);
+
       return fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body
+        body: body,
+        signal: controller.signal
       })
         .then(r => {
-          if (!r.ok) throw new Error('HTTP error: ' + r.status);
+          clearTimeout(timeoutId);
+          if (!r.ok) {
+            const e = new Error('HTTP ' + r.status);
+            e.code = 'http';
+            e.status = r.status;
+            throw e;
+          }
           return r.json();
         })
         .catch(err => {
-          console.error('gasCall error:', err.message);
-          if (retries > 0) {
-            console.log(`リトライします... 残り${retries}回`);
-            return new Promise(resolve => setTimeout(resolve, 2000))
+          clearTimeout(timeoutId);
+          let code = err.code;
+          if (!code) {
+            if (err.name === 'AbortError') code = 'timeout';
+            else if (/Failed to fetch|NetworkError|ERR_INTERNET/.test(err.message || '')) code = 'network';
+            else code = 'unknown';
+          }
+          console.error('gasCall error:', code, err.message);
+
+          // 一時的エラー (timeout / network) のみ再試行。HTTP エラーは再試行しない
+          if (retries > 0 && (code === 'timeout' || code === 'network')) {
+            console.log(`gasCall retry (${code}), 残り ${retries} 回`);
+            return new Promise(resolve => setTimeout(resolve, GAS_RETRY_DELAY))
               .then(() => gasCall(params, retries - 1));
           }
-          return { success: false, error: err.message };
+
+          let userError;
+          if (code === 'timeout')      userError = 'GAS の応答が遅延しています。少し待ってからもう一度お試しください。';
+          else if (code === 'network') userError = 'ネットワーク接続を確認してください。';
+          else if (code === 'http')    userError = `サーバーエラー (HTTP ${err.status}) が発生しました。`;
+          else                          userError = err.message || '通信エラーが発生しました。';
+
+          return { success: false, error: userError, code: code };
         });
     }
 
@@ -1742,6 +1784,11 @@
     function saveExName() {
       const newName = document.getElementById('exNameInput').value.trim();
       if (!newName) return alert('展覧会名を入力してください。');
+      // D-3: オフラインだと Firestore 書き込みが永久 pending になるので事前チェック
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してください。');
+        return;
+      }
       const ex = document.getElementById('exCodeInput').value.trim();
       const saveBtn = document.querySelector('#exNameEditArea button');
       saveBtn.disabled = true;
@@ -2779,6 +2826,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function saveTemplate() {
       const name = document.getElementById('saveTemplateName').value.trim();
       if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
+      if (!navigator.onLine) {
+        showSaveMsg('オフラインです。ネットワーク接続を確認してください。', '#d93025');
+        return;
+      }
       const overwriting = savedTemplateNames.has(name);
       // D-1: confirm は撤廃。oninput で「⚠ 上書き保存」を明示済。
       const settings = getSettings();
@@ -2809,6 +2860,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     function deleteSavedTemplate(name, btn) {
       if (!confirm(`Delete "${name}"?`)) return;
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してください。');
+        return;
+      }
       if (btn) btn.disabled = true;
       const docId = sanitizeTplId(name);
       firebase.firestore().collection('caption_templates').doc(docId).delete()
@@ -2825,8 +2880,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     const LIKE_PATH1 = new Path2D('M 819.363281 444.765625 C 828.230469 440.285156 834.960938 429.640625 830.355469 419.574219 C 828.964844 416.523438 826.480469 413.871094 823.691406 411.714844 C 827.027344 408.5 829.164062 404.019531 829.800781 399.296875 C 830.671875 392.785156 828.707031 385.941406 823.648438 381.558594 C 821.269531 379.511719 818.308594 378.269531 815.113281 377.585938 C 811.023438 376.710938 806.527344 376.753906 802.761719 376.703125 C 788.328125 376.503906 773.847656 377.34375 759.429688 378.058594 C 754.40625 378.308594 749.425781 378.746094 744.445312 379.40625 C 746.15625 374.992188 747.683594 370.511719 748.96875 365.949219 C 753.261719 350.726562 755.917969 332.398438 750.316406 317.105469 C 748.667969 312.601562 745.136719 307.503906 740.695312 304.113281 C 737.460938 301.644531 733.753906 300.078125 729.953125 299.980469 C 724.816406 299.847656 721.425781 302.441406 719.140625 306.320312 C 716.582031 310.671875 715.679688 316.941406 714.707031 320.984375 C 714.261719 322.828125 713.777344 324.652344 713.269531 326.476562 C 712.695312 328.554688 712.015625 330.605469 711.21875 332.617188 C 709.507812 336.953125 707.558594 341.191406 705.714844 345.46875 C 701.617188 354.976562 696.261719 365.855469 689.042969 374.722656 C 682.578125 382.667969 674.589844 388.953125 664.566406 390.792969 L 664.566406 494.488281 C 678.109375 499.101562 689.910156 504.277344 704.492188 506.675781 C 710.042969 507.589844 716.003906 507.046875 721.613281 507.277344 C 735.460938 507.855469 749.320312 508.066406 763.140625 509.109375 C 769.820312 509.609375 783.554688 509.839844 793.621094 506.78125 C 801.765625 504.308594 807.480469 499.578125 807.8125 492.382812 C 808.074219 486.722656 806.332031 483.03125 803.617188 480.488281 C 807.210938 480.035156 810.722656 479.222656 813.976562 477.679688 C 823.109375 473.363281 830.1875 462.453125 825.492188 452.1875 C 824.1875 449.335938 821.929688 446.839844 819.371094 444.761719 Z');
     const LIKE_PATH2 = new Path2D('M 604.878906 390.714844 L 604.878906 494.863281 C 604.878906 498.5625 606.34375 502.101562 608.960938 504.714844 C 611.574219 507.328125 615.117188 508.792969 618.816406 508.792969 L 650.625 508.792969 C 654.320312 508.792969 657.871094 507.328125 660.484375 504.714844 C 663.101562 502.101562 664.566406 498.5625 664.566406 494.863281 L 664.566406 390.714844 C 664.566406 387.019531 663.101562 383.476562 660.484375 380.863281 C 657.871094 378.25 654.328125 376.785156 650.625 376.785156 L 618.816406 376.785156 C 615.117188 376.785156 611.574219 378.25 608.960938 380.863281 C 606.34375 383.476562 604.878906 387.019531 604.878906 390.714844 Z');
     const LIKE_PCX = 718, LIKE_PCY = 404.5, LIKE_SIZE = 228;
-    const QR_CELL_SIZE = 10;
-    const QR_MARGIN = 4;
+    // QR_CELL_SIZE / QR_MARGIN は D-4 で script 先頭の Config セクションに移動
 
     const FORM_FIELD_DEFS = [
       { name: 'title', label: 'タイトル（日本語）', required: true },
@@ -2883,6 +2937,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     }
 
     function saveFormSettings() {
+      const msg = document.getElementById('formSettingMsg');
+      if (!navigator.onLine) {
+        msg.style.color = '#d93025';
+        msg.innerText = 'オフラインです。ネットワーク接続を確認してください。';
+        return;
+      }
       const activeFields = [];
       FORM_FIELD_DEFS.forEach(def => {
         const checkEl = document.getElementById('fcheck_' + def.name);
@@ -2892,7 +2952,6 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         const required = reqEl.value === 'true';
         activeFields.push({ name: def.name, required: required });
       });
-      const msg = document.getElementById('formSettingMsg');
       msg.style.color = '#888';
       msg.innerText = '保存中...';
       const ex = document.getElementById('exCodeInput').value.trim();
