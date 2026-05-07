@@ -389,8 +389,97 @@
       border: 1px solid #eee;
     }
 
+    /* B-2 (2026-05-07): field-item を column flex に変えて、本質行 (field-row-main)
+       と詳細パネル (field-detail) を縦に並べる。divider/spacer/group は従来通り。 */
     .field-item {
+      background: transparent;
+      border: none;
+      padding: 0;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .field-row-main {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #eee;
       background: #f9f9f9;
+    }
+
+    .detail-toggle {
+      padding: 1px 6px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: white;
+      color: #1a73e8;
+      flex-shrink: 0;
+      height: 22px;
+      width: 32px;
+      line-height: 1;
+    }
+
+    .detail-toggle:hover {
+      background: #f0f7ff;
+      border-color: #1a73e8;
+    }
+
+    .field-detail {
+      margin: 4px 0 4px 28px;
+      padding: 8px 12px;
+      background: #f5f8fb;
+      border-radius: 6px;
+      border: 1px solid #e8eef5;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* hidden 属性の挙動を display:flex より優先させる */
+    .field-detail[hidden] {
+      display: none;
+    }
+
+    .field-detail-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .field-detail-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #555;
+    }
+
+    .field-detail-label {
+      color: #666;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .field-detail input[type="text"],
+    .field-detail input[type="number"],
+    .field-detail select {
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      background: white;
+    }
+
+    .field-detail input[type="checkbox"] {
+      width: 13px;
+      height: 13px;
+      cursor: pointer;
     }
 
     .divider-item {
@@ -432,7 +521,7 @@
       margin-left: 4px;
     }
 
-    .group-children .field-item {
+    .group-children .field-row-main {
       background: #fafdff;
     }
 
@@ -1382,131 +1471,21 @@
     let spacerCount = 0;
     let groupCount = 0;
 
-    const PRESETS = {
-      standard: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'field', name: 'title', size: 14, bold: true, italic: false, align: 'inherit', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'artist', size: 12, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 11, bold: true, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '¥', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      minimal: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'field', name: 'title', size: 14, bold: true, italic: false, align: 'inherit', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'artist', size: 12, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-        ]
-      },
-      gallery: {
-        qrPosition: 'top-left', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'divider' },
-          { type: 'field', name: 'title', size: 14, bold: true, italic: false, align: 'inherit', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'artist', size: 12, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'spacer', size: '4mm' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 11, bold: true, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '¥', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      bilingual: {
-        qrPosition: "bottom-left", qrOffset: 0, textAlign: "center",
-        items: [
-          { type: "field", name: "title", size: 16, bold: true, italic: false, align: "center", maxLines: 2, minSize: 8, currency: "", comma: false, prefix: "", suffix: "" },
-          { type: "field", name: "title_en", size: 11, bold: false, italic: false, align: "center", maxLines: 2, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" },
-          { type: "divider" },
-          { type: "spacer", size: "4mm" },
-          { type: "group", sep: "　　", align: "left", children: [
-            { type: "field", name: "artist",    size: 12, bold: false, italic: false, align: "inherit", maxLines: 1, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" },
-            { type: "field", name: "artist_en", size: 12, bold: false, italic: false, align: "inherit", maxLines: 1, minSize: 7, currency: "", comma: false, prefix: "", suffix: "" }
-          ] },
-        ]
-      },
-      print: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'field', name: 'title', size: 14, bold: true, italic: false, align: 'inherit', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'artist', size: 12, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'edition', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'spacer', size: '3mm' },
-          { type: 'field', name: 'price', size: 11, bold: true, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '¥', comma: true, prefix: '', suffix: '' },
-          { type: 'field', name: 'price_framed', size: 11, bold: true, italic: false, align: 'inherit', maxLines: 1, minSize: 7, currency: '¥', comma: true, prefix: 'framed: ', suffix: '' },
-        ]
-      },
-      jp_standard_l: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'field', name: 'title', size: 16, bold: true, italic: false, align: 'left', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'artist', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'material', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      jp_standard_r: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'right',
-        items: [
-          { type: 'field', name: 'title', size: 16, bold: true, italic: false, align: 'right', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'artist', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'material', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      jp_artist_first_l: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'left',
-        items: [
-          { type: 'field', name: 'artist', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'spacer', size: '4mm' },
-          { type: 'field', name: 'title', size: 16, bold: true, italic: false, align: 'left', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'material', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      jp_artist_first_c: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'center',
-        items: [
-          { type: 'field', name: 'artist', size: 10, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'title', size: 16, bold: true, italic: false, align: 'center', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'material', size: 10, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: true, prefix: '', suffix: '' },
-        ]
-      },
-      jp_artist_first_r: {
-        qrPosition: 'bottom-right', qrOffset: 0, textAlign: 'right',
-        items: [
-          { type: 'field', name: 'artist', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'title', size: 16, bold: true, italic: false, align: 'right', maxLines: 2, minSize: 8, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'divider' },
-          { type: 'field', name: 'year', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'size', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'technique', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'material', size: 10, bold: false, italic: false, align: 'right', maxLines: 1, minSize: 7, currency: '', comma: false, prefix: '', suffix: '' },
-          { type: 'field', name: 'price', size: 10, bold: false, italic: false, align: 'left', maxLines: 1, minSize: 7, currency: '', comma: true, prefix: '', suffix: '' },
-        ]
-      }
-    };
+    // 起動時に data/caption-presets.json から PRESETS を読み込む。
+    // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
+    // 呼ばれるため、その時点では fetch は完了している (Firestore 認証や exhibition
+    // 取得より先に解決する小さな静的 JSON のため)。
+    let PRESETS = {};
+    fetch('data/caption-presets.json')
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(data => { PRESETS = data; })
+      .catch(err => {
+        console.error('PRESETS load failed:', err);
+        alert('プリセット読み込みに失敗しました: ' + (err && err.message ? err.message : err));
+      });
 
     document.addEventListener('DOMContentLoaded', () => {
       const ex = getUrlParam('ex');
@@ -1812,8 +1791,9 @@
       const rows = topLevelRows(container);
       rows.forEach((row, idx) => {
         // 直接配下の move-btns のみ更新（孫の group-children 内のボタンは触らない）
+        // field-item は B-2 で field-row-main 内に move-btns / merge-btn を持つ
         const moveBtns = container === row.parentNode
-          ? row.querySelector(':scope > .move-btns, :scope > .group-header > .move-btns')
+          ? row.querySelector(':scope > .move-btns, :scope > .group-header > .move-btns, :scope > .field-row-main > .move-btns')
           : null;
         const up = moveBtns ? moveBtns.querySelector('.btn-up') : null;
         const down = moveBtns ? moveBtns.querySelector('.btn-down') : null;
@@ -1822,7 +1802,7 @@
 
         // merge ボタン: field-item で、かつ直前の行が結合可能なときのみ有効
         const mergeBtn = row.dataset.type === 'field'
-          ? row.querySelector(':scope > .merge-btn')
+          ? row.querySelector(':scope > .field-row-main > .merge-btn')
           : null;
         if (mergeBtn) {
           if (isInsideGroup) {
@@ -1918,50 +1898,88 @@
       const curOptions = ['', '¥', '€', '$', '£'].map(c =>
         `<option value="${c}" ${c === currency ? 'selected' : ''}>${c || '—'}</option>`
       ).join('');
+      const isPrice = ['price', 'price_framed'].includes(name);
 
       el.innerHTML = `
-      ${moveBtnsHtml()}
-      <button class="merge-btn" onclick="mergeWithAbove(this)" title="直前の行と結合">↥結</button>
-      <input type="checkbox" id="field_${name}" ${checked ? 'checked' : ''}>
-      <span class="field-name" title="${name}">${name}</span>
-      <div class="field-controls">
-        <select id="align_${name}" title="Align">
-          <option value="inherit" ${align === 'inherit' ? 'selected' : ''}>—</option>
-          <option value="left"    ${align === 'left' ? 'selected' : ''}>L</option>
-          <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
-          <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
-        </select>
-        <input type="number" id="size_${name}" min="6" max="28" value="${size}" style="width:46px;">
-        <span>pt</span>
-        <button class="toggle-btn ${bold ? 'active' : ''}" id="bold_${name}"   onclick="this.classList.toggle('active')">B</button>
-        <button class="toggle-btn ${italic ? 'active' : ''}" id="italic_${name}" onclick="this.classList.toggle('active')"><i>I</i></button>
-        <select id="maxLines_${name}" title="Max lines">
-          <option value="1" ${maxLines === 1 ? 'selected' : ''}>1L</option>
-          <option value="2" ${maxLines === 2 ? 'selected' : ''}>2L</option>
-          <option value="3" ${maxLines === 3 ? 'selected' : ''}>3L</option>
-          <option value="0" ${maxLines === 0 ? 'selected' : ''}>∞</option>
-        </select>
-        <span style="font-size:10px;color:#aaa;">min:</span>
-        <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:46px;">     
-        <div class="price-fmt" title="Price format" style="${['price', 'price_framed'].includes(name) ? '' : 'display:none;'}">
-          <select id="currency_${name}">${curOptions}</select>
-          <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
-          <label for="comma_${name}">&#44;</label>
-        </div>
-        <div class="affix-wrap" title="Prefix / Suffix">
-          <span class="affix-label">pre</span>
-          <input type="text" id="prefix_${name}" value="${prefix.replace(/"/g, '&quot;')}" placeholder="pre">
-          <span class="affix-label">suf</span>
-          <input type="text" id="suffix_${name}" value="${suffix.replace(/"/g, '&quot;')}" placeholder="suf">
-          <select id="affixScale_${name}" title="prefix/suffix の本体に対するサイズ" style="font-size:10px;padding:1px 2px;">
-            <option value="0.5"  ${String(affixScale) === '0.5' ? 'selected' : ''}>50%</option>
-            <option value="0.75" ${String(affixScale) === '0.75' ? 'selected' : ''}>75%</option>
-            <option value="1"    ${String(affixScale) === '1' || String(affixScale) === '1.0' ? 'selected' : ''}>100%</option>
+      <div class="field-row-main">
+        ${moveBtnsHtml()}
+        <button class="merge-btn" onclick="mergeWithAbove(this)" title="直前の行と結合">↥結</button>
+        <input type="checkbox" id="field_${name}" ${checked ? 'checked' : ''}>
+        <span class="field-name" title="${name}">${name}</span>
+        <div class="field-controls">
+          <select id="align_${name}" title="Align">
+            <option value="inherit" ${align === 'inherit' ? 'selected' : ''}>—</option>
+            <option value="left"    ${align === 'left' ? 'selected' : ''}>L</option>
+            <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
+            <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
           </select>
+          <input type="number" id="size_${name}" min="6" max="28" value="${size}" style="width:46px;">
+          <span>pt</span>
+          <button class="toggle-btn ${bold ? 'active' : ''}" id="bold_${name}"   onclick="this.classList.toggle('active')">B</button>
+          <button class="toggle-btn ${italic ? 'active' : ''}" id="italic_${name}" onclick="this.classList.toggle('active')"><i>I</i></button>
         </div>
+        <button class="detail-toggle" onclick="toggleFieldDetail(this)" title="詳細設定" aria-expanded="false">▶</button>
+        <button class="del-btn" onclick="removeRow(this)">✕</button>
       </div>
-      <button class="del-btn" onclick="removeRow(this)">✕</button>`;
+      <div class="field-detail" hidden>
+        <div class="field-detail-row">
+          <label class="field-detail-item">
+            <span class="field-detail-label">最大行数</span>
+            <select id="maxLines_${name}">
+              <option value="1" ${maxLines === 1 ? 'selected' : ''}>1行</option>
+              <option value="2" ${maxLines === 2 ? 'selected' : ''}>2行</option>
+              <option value="3" ${maxLines === 3 ? 'selected' : ''}>3行</option>
+              <option value="0" ${maxLines === 0 ? 'selected' : ''}>制限なし</option>
+            </select>
+          </label>
+          <label class="field-detail-item">
+            <span class="field-detail-label">最小サイズ</span>
+            <input type="number" id="minSize_${name}" min="5" max="14" value="${minSize}" style="width:50px;">
+            <span class="field-detail-label">pt</span>
+          </label>
+        </div>
+        <div class="field-detail-row" ${isPrice ? '' : 'style="display:none;"'}>
+          <label class="field-detail-item">
+            <span class="field-detail-label">通貨記号</span>
+            <select id="currency_${name}">${curOptions}</select>
+          </label>
+          <label class="field-detail-item">
+            <input type="checkbox" id="comma_${name}" ${comma ? 'checked' : ''}>
+            <span class="field-detail-label">3桁区切り</span>
+          </label>
+        </div>
+        <div class="field-detail-row">
+          <label class="field-detail-item">
+            <span class="field-detail-label">prefix</span>
+            <input type="text" id="prefix_${name}" value="${prefix.replace(/"/g, '&quot;')}" placeholder="例: Title:" style="width:100px;">
+          </label>
+          <label class="field-detail-item">
+            <span class="field-detail-label">suffix</span>
+            <input type="text" id="suffix_${name}" value="${suffix.replace(/"/g, '&quot;')}" placeholder="例: 円" style="width:100px;">
+          </label>
+          <label class="field-detail-item">
+            <span class="field-detail-label">サイズ比</span>
+            <select id="affixScale_${name}" title="prefix/suffix の本体に対するサイズ">
+              <option value="0.5"  ${String(affixScale) === '0.5' ? 'selected' : ''}>50%</option>
+              <option value="0.75" ${String(affixScale) === '0.75' ? 'selected' : ''}>75%</option>
+              <option value="1"    ${String(affixScale) === '1' || String(affixScale) === '1.0' ? 'selected' : ''}>100%</option>
+            </select>
+          </label>
+        </div>
+      </div>`;
       return el;
+    }
+
+    // ▶/▼ をクリックすると field-detail を開閉する
+    function toggleFieldDetail(btn) {
+      const item = btn.closest('.field-item');
+      if (!item) return;
+      const detail = item.querySelector('.field-detail');
+      if (!detail) return;
+      const isHidden = detail.hidden;
+      detail.hidden = !isHidden;
+      btn.textContent = isHidden ? '▼' : '▶';
+      btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
     }
 
     function makeDividerEl() {
@@ -2302,177 +2320,189 @@
       return currency ? currency + str : str;
     }
 
-    function buildPrintHtml(s) {
-      const paperDims = {
-        A4: { portrait: ['210mm', '297mm'], landscape: ['297mm', '210mm'] },
-        Letter: { portrait: ['216mm', '279mm'], landscape: ['279mm', '216mm'] }
+    // 印刷 HTML 用紙寸法テーブル
+    const PAPER_DIMS = {
+      A4: { portrait: ['210mm', '297mm'], landscape: ['297mm', '210mm'] },
+      Letter: { portrait: ['216mm', '279mm'], landscape: ['279mm', '216mm'] }
+    };
+
+    // 設定 s から印刷で使う各種寸法 (mm 文字列込み) を一括計算
+    function computePrintDims(s) {
+      const [pageW, pageH] = PAPER_DIMS[s.paperSize][s.orientation];
+      return {
+        pageW, pageH,
+        perPage: s.cols * s.rows,
+        qrSizeMm: s.qrSize + 'mm',
+        qrMH: s.qrMarginH + 'mm',
+        qrMV: s.qrMarginV + 'mm',
+        tML: s.textMarginLeft + 'mm',
+        tMR: s.textMarginRight + 'mm'
       };
-      const [pageW, pageH] = paperDims[s.paperSize][s.orientation];
-      const perPage = s.cols * s.rows;
-      const qrSizeMm = s.qrSize + 'mm';
-      const qrMH = s.qrMarginH + 'mm';
-      const qrMV = s.qrMarginV + 'mm';
-      const tML = s.textMarginLeft + 'mm';
-      const tMR = s.textMarginRight + 'mm';
+    }
 
-      function buildFixedTextStyle(ft) {
-        const mH = ft.marginH + 'mm';
-        const mV = ft.marginV + 'mm';
-        const pos = ft.pos;
-        const isTop = pos.startsWith('top');
-        const isLeft = pos.endsWith('left');
-        const isRight = pos.endsWith('right');
-        const isCenter = pos.endsWith('center');
-        let style = `position:absolute;z-index:2;font-size:${ft.size}pt;line-height:1.3;`;
-        style += ft.bold ? 'font-weight:bold;' : 'font-weight:normal;';
-        style += ft.italic ? 'font-style:italic;' : 'font-style:normal;';
-        style += isTop ? `top:${mV};` : `bottom:${mV};`;
-        if (isLeft) style += `left:${mH};text-align:left;`;
-        if (isRight) style += `right:${mH};text-align:right;`;
-        if (isCenter) style += `left:${mH};right:${mH};text-align:center;`;
-        return style;
-      }
+    // prefix / suffix を affixScale 倍 (デフォルト 0.75 = 75%) のサイズで描画
+    function buildAffix(text, scale) {
+      if (!text) return '';
+      const sc = (scale !== undefined && scale !== null && isFinite(scale) && scale > 0) ? scale : 0.75;
+      return `<span style="font-size:${sc}em;">${text}</span>`;
+    }
 
-      function buildContent(art) {
-        // prefix / suffix は item.affixScale 倍のサイズで描画（デフォルト 0.75 = 75%）
-        // 1.0 にすると本体と同サイズに。
-        function affix(text, scale) {
-          if (!text) return '';
-          const s = (scale !== undefined && scale !== null && isFinite(scale) && scale > 0) ? scale : 0.75;
-          return `<span style="font-size:${s}em;">${text}</span>`;
+    // 固定文 (FixedText) の style 文字列
+    function buildFixedTextStyle(ft) {
+      const mH = ft.marginH + 'mm';
+      const mV = ft.marginV + 'mm';
+      const pos = ft.pos;
+      const isTop = pos.startsWith('top');
+      const isLeft = pos.endsWith('left');
+      const isRight = pos.endsWith('right');
+      const isCenter = pos.endsWith('center');
+      let style = `position:absolute;z-index:2;font-size:${ft.size}pt;line-height:1.3;`;
+      style += ft.bold ? 'font-weight:bold;' : 'font-weight:normal;';
+      style += ft.italic ? 'font-style:italic;' : 'font-style:normal;';
+      style += isTop ? `top:${mV};` : `bottom:${mV};`;
+      if (isLeft) style += `left:${mH};text-align:left;`;
+      if (isRight) style += `right:${mH};text-align:right;`;
+      if (isCenter) style += `left:${mH};right:${mH};text-align:center;`;
+      return style;
+    }
+
+    // 1作品分の本文 (s.items を field / group / divider / spacer 別に HTML 化)
+    function buildContent(s, art) {
+      let html = '';
+      s.items.forEach(item => {
+        if (item.type === 'field') {
+          let val = (art[item.name] || '').toString().trim();
+          if (!val) return;
+          val = formatValue(val, item.currency || '', item.comma || false);
+          val = buildAffix(item.prefix, item.affixScale) + val + buildAffix(item.suffix, item.affixScale);
+          const align = item.align !== 'inherit' ? item.align : s.textAlign;
+          const weight = item.bold ? 'bold' : 'normal';
+          const fstyle = item.italic ? 'italic' : 'normal';
+          const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
+          const minSize = item.minSize !== undefined ? item.minSize : 7;
+          html += `<div class="auto-fit" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
+            + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
+            + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+            + `${val}</div>`;
+        } else if (item.type === 'group') {
+          const parts = (item.children || []).map(c => {
+            const raw = (art[c.name] || '').toString().trim();
+            if (!raw) return null;
+            const v = buildAffix(c.prefix, c.affixScale) + formatValue(raw, c.currency || '', c.comma || false) + buildAffix(c.suffix, c.affixScale);
+            const w = c.bold ? 'bold' : 'normal';
+            const fs = c.italic ? 'italic' : 'normal';
+            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};">${v}</span>`;
+          }).filter(Boolean);
+          if (parts.length === 0) return;
+          const align = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
+          const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += `<div style="text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+            + parts.join(sepHtml)
+            + `</div>`;
+        } else if (item.type === 'divider') {
+          html += `<hr style="border:none;border-top:1px solid #ccc;margin:4px 0;">`;
+        } else if (item.type === 'spacer') {
+          html += `<div style="height:${item.size};"></div>`;
         }
-        let html = '';
-        s.items.forEach(item => {
-          if (item.type === 'field') {
-            let val = (art[item.name] || '').toString().trim();
-            if (!val) return;
-            val = formatValue(val, item.currency || '', item.comma || false);
-            val = affix(item.prefix, item.affixScale) + val + affix(item.suffix, item.affixScale);
-            const align = item.align !== 'inherit' ? item.align : s.textAlign;
-            const weight = item.bold ? 'bold' : 'normal';
-            const fstyle = item.italic ? 'italic' : 'normal';
-            const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
-            const minSize = item.minSize !== undefined ? item.minSize : 7;
-            html += `<div class="auto-fit" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
-              + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
-              + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
-              + `${val}</div>`;
-          } else if (item.type === 'group') {
-            // 各 child を自身の書式で span に展開し、value が空のものは除外して sep で連結
-            const parts = (item.children || []).map(c => {
-              const raw = (art[c.name] || '').toString().trim();
-              if (!raw) return null;
-              const v = affix(c.prefix, c.affixScale) + formatValue(raw, c.currency || '', c.comma || false) + affix(c.suffix, c.affixScale);
-              const w = c.bold ? 'bold' : 'normal';
-              const fs = c.italic ? 'italic' : 'normal';
-              return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};">${v}</span>`;
-            }).filter(Boolean);
-            if (parts.length === 0) return;
-            const align = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
-            const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            html += `<div style="text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
-              + parts.join(sepHtml)
-              + `</div>`;
-          } else if (item.type === 'divider') {
-            html += `<hr style="border:none;border-top:1px solid #ccc;margin:4px 0;">`;
-          } else if (item.type === 'spacer') {
-            html += `<div style="height:${item.size};"></div>`;
-          }
-        });
-        return html;
-      }
+      });
+      return html;
+    }
 
-      function buildQrImg(art) {
-        const url = art.qr_url;
-        if (!url) return `<div style="width:${qrSizeMm};height:${qrSizeMm};background:#eee;display:flex;align-items:center;`
-          + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
-        const logo = document.getElementById('qrLogo').value;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const qr = qrcode(0, 'H');
-        qr.addData(url);
-        qr.make();
-        const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
-        canvas.width = size;
-        canvas.height = size;
+    // 1作品分の QR (canvas → img tag)。qrLogo は DOM から都度参照
+    function buildQrImg(s, dims, art) {
+      const url = art.qr_url;
+      if (!url) return `<div style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};background:#eee;display:flex;align-items:center;`
+        + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
+      const logo = document.getElementById('qrLogo').value;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const qr = qrcode(0, 'H');
+      qr.addData(url);
+      qr.make();
+      const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
+      canvas.width = size;
+      canvas.height = size;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#333333';
+      for (let row = 0; row < qr.getModuleCount(); row++) {
+        for (let col = 0; col < qr.getModuleCount(); col++) {
+          if (qr.isDark(row, col)) {
+            ctx.fillRect((col + QR_MARGIN) * QR_CELL_SIZE, (row + QR_MARGIN) * QR_CELL_SIZE, QR_CELL_SIZE, QR_CELL_SIZE);
+          }
+        }
+      }
+      const cx = size / 2, cy = size / 2, hs = size * 0.18;
+      if (logo === 'heart') {
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, size, size);
-        ctx.fillStyle = '#333333';
-        for (let row = 0; row < qr.getModuleCount(); row++) {
-          for (let col = 0; col < qr.getModuleCount(); col++) {
-            if (qr.isDark(row, col)) {
-              ctx.fillRect((col + QR_MARGIN) * QR_CELL_SIZE, (row + QR_MARGIN) * QR_CELL_SIZE, QR_CELL_SIZE, QR_CELL_SIZE);
-            }
-          }
-        }
-        const cx = size / 2, cy = size / 2, hs = size * 0.18;
-        if (logo === 'heart') {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.moveTo(cx, cy + hs * 0.5);
-          ctx.bezierCurveTo(cx - hs, cy - hs * 0.5, cx - hs * 0.5, cy - hs, cx, cy - hs * 0.4);
-          ctx.bezierCurveTo(cx + hs * 0.5, cy - hs, cx + hs, cy - hs * 0.5, cx, cy + hs * 0.5);
-          ctx.fill();
-          ctx.strokeStyle = '#333333';
-          ctx.lineWidth = 8;
-          ctx.stroke();
-        } else if (logo === 'like') {
-          const sc = hs * 1.3 / LIKE_SIZE;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.scale(sc, sc);
-          ctx.translate(-LIKE_PCX, -LIKE_PCY);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fill(LIKE_PATH1);
-          ctx.fill(LIKE_PATH2);
-          ctx.strokeStyle = '#333333';
-          ctx.lineWidth = 8 / sc;
-          ctx.stroke(LIKE_PATH1);
-          ctx.stroke(LIKE_PATH2);
-          ctx.restore();
-        }
-        return `<img src="${canvas.toDataURL('image/png')}" style="width:${qrSizeMm};height:${qrSizeMm};display:block;">`;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + hs * 0.5);
+        ctx.bezierCurveTo(cx - hs, cy - hs * 0.5, cx - hs * 0.5, cy - hs, cx, cy - hs * 0.4);
+        ctx.bezierCurveTo(cx + hs * 0.5, cy - hs, cx + hs, cy - hs * 0.5, cx, cy + hs * 0.5);
+        ctx.fill();
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+      } else if (logo === 'like') {
+        const sc = hs * 1.3 / LIKE_SIZE;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(sc, sc);
+        ctx.translate(-LIKE_PCX, -LIKE_PCY);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill(LIKE_PATH1);
+        ctx.fill(LIKE_PATH2);
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 8 / sc;
+        ctx.stroke(LIKE_PATH1);
+        ctx.stroke(LIKE_PATH2);
+        ctx.restore();
       }
+      return `<img src="${canvas.toDataURL('image/png')}" style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};display:block;">`;
+    }
 
-      function buildCard(art) {
-        const pos = s.qrPosition;
-        const offset = s.qrOffset;
-        const content = buildContent(art);
-        const qrImg = buildQrImg(art);
-        const textDiv = `<div style="padding-left:${tML};padding-right:${tMR};">${content}</div>`;
-        const ftHtml = s.fixedText
-          ? `<div style="${buildFixedTextStyle(s.fixedText)}">${s.fixedText.value}</div>`
-          : '';
+    // 1作品分のカード (枠 + 固定文 + QR + 本文) を組む
+    function buildCard(s, dims, art) {
+      const pos = s.qrPosition;
+      const offset = s.qrOffset;
+      const content = buildContent(s, art);
+      const qrImg = buildQrImg(s, dims, art);
+      const textDiv = `<div style="padding-left:${dims.tML};padding-right:${dims.tMR};">${content}</div>`;
+      const ftHtml = s.fixedText
+        ? `<div style="${buildFixedTextStyle(s.fixedText)}">${s.fixedText.value}</div>`
+        : '';
 
-        if (pos === 'wrap-left' || pos === 'wrap-right') {
-          const floatDir = pos === 'wrap-left' ? 'left' : 'right';
-          const mTop = offset > 0 ? `calc(${offset}mm + ${qrMV})` : qrMV;
-          return `<div style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
+      if (pos === 'wrap-left' || pos === 'wrap-right') {
+        const floatDir = pos === 'wrap-left' ? 'left' : 'right';
+        const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
+        return `<div style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
-  <div style="float:${floatDir};margin:${mTop} ${qrMH} ${qrMV} ${qrMH};line-height:0;">${qrImg}</div>
+  <div style="float:${floatDir};margin:${mTop} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
   ${textDiv}
   <div style="clear:both;"></div>
 </div>`;
-        }
+      }
 
-        let qrStyle = 'position:absolute;line-height:0;z-index:1;';
-        switch (pos) {
-          case 'top-left': qrStyle += `top:calc(${offset}mm + ${qrMV});left:${qrMH};`; break;
-          case 'top-right': qrStyle += `top:calc(${offset}mm + ${qrMV});right:${qrMH};`; break;
-          case 'bottom-left': qrStyle += `bottom:${qrMV};left:${qrMH};`; break;
-          case 'bottom-right': qrStyle += `bottom:${qrMV};right:${qrMH};`; break;
-          case 'bottom-center': qrStyle += `bottom:${qrMV};left:50%;transform:translateX(-50%);`; break;
-        }
-        return `<div style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
+      let qrStyle = 'position:absolute;line-height:0;z-index:1;';
+      switch (pos) {
+        case 'top-left': qrStyle += `top:calc(${offset}mm + ${dims.qrMV});left:${dims.qrMH};`; break;
+        case 'top-right': qrStyle += `top:calc(${offset}mm + ${dims.qrMV});right:${dims.qrMH};`; break;
+        case 'bottom-left': qrStyle += `bottom:${dims.qrMV};left:${dims.qrMH};`; break;
+        case 'bottom-right': qrStyle += `bottom:${dims.qrMV};right:${dims.qrMH};`; break;
+        case 'bottom-center': qrStyle += `bottom:${dims.qrMV};left:50%;transform:translateX(-50%);`; break;
+      }
+      return `<div style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
   ${ftHtml}
   <div style="${qrStyle}">${qrImg}</div>
   ${textDiv}
 </div>`;
-      }
+    }
 
-      const cards = artworkData.artworks.map(art => buildCard(art));
+    function buildPrintHtml(s) {
+      const dims = computePrintDims(s);
+      const cards = artworkData.artworks.map(art => buildCard(s, dims, art));
       const pages = [];
-      for (let i = 0; i < cards.length; i += perPage) pages.push(cards.slice(i, i + perPage));
+      for (let i = 0; i < cards.length; i += dims.perPage) pages.push(cards.slice(i, i + dims.perPage));
 
       return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
@@ -2480,7 +2510,7 @@
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:${s.fontFamily}; background:white; }
 .page {
-  width:${pageW}; height:${pageH}; padding:8mm;
+  width:${dims.pageW}; height:${dims.pageH}; padding:8mm;
   display:grid;
   grid-template-columns:repeat(${s.cols}, 1fr);
   grid-template-rows:repeat(${s.rows}, 1fr);
