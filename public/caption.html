@@ -1008,15 +1008,19 @@
 
   <!-- 主催者ログインカード -->
   <div class="card" id="pwCard" style="display:none;">
-    <div class="card-title">主催者ログイン</div>
+    <div class="card-title">
+      📝 <span id="pwCardExName" style="color:#1a73e8;"></span> 主催者ログイン
+    </div>
     <div id="operatorAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin-bottom:10px;"></div>
-    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この展覧会の主催者として登録されたメールアドレスを入力してください。</div>
+    <div style="font-size:0.88em; color:#444; margin-bottom:10px; line-height:1.55;">
+      この展覧会を管理するには、主催者として登録されたメールアドレスでログインしてください。<br>
+      入力後、ログイン用リンクがメールで届きます。
+    </div>
     <div class="pw-row" id="emailLinkRow">
       <input type="email" id="operatorEmailInput" placeholder="主催者メールアドレス" autocomplete="email">
       <button class="btn-load" id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
     </div>
-    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
-    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:8px; min-height:1.2em; line-height:1.55; white-space:pre-line;"></div>
   </div>
 
   <div class="card" id="notOrganizerCard" style="display:none;">
@@ -1710,6 +1714,17 @@
           if (window.sandboxBadge) {
             window.sandboxBadge.render('sandboxBadge', exData, 'operator', { maxWidth: '700px' });
           }
+          // D-5b: URL に ex を反映する。
+          //   理由: sendSignInLink の continueUrl が window.location.href を使うため、
+          //   URL に ex が無い状態で Load 後にメールリンクを送ると、戻り先 URL にも ex が
+          //   含まれず、ユーザーは再度 ex を入力する羽目になる。replaceState で履歴は汚さない。
+          try {
+            const u = new URL(window.location.href);
+            if (u.searchParams.get('ex') !== ex) {
+              u.searchParams.set('ex', ex);
+              window.history.replaceState({}, '', u.toString());
+            }
+          } catch (e) { /* URL constructor 不可な極端に古いブラウザは無視 */ }
           applyAuthorizationUI();
         })
         .catch(err => {
@@ -1728,6 +1743,12 @@
       const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
       const loggedInBar = document.getElementById('loggedInBar');
       if (!user) {
+        // D-5: pwCard に展覧会名を注入してコンテキストを明示
+        const exNameSpan = document.getElementById('pwCardExName');
+        if (exNameSpan) {
+          const dispName = (window._currentExData && window._currentExData.ex_name) || ex;
+          exNameSpan.innerText = '「' + dispName + '」';
+        }
         document.getElementById('pwCard').style.display = 'block';
         document.getElementById('notOrganizerCard').style.display = 'none';
         if (loggedInBar) loggedInBar.style.display = 'none';
@@ -3300,7 +3321,12 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         window.operatorAuth.sendSignInLink(email)
           .then(function () {
             btn.disabled = false;
-            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+            setMsg(
+              '✉️ ' + email + ' にログイン用リンクを送信しました。\n' +
+              '受信トレイを確認してリンクをクリックすると、自動的にこのページでログインが完了します。\n' +
+              '（リンクが届かない場合は迷惑メールフォルダもご確認ください。）',
+              '#1a73e8'
+            );
           })
           .catch(function (err) {
             btn.disabled = false;
