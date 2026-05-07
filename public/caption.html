@@ -296,17 +296,20 @@
       border-bottom-color: #1a73e8;
     }
 
+    /* C-2 Phase 1.5: テンプレ一覧は compact grid (固定位置)。inline プレビューは
+       下の専用領域に集約 (選択するたびにグリッドが動かない、画面が安定) */
     .template-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: start;
     }
 
     .template-card {
       border: 2px solid #eee;
       border-radius: 10px;
-      padding: 14px;
+      padding: 10px 12px;
       cursor: pointer;
       transition: all 0.15s;
       background: white;
@@ -323,12 +326,28 @@
     }
 
     .template-card h4 {
-      font-size: 0.9em;
+      font-size: 0.88em;
       color: #1a73e8;
-      margin-bottom: 8px;
+      margin: 0;
     }
 
-    .template-preview {
+    /* 各カード内に元々あった .template-preview は隠す (HTML はそのまま、JS でクローン) */
+    .template-card .template-preview {
+      display: none;
+    }
+
+    /* 共通プレビュー領域 (グリッド下に固定で1つ) */
+    .selected-tpl-preview-wrap {
+      margin-bottom: 16px;
+      font-size: 0.78em;
+      color: #888;
+    }
+
+    .selected-tpl-preview-wrap .label {
+      margin-bottom: 6px;
+    }
+
+    .selected-tpl-preview {
       font-size: 10px;
       color: #555;
       line-height: 1.8;
@@ -337,6 +356,7 @@
       padding: 8px;
       background: #fafafa;
       font-family: monospace;
+      max-width: 360px;
     }
 
     .tpl-divider {
@@ -1342,6 +1362,10 @@
             </div>
           </div>
         </div>
+        <div class="selected-tpl-preview-wrap">
+          <div class="label">選択中のテンプレ構造 (項目設定の参考):</div>
+          <div id="selectedTplPreview" class="selected-tpl-preview"></div>
+        </div>
         <button class="btn-customize" onclick="customizeTemplate()">⚙️ Customize this template →</button>
 
         <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
@@ -1698,7 +1722,16 @@
     function selectTemplate(name) {
       currentTemplate = name;
       document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
-      document.getElementById('tpl_' + name).classList.add('selected');
+      const card = document.getElementById('tpl_' + name);
+      if (card) card.classList.add('selected');
+
+      // 選択中テンプレの inline プレビューを共通領域にクローン (画面が動かない)
+      const sourcePreview = card ? card.querySelector('.template-preview') : null;
+      const dest = document.getElementById('selectedTplPreview');
+      if (dest && sourcePreview) {
+        dest.innerHTML = sourcePreview.innerHTML;
+      }
+
       const p = PRESETS[name];
       if (!p) return;  // 起動直後 PRESETS 未ロードのケース
       document.getElementById('qrPosition').value = p.qrPosition;
