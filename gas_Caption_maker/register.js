@@ -86,67 +86,9 @@ function saveRegistrationFields(ex, fieldsJson) {
   }
 }
 
-// =========================================================
-// 🌟 caption_fields を取得
-// =========================================================
-function getCaptionFields(ex) {
-  try {
-    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
-    const sheet = ss.getSheetByName('exhibitions');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    // caption_fields を優先、なければ registration_fields → active_fields にフォールバック
-    let colIdx = headers.indexOf('caption_fields');
-    if (colIdx === -1) colIdx = headers.indexOf('registration_fields');
-    if (colIdx === -1) colIdx = headers.indexOf('active_fields');
-    if (colIdx === -1) return null;
-
-    const row = data.find((r, i) => i > 0 && r[headers.indexOf('ex_code')].toString().trim() === ex.toString().trim());
-    if (!row) return null;
-    const val = row[colIdx].toString().trim();
-    if (!val) return null;
-    return JSON.parse(val);
-  } catch (e) {
-    return null;
-  }
-}
-
-// =========================================================
-// 🌟 caption_fields を保存
-// =========================================================
-function saveCaptionFields(ex, fieldsJson) {
-  try {
-    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
-    const sheet = ss.getSheetByName('exhibitions');
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    // caption_fields 列を取得、なければ追加
-    let colIdx = headers.indexOf('caption_fields');
-    if (colIdx === -1) {
-      colIdx = sheet.getLastColumn();
-      sheet.getRange(1, colIdx + 1).setValue('caption_fields');
-    }
-    const updatedAtIdx = headers.indexOf('updated_at');
-
-    // 行番号を特定して一発書き込み
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][headers.indexOf('ex_code')].toString().trim() === ex.toString().trim()) {
-        sheet.getRange(i + 1, colIdx + 1).setValue(fieldsJson);
-        if (updatedAtIdx !== -1) {
-          sheet.getRange(i + 1, updatedAtIdx + 1)
-            .setValue(Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss'));
-        }
-        clearAllCache(ex);
-        return { success: true };
-      }
-    }
-    return { success: false, error: '展覧会が見つかりません。' };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// Phase 7-A1 (2026-05-07): caption_fields は Firestore (exhibitions/{ex}.caption_fields) に
+// 一本化したため getCaptionFields / saveCaptionFields は撤去。caption.html は
+// fsSaveCaptionFields (Firestore set merge) で直接書き込む。
 
 // =========================================================
 // 🌟 作品を登録（status=0の行に書き込む）

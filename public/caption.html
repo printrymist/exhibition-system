@@ -1754,20 +1754,40 @@
       const ex = document.getElementById('exCodeInput').value.trim();
       const saveBtn = document.querySelector('#exNameEditArea button');
       saveBtn.disabled = true;
-      gasCall({ action: 'updateExName', ex: ex, newName: newName })
-        .then(res => {
-          if (!res.success) { alert('Error: ' + res.error); return; }
+
+      // Master SS (運用台帳) と Firestore (アプリの表示元) の両方を並列更新。
+      // 片方だけ失敗するケースを見えるようにする。
+      const gasPromise = gasCall({ action: 'updateExName', ex: ex, newName: newName });
+      const fsPromise = firebase.firestore().collection('exhibitions').doc(ex).set({
+        ex_name: newName,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      Promise.allSettled([gasPromise, fsPromise]).then(([gasRes, fsRes]) => {
+        const gasOk = gasRes.status === 'fulfilled' && gasRes.value && gasRes.value.success;
+        const fsOk  = fsRes.status === 'fulfilled';
+        const gasErr = gasRes.status === 'rejected' ? (gasRes.reason && gasRes.reason.message || gasRes.reason)
+                     : (gasRes.value && gasRes.value.error) || '';
+        const fsErr  = fsRes.status === 'rejected' ? (fsRes.reason && fsRes.reason.message || fsRes.reason) : '';
+
+        // Firestore が OK なら表示は更新する (アプリの表示元なので)
+        if (fsOk) {
           artworkData.exName = newName;
           document.getElementById('exName').innerText = '✅ ' + newName + ' (' + artworkData.artworks.length + ' artworks)';
           cancelEditExName();
-          // Firestore exhibitions ドキュメントの ex_name も同期更新 (読み込み時に古い名前が出ないように)
-          fsDb.collection('exhibitions').doc(ex).set({
-            ex_name: newName,
-            updatedAt: new Date().toISOString()
-          }, { merge: true }).catch(e => console.warn('Firestore ex_name sync failed:', e));
-        })
-        .catch(err => { alert('通信エラー: ' + err.message); })
-        .finally(() => { saveBtn.disabled = false; });
+        }
+
+        if (gasOk && fsOk) {
+          // 両方成功、追加メッセージなし
+        } else if (!gasOk && !fsOk) {
+          alert('保存に失敗しました。\nMaster SS: ' + gasErr + '\nFirestore: ' + fsErr);
+        } else if (!gasOk) {
+          alert('⚠ Master SS への反映に失敗しました。アプリ表示 (Firestore) は更新済みですが、運用台帳が古いままです。\n' + gasErr);
+        } else {
+          // Firestore 失敗 = アプリ表示が古いまま
+          alert('⚠ Firestore への同期に失敗しました。Master SS は更新済みですが、次回読み込み時に古い名前が出る可能性があります。\n' + fsErr);
+        }
+      }).finally(() => { saveBtn.disabled = false; });
     }
 
     // 親コンテナ直下の data-row のみを対象にするヘルパ
@@ -2512,19 +2532,40 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       }, 100);
     }
 
+    // Firestore doc ID 制約: '/' '.' を含めない、'__' で始まり/終わらない、1500バイト以内
+    function sanitizeTplId(name) {
+      let s = String(name).replace(/[/.]/g, '_');
+      if (/^__/.test(s)) s = 'x' + s;
+      if (/__$/.test(s)) s = s + 'x';
+      if (s === '.' || s === '..' || s === '') s = '_' + Date.now();
+      if (s.length > 200) s = s.slice(0, 200);
+      return s;
+    }
+
     let savedTemplateNames = new Set();
     function loadSavedTemplates() {
-      gasCall({ action: 'getCaptionTemplates' })
-        .then(res => {
-          if (!res.success || res.templates.length === 0) {
-            savedTemplateNames = new Set();
+      const section = document.getElementById('savedTemplatesSection');
+      firebase.firestore().collection('caption_templates').get()
+        .then(snap => {
+          const templates = [];
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (d && d.name) templates.push({
+              id: doc.id,
+              name: d.name,
+              settingsJson: d.settingsJson || '',
+              createdAt: d.createdAt || ''
+            });
+          });
+          templates.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+          savedTemplateNames = new Set(templates.map(t => t.name));
+          if (templates.length === 0) {
+            if (section) section.style.display = 'none';
             return;
           }
-          savedTemplateNames = new Set(res.templates.map(t => t.name));
-          const section = document.getElementById('savedTemplatesSection');
           const grid = document.getElementById('savedTemplatesGrid');
           grid.innerHTML = '';
-          res.templates.forEach(tpl => {
+          templates.forEach(tpl => {
             const card = document.createElement('div');
             card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
 
@@ -2648,7 +2689,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function saveTemplate() {
       const name = document.getElementById('saveTemplateName').value.trim();
       if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
-      if (savedTemplateNames.has(name)) {
+      const overwriting = savedTemplateNames.has(name);
+      if (overwriting) {
         if (!confirm(`"${name}" は既に存在します。上書きしますか？`)) {
           showSaveMsg('保存をキャンセルしました。', '#888');
           return;
@@ -2659,15 +2701,21 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       showSaveMsg('Saving...', '#888');
       const saveBtn = document.getElementById('btnSaveTemplate');
       if (saveBtn) saveBtn.disabled = true;
-      gasCall({ action: 'saveCaptionTemplate', name: name, settingsJson: json })
-        .then(res => {
-          if (res.success) {
-            showSaveMsg(res.overwritten ? `"${name}" updated.` : `"${name}" saved.`, '#1a73e8');
-            document.getElementById('saveTemplateName').value = '';
-            loadSavedTemplates();
-          } else {
-            showSaveMsg('Error: ' + res.error, '#d93025');
-          }
+      const docId = sanitizeTplId(name);
+      const user = firebase.auth && firebase.auth().currentUser;
+      const createdBy = user ? (user.email || '') : '';
+      const now = new Date().toLocaleString('ja-JP');
+      firebase.firestore().collection('caption_templates').doc(docId).set({
+        name: name,
+        settingsJson: json,
+        createdBy: createdBy,
+        createdAt: now,
+        updatedAt: new Date().toISOString()
+      }, { merge: true })
+        .then(() => {
+          showSaveMsg(overwriting ? `"${name}" updated.` : `"${name}" saved.`, '#1a73e8');
+          document.getElementById('saveTemplateName').value = '';
+          loadSavedTemplates();
         })
         .catch(err => showSaveMsg('Error: ' + err.message, '#d93025'))
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
@@ -2676,12 +2724,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function deleteSavedTemplate(name, btn) {
       if (!confirm(`Delete "${name}"?`)) return;
       if (btn) btn.disabled = true;
-      gasCall({ action: 'deleteCaptionTemplate', name: name })
-        .then(res => {
-          if (res.success) { loadSavedTemplates(); }
-          else { alert('Error: ' + res.error); if (btn) btn.disabled = false; }
-        })
-        .catch(err => { alert('通信エラー: ' + err.message); if (btn) btn.disabled = false; });
+      const docId = sanitizeTplId(name);
+      firebase.firestore().collection('caption_templates').doc(docId).delete()
+        .then(() => loadSavedTemplates())
+        .catch(err => { alert('Error: ' + err.message); if (btn) btn.disabled = false; });
     }
 
     function showSaveMsg(msg, color) {
@@ -2914,11 +2960,6 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         caption_fields: fieldsJson,
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      // SS にも反映（fire-and-forget）
-      if (typeof gasCall === 'function') {
-        gasCall({ action: 'saveCaptionFields', ex: exCode, fieldsJson: fieldsJson })
-          .catch(e => console.warn('SS saveCaptionFields sync failed:', e));
-      }
       return { success: true };
     };
     window.fsLoadAllData = async (exCode) => {

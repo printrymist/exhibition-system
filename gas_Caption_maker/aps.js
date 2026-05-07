@@ -120,43 +120,9 @@ function warmUp() {
   Logger.log('warm up: ' + new Date());
 }
 
-// =========================================================
-// 【aps.gs の doGet を以下に置き換え】
-// page=input を追加
-// =========================================================
-function doGet(e) {
-  const page = e.parameter.page || 'caption';
-  const ex = e.parameter.ex || '';
-
-  if (page === 'register') {
-    const tmp = HtmlService.createTemplateFromFile('registerUI');
-    tmp.ex = ex;
-    tmp.appUrl = ScriptApp.getService().getUrl();
-    return tmp.evaluate()
-      .setTitle('Exhibition Register Setup')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-
-  if (page === 'input') {
-    const tmp = HtmlService.createTemplateFromFile('inputUI');
-    tmp.ex = ex;
-    tmp.appUrl = ScriptApp.getService().getUrl();
-    return tmp.evaluate()
-      .setTitle('作品情報入力')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-
-  // デフォルト：キャプション画面
-  const tmp = HtmlService.createTemplateFromFile('captionUI');
-  tmp.ex = ex;
-  tmp.appUrl = ScriptApp.getService().getUrl();
-  return tmp.evaluate()
-    .setTitle('Exhibition Caption Manager')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
+// 旧 doGet (page=caption/register/input → captionUI/registerUI/inputUI) は
+// 2026-05-07 に削除。UI は Firebase Hosting (caption.html / register.html /
+// input.html) に完全移行済。/exec は doPost (gasCall) 専用。
 
 // =========================================================
 // 🌟 ヘッダー名から列インデックスを取得するユーティリティ
@@ -185,24 +151,9 @@ function doPost(e) {
       return output;
     }
 
-    if (action === 'getCaptionTemplates') {
-      output.setContent(JSON.stringify(getCaptionTemplates()));
-      return output;
-    }
-
-    if (action === 'saveCaptionTemplate') {
-      output.setContent(JSON.stringify(
-        saveCaptionTemplate(e.parameter.name, e.parameter.settingsJson)
-      ));
-      return output;
-    }
-
-    if (action === 'deleteCaptionTemplate') {
-      output.setContent(JSON.stringify(
-        deleteCaptionTemplate(e.parameter.name)
-      ));
-      return output;
-    }
+    // Phase 7-A1 (2026-05-07): caption_templates / caption_fields は
+    // Firestore に移行済。getCaptionTemplates / saveCaptionTemplate /
+    // deleteCaptionTemplate / getCaptionFields / saveCaptionFields は撤去。
 
     if (action === 'bumpArtworkCount') {
       const dT = parseInt(e.parameter.dT || '0') || 0;
@@ -238,18 +189,6 @@ function doPost(e) {
     if (action === 'saveRegistrationFields') {
       output.setContent(JSON.stringify(
         saveRegistrationFields(ex, e.parameter.fieldsJson)
-      ));
-      return output;
-    }
-
-    if (action === 'getCaptionFields') {
-      output.setContent(JSON.stringify(getCaptionFields(ex)));
-      return output;
-    }
-
-    if (action === 'saveCaptionFields') {
-      output.setContent(JSON.stringify(
-        saveCaptionFields(ex, e.parameter.fieldsJson)
       ));
       return output;
     }
@@ -348,84 +287,10 @@ function getWorkspaceFolder(ex) {
   }
 }
 
-// =========================================================
-// 🌟 caption_templates シートを取得（なければ作成）
-// =========================================================
-function getTemplatesSheet() {
-  const ss = SpreadsheetApp.openById(MASTER_SS_ID);
-  let sheet = ss.getSheetByName('caption_templates');
-  if (!sheet) {
-    sheet = ss.insertSheet('caption_templates');
-    sheet.appendRow(['name', 'settings_json', 'created_at']);
-    sheet.setFrozenRows(1);
-  }
-  return sheet;
-}
-
-// =========================================================
-// 🌟 保存済みテンプレート一覧を取得
-// =========================================================
-function getCaptionTemplates() {
-  try {
-    const sheet = getTemplatesSheet();
-    const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return { success: true, templates: [] };
-    const templates = [];
-    for (let i = 1; i < data.length; i++) {
-      if (!data[i][0]) continue; // 名前が空の行はスキップ
-      templates.push({
-        name: data[i][0].toString(),
-        settingsJson: data[i][1].toString(),
-        createdAt: data[i][2].toString()
-      });
-    }
-    return { success: true, templates: templates };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// =========================================================
-// 🌟 テンプレートを保存（同名の場合は上書き）
-// =========================================================
-function saveCaptionTemplate(name, settingsJson) {
-  try {
-    const sheet = getTemplatesSheet();
-    const data = sheet.getDataRange().getValues();
-    const now = new Date().toLocaleString('ja-JP');
-    // 同名行を検索して上書き
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0].toString() === name) {
-        sheet.getRange(i + 1, 1, 1, 3).setValues([[name, settingsJson, now]]);
-        return { success: true, overwritten: true };
-      }
-    }
-    // 新規追加
-    sheet.appendRow([name, settingsJson, now]);
-    return { success: true, overwritten: false };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// =========================================================
-// 🌟 テンプレートを削除
-// =========================================================
-function deleteCaptionTemplate(name) {
-  try {
-    const sheet = getTemplatesSheet();
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0].toString() === name) {
-        sheet.deleteRow(i + 1);
-        return { success: true };
-      }
-    }
-    return { success: false, error: 'Template not found.' };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// Phase 7-A1 (2026-05-07): caption_templates 系の関数 (getTemplatesSheet /
+// getCaptionTemplates / saveCaptionTemplate / deleteCaptionTemplate) は
+// Firestore に移行済のため撤去。caption.html は firebase.firestore() で直接
+// caption_templates コレクションを読み書きする。
 
 // Phase 6e: getQrData は撤去 (caption.html は fsLoadAllData で Firestore 直読み)。
 
