@@ -1349,6 +1349,10 @@
       </div>
     </div>
 
+    <!-- D-6: 入りきらないフィールドの警告パネル (Preview 後に表示) -->
+    <div id="overflowWarning" class="card"
+         style="display:none; background:#fff3e0; border:1px solid #ffb74d;"></div>
+
     <div id="previewArea" class="card">
       <div class="card-title">Preview</div>
       <iframe id="previewFrame" scrolling="auto"></iframe>
@@ -2390,10 +2394,52 @@
       const frame = document.getElementById('previewFrame');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
-        autoFitText(frame.contentWindow.document, frame.contentWindow);
+        const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
+        showOverflowWarning(overflow);
       }, { once: true });
       document.getElementById('previewArea').style.display = 'block';
-      document.getElementById('btnPrint').disabled = false;
+    }
+
+    // D-6: 入りきらないフィールド一覧を画面に出し、Print ボタンを警告 ack で gate
+    function showOverflowWarning(list) {
+      const warnArea = document.getElementById('overflowWarning');
+      const printBtn = document.getElementById('btnPrint');
+      if (!list || list.length === 0) {
+        warnArea.style.display = 'none';
+        warnArea.innerHTML = '';
+        printBtn.disabled = false;
+        return;
+      }
+      const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const items = list.map(o => {
+        const text = o.text.length > 60 ? o.text.slice(0, 60) + '…' : o.text;
+        return `<li style="margin-bottom:4px;">
+          <strong>${escape(o.artworkId)}</strong>
+          / ${escape(o.field)}
+          (${o.origSize}pt → ${o.finalSize}pt でも収まらず)
+          <div style="color:#666;font-size:0.88em;margin-left:1em;">「${escape(text)}」</div>
+        </li>`;
+      }).join('');
+      warnArea.innerHTML = `
+        <div style="color:#d93025;font-weight:bold;font-size:1.05em;margin-bottom:8px;">
+          ⚠ ${list.length} 件のフィールドが指定の最小サイズに収まりません
+        </div>
+        <ul style="font-size:0.9em;margin:8px 0 8px 22px;color:#333;line-height:1.55;">${items}</ul>
+        <div style="font-size:0.88em;color:#555;margin-top:10px;line-height:1.55;">
+          作品タイトル等は省略せず、このまま印刷するとカード枠から文字がはみ出ます。<br>
+          <strong>対応案:</strong> 作家にタイトル短縮を相談 / テンプレの最小サイズ・最大行数を見直す / フォントサイズを下げる。
+        </div>
+        <label style="display:block;margin-top:14px;cursor:pointer;font-size:0.92em;">
+          <input type="checkbox" id="ackOverflow" onchange="onAckOverflow(this)"
+            style="width:16px;height:16px;vertical-align:-3px;margin-right:6px;">
+          内容を確認しました。承知の上で印刷します。
+        </label>`;
+      warnArea.style.display = 'block';
+      printBtn.disabled = true;
+    }
+
+    function onAckOverflow(chk) {
+      document.getElementById('btnPrint').disabled = !chk.checked;
     }
 
     function formatValue(val, currency, comma) {
@@ -2464,7 +2510,7 @@
           const fstyle = item.italic ? 'italic' : 'normal';
           const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
           const minSize = item.minSize !== undefined ? item.minSize : 7;
-          html += `<div class="auto-fit" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
+          html += `<div class="auto-fit" data-field="${item.name}" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
             + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
             + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
             + `${val}</div>`;
@@ -2556,10 +2602,11 @@
         ? `<div style="${buildFixedTextStyle(s.fixedText)}">${s.fixedText.value}</div>`
         : '';
 
+      const cardId = (art.artwork_id || '').toString();
       if (pos === 'wrap-left' || pos === 'wrap-right') {
         const floatDir = pos === 'wrap-left' ? 'left' : 'right';
         const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
-        return `<div style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
+        return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
   <div style="float:${floatDir};margin:${mTop} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
   ${textDiv}
@@ -2575,7 +2622,7 @@
         case 'bottom-right': qrStyle += `bottom:${dims.qrMV};right:${dims.qrMH};`; break;
         case 'bottom-center': qrStyle += `bottom:${dims.qrMV};left:50%;transform:translateX(-50%);`; break;
       }
-      return `<div style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
+      return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
   ${ftHtml}
   <div style="${qrStyle}">${qrImg}</div>
   ${textDiv}
@@ -2602,22 +2649,60 @@ body { font-family:${s.fontFamily}; background:white; }
   page-break-after:always; break-after:page;
 }
 .page > div { min-height:0; min-width:0; }
+
+/* D-6: 入りきらないフィールドはプレビューで強調 (印刷物には出さない) */
+@media screen {
+  .cap-card.has-overflow {
+    border-color: #ff9800 !important;
+    box-shadow: 0 0 0 1px #ff9800;
+  }
+  .auto-fit[data-overflow="true"] {
+    background: rgba(255, 200, 0, 0.18);
+    outline: 1px dashed #ff9800;
+  }
+  .cap-card.has-overflow::after {
+    content: '⚠';
+    position: absolute;
+    top: 2px; right: 4px;
+    background: #ff9800;
+    color: white;
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: center;
+    font-family: sans-serif;
+    z-index: 5;
+  }
+}
+
 @media print {
   @page { size:${s.paperSize} ${s.orientation}; margin:0; }
   body  { margin:0; }
   .page { page-break-after:always; break-after:page; }
+  /* 印刷時は警告マークも背景もクリーンに */
+  .cap-card.has-overflow { border-color: #ccc !important; box-shadow: none; }
+  .cap-card.has-overflow::after { display: none; }
+  .auto-fit[data-overflow="true"] { background: transparent; outline: none; }
 }
 </style></head><body>
 ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 </body></html>`;
     }
 
+    // D-6: 入りきらないフィールドは省略せず overflow:visible でカード枠から
+    // はみ出させる + 一覧を返す。呼び出し側 (showOverflowWarning) が UI に反映。
     function autoFitText(doc, win) {
+      const overflowList = [];
       doc.querySelectorAll('.auto-fit').forEach(function (el) {
         var maxLines = parseInt(el.dataset.maxLines) || 2;
         var minSize = parseFloat(el.dataset.minSize) || 7;
-        if (maxLines === 0) return;
-        var size = parseFloat(el.dataset.size);
+        if (maxLines === 0) {
+          el.style.overflow = 'visible';
+          return;
+        }
+        var origSize = parseFloat(el.dataset.size);
+        var size = origSize;
         var lh = parseFloat(win.getComputedStyle(el).lineHeight);
         if (!lh || isNaN(lh)) lh = size * 1.4;
         var maxH = lh * maxLines;
@@ -2629,11 +2714,21 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           if (!isNaN(lh)) maxH = lh * maxLines;
         }
         if (el.scrollHeight > maxH + 2) {
-          el.style.display = '-webkit-box';
-          el.style.webkitLineClamp = maxLines;
-          el.style.webkitBoxOrient = 'vertical';
+          // minSize でも入りきらず: 省略せず overflow:visible で見せる
+          el.dataset.overflow = 'true';
+          el.style.overflow = 'visible';
+          var card = el.closest('.cap-card');
+          if (card) card.classList.add('has-overflow');
+          overflowList.push({
+            artworkId: card ? card.dataset.artworkId : '?',
+            field: el.dataset.field || '?',
+            origSize: origSize,
+            finalSize: size,
+            text: (el.textContent || '').trim()
+          });
         }
       });
+      return overflowList;
     }
 
     function openPrint() {
