@@ -375,21 +375,34 @@
       margin-top: 4px;
     }
 
-    .btn-customize {
-      width: 100%;
-      padding: 12px;
-      background: #1a73e8;
-      color: white;
-      border: none;
+    .custom-tab-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      background: #f0f7ff;
+      border: 1px solid #c5d9f7;
       border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 4px;
+      font-size: 0.82em;
+      color: #1a73e8;
+      flex-wrap: wrap;
     }
 
-    .btn-customize:hover {
-      background: #1557b0;
+    .btn-reset-tpl {
+      padding: 5px 10px;
+      font-size: 0.92em;
+      border: 1px solid #c5d9f7;
+      background: white;
+      color: #1a73e8;
+      border-radius: 6px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .btn-reset-tpl:hover {
+      background: #d6e6fc;
     }
 
     .fields-list {
@@ -1366,7 +1379,6 @@
           <div class="label">選択中のテンプレ構造 (項目設定の参考):</div>
           <div id="selectedTplPreview" class="selected-tpl-preview"></div>
         </div>
-        <button class="btn-customize" onclick="customizeTemplate()">⚙️ Customize this template →</button>
 
         <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
           <div style="font-size:0.78em;color:#888;margin-bottom:8px;padding-top:10px;border-top:1px solid #eee;">💾
@@ -1376,6 +1388,11 @@
       </div>
 
       <div id="customTab" style="display:none;">
+        <div class="custom-tab-header">
+          <span>編集中: <strong id="customTabBaseName" style="color:#1a73e8;">—</strong> から派生</span>
+          <button class="btn-reset-tpl" onclick="resetCustomFromTemplate()"
+            title="現在の編集を破棄して、選択中のテンプレで再構築する">↻ 選択中テンプレで再構築</button>
+        </div>
         <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
           ↑↓ to reorder · check to show · click ＋ between rows to insert
         </p>
@@ -1717,6 +1734,13 @@
       document.getElementById('tabCustom').classList.toggle('active', tab === 'custom');
       document.getElementById('templateTab').style.display = tab === 'template' ? 'block' : 'none';
       document.getElementById('customTab').style.display = tab === 'custom' ? 'block' : 'none';
+      // Custom タブに切り替え + グリッドが空なら現在のテンプレで自動構築
+      if (tab === 'custom') {
+        const grid = document.getElementById('fieldsGrid');
+        if (grid && topLevelRows(grid).length === 0 && currentTemplate && PRESETS[currentTemplate]) {
+          buildFieldsGridFromPreset(currentTemplate);
+        }
+      }
     }
 
     function selectTemplate(name) {
@@ -1741,9 +1765,29 @@
       schedulePreviewUpdate();
     }
 
-    function customizeTemplate() {
+    // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。
+    // 編集中の内容があれば破棄確認、無ければ即座に再構築。
+    function resetCustomFromTemplate() {
+      if (!currentTemplate || !PRESETS[currentTemplate]) {
+        alert('テンプレが選択されていません。Templates タブから選んでください。');
+        return;
+      }
+      const grid = document.getElementById('fieldsGrid');
+      const hasRows = grid && topLevelRows(grid).length > 0;
+      if (hasRows) {
+        const tplLabel = getTemplateLabel(currentTemplate);
+        if (!confirm(`現在の編集内容を破棄して、選択中のテンプレ「${tplLabel}」で再構築しますか?`)) return;
+      }
       buildFieldsGridFromPreset(currentTemplate);
       switchTab('custom');
+    }
+
+    // 内部キー (例: 'jp_artist_first_l') から Templates タブのカード見出し ('🇯🇵 作家名先・左') を取り出す
+    function getTemplateLabel(name) {
+      const card = document.getElementById('tpl_' + name);
+      if (!card) return name;
+      const h4 = card.querySelector('h4');
+      return h4 ? h4.innerText.trim() : name;
     }
 
     function loadExhibition() {
@@ -2285,6 +2329,9 @@
       groupCount = 0;
       const preset = PRESETS[name];
       const usedFields = [];
+      // Custom タブのヘッダラベルを更新 (このグリッドが何派生か明示)
+      const baseNameEl = document.getElementById('customTabBaseName');
+      if (baseNameEl) baseNameEl.innerText = getTemplateLabel(name);
 
       const capFieldNames = artworkData && artworkData.captionFields
         ? artworkData.captionFields.map(f => f.name)
