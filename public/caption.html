@@ -1381,9 +1381,18 @@
         </div>
 
         <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
-          <div style="font-size:0.78em;color:#888;margin-bottom:8px;padding-top:10px;border-top:1px solid #eee;">💾
-            Saved templates</div>
-          <div id="savedTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+          <div id="officialTemplatesWrap" style="display:none;">
+            <div style="font-size:0.78em;color:#888;margin-bottom:8px;padding-top:10px;border-top:1px solid #eee;">
+              🏛️ 公式テンプレ <span style="color:#aaa;font-size:0.92em;">(運営者作成・共通)</span>
+            </div>
+            <div id="officialTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+          </div>
+          <div id="personalTemplatesWrap" style="display:none;">
+            <div style="font-size:0.78em;color:#888;margin:14px 0 8px 0;padding-top:10px;border-top:1px solid #eee;">
+              💾 自分のテンプレ <span style="color:#aaa;font-size:0.92em;">(この主催者のみ可視)</span>
+            </div>
+            <div id="personalTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+          </div>
         </div>
       </div>
 
@@ -2902,61 +2911,115 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       return s;
     }
 
+    const OPERATOR_EMAIL = 'rymist1@gmail.com';
+
+    // 1テンプレ分のカード DOM を組む。deletable=true のときだけ ✕ ボタンを付ける。
+    function buildSavedTemplateCard(tpl, deletable) {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.style.cssText = 'font-size:0.85em;font-weight:bold;color:#1a73e8;margin-bottom:6px;padding-right:20px;';
+      nameDiv.textContent = tpl.name;
+
+      const dateDiv = document.createElement('div');
+      dateDiv.style.cssText = 'font-size:0.72em;color:#aaa;margin-bottom:8px;';
+      dateDiv.textContent = tpl.createdAt;
+
+      const loadBtn = document.createElement('button');
+      loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
+      loadBtn.textContent = 'Load';
+      loadBtn.dataset.settings = tpl.settingsJson;
+      loadBtn.onclick = function () { loadSavedTemplate(this); };
+
+      card.appendChild(nameDiv);
+      card.appendChild(dateDiv);
+      card.appendChild(loadBtn);
+
+      if (deletable) {
+        const delBtn = document.createElement('button');
+        delBtn.style.cssText = 'position:absolute;top:6px;right:6px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:2px 5px;';
+        delBtn.textContent = '✕';
+        delBtn.onclick = function () { deleteSavedTemplate(tpl.name, this); };
+        card.appendChild(delBtn);
+      }
+      return card;
+    }
+
     let savedTemplateNames = new Set();
     function loadSavedTemplates() {
       const section = document.getElementById('savedTemplatesSection');
-      firebase.firestore().collection('caption_templates').get()
-        .then(snap => {
-          const templates = [];
+      const officialWrap = document.getElementById('officialTemplatesWrap');
+      const personalWrap = document.getElementById('personalTemplatesWrap');
+      const officialGrid = document.getElementById('officialTemplatesGrid');
+      const personalGrid = document.getElementById('personalTemplatesGrid');
+      const me = ((firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.email) || '').trim().toLowerCase();
+      const isOp = (me === OPERATOR_EMAIL.toLowerCase());
+
+      const col = firebase.firestore().collection('caption_templates');
+      const docToItem = doc => {
+        const d = doc.data() || {};
+        return {
+          id: doc.id,
+          name: d.name || '',
+          settingsJson: d.settingsJson || '',
+          createdAt: d.createdAt || '',
+          createdBy: (d.createdBy || '').toLowerCase()
+        };
+      };
+
+      // 運営者 = 全 doc 読める。それ以外 = where(==) で公式 + 自分の 2クエリに分割
+      // (collection get は全 doc が rule を通らないと失敗するため)
+      let queryP;
+      if (isOp) {
+        queryP = col.get().then(snap => {
+          const officials = [];
+          const personal = [];
           snap.forEach(doc => {
-            const d = doc.data();
-            if (d && d.name) templates.push({
-              id: doc.id,
-              name: d.name,
-              settingsJson: d.settingsJson || '',
-              createdAt: d.createdAt || ''
-            });
+            const it = docToItem(doc);
+            if (!it.name) return;
+            if (it.createdBy === OPERATOR_EMAIL.toLowerCase()) officials.push(it);
+            else personal.push(it);
           });
-          templates.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-          savedTemplateNames = new Set(templates.map(t => t.name));
-          if (templates.length === 0) {
-            if (section) section.style.display = 'none';
-            return;
-          }
-          const grid = document.getElementById('savedTemplatesGrid');
-          grid.innerHTML = '';
-          templates.forEach(tpl => {
-            const card = document.createElement('div');
-            card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
+          return { officials, personal };
+        });
+      } else {
+        const officialsP = col.where('createdBy', '==', OPERATOR_EMAIL.toLowerCase()).get();
+        const personalP  = me ? col.where('createdBy', '==', me).get() : Promise.resolve({ forEach: () => {} });
+        queryP = Promise.all([officialsP, personalP]).then(([oSnap, pSnap]) => {
+          const officials = [];
+          const personal = [];
+          oSnap.forEach(d => { const it = docToItem(d); if (it.name) officials.push(it); });
+          pSnap.forEach(d => { const it = docToItem(d); if (it.name) personal.push(it); });
+          return { officials, personal };
+        });
+      }
 
-            const nameDiv = document.createElement('div');
-            nameDiv.style.cssText = 'font-size:0.85em;font-weight:bold;color:#1a73e8;margin-bottom:6px;padding-right:20px;';
-            nameDiv.textContent = tpl.name;
+      queryP.then(({ officials, personal }) => {
+        savedTemplateNames = new Set([...officials, ...personal].map(t => t.name));
+        const total = officials.length + personal.length;
+        if (total === 0) {
+          section.style.display = 'none';
+          officialWrap.style.display = 'none';
+          personalWrap.style.display = 'none';
+          return;
+        }
+        officials.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        personal.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
-            const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size:0.72em;color:#aaa;margin-bottom:8px;';
-            dateDiv.textContent = tpl.createdAt;
+        // 公式テンプレ: 運営者ログイン時のみ削除可
+        officialGrid.innerHTML = '';
+        officials.forEach(t => officialGrid.appendChild(buildSavedTemplateCard(t, isOp)));
+        officialWrap.style.display = officials.length > 0 ? 'block' : 'none';
 
-            const loadBtn = document.createElement('button');
-            loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
-            loadBtn.textContent = 'Load';
-            loadBtn.dataset.settings = tpl.settingsJson;
-            loadBtn.onclick = function () { loadSavedTemplate(this); };
+        // 自分のテンプレ: 本人だけ表示 (rules で他主催者のは取れない) / 削除可
+        personalGrid.innerHTML = '';
+        personal.forEach(t => personalGrid.appendChild(buildSavedTemplateCard(t, true)));
+        personalWrap.style.display = personal.length > 0 ? 'block' : 'none';
 
-            const delBtn = document.createElement('button');
-            delBtn.style.cssText = 'position:absolute;top:6px;right:6px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:2px 5px;';
-            delBtn.textContent = '✕';
-            delBtn.onclick = function () { deleteSavedTemplate(tpl.name, this); };
-
-            card.appendChild(nameDiv);
-            card.appendChild(dateDiv);
-            card.appendChild(loadBtn);
-            card.appendChild(delBtn);
-            grid.appendChild(card);
-          });
-          section.style.display = 'block';
-        })
-        .catch(err => console.log('loadSavedTemplates error:', err.message));
+        section.style.display = 'block';
+      })
+      .catch(err => console.warn('loadSavedTemplates error:', err && err.message ? err.message : err));
     }
 
     function loadSavedTemplate(btn) {
@@ -3085,7 +3148,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       if (saveBtn) saveBtn.disabled = true;
       const docId = sanitizeTplId(name);
       const user = firebase.auth && firebase.auth().currentUser;
-      const createdBy = user ? (user.email || '') : '';
+      // ハイブリッドルール (2026-05-08) は createdBy を case-insensitive で比較する。
+      // 保存側でも小文字統一しておくと where(==) クエリが取りこぼさなくて済む。
+      const createdBy = user ? ((user.email || '').trim().toLowerCase()) : '';
       const now = new Date().toLocaleString('ja-JP');
       firebase.firestore().collection('caption_templates').doc(docId).set({
         name: name,

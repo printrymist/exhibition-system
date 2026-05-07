@@ -94,10 +94,37 @@ service cloud.firestore {
     }
 
     // キャプションテンプレ（caption.html の保存済みテンプレ）
-    // 2026-05-07 に Master SS から移行。当面は認証済みユーザー全員で共有
-    // (旧 SS シート挙動互換)。将来的に createdBy ベースで分離予定。
+    // 2026-05-08 に「全員共有」から「ハイブリッド (運営者公式 + 各主催者 private)」に変更。
+    //   運営者 (rymist1@gmail.com) のテンプレ = 公式ライブラリ、全員に表示
+    //   各主催者 (organizer) のテンプレ = 本人だけに表示
+    //   運営者は全部 read/write 可能 (admin)。
+    // クライアント側 (caption.html loadSavedTemplates) は collection クエリの
+    // 「全 doc が read OK」制約に対応するため where('createdBy', '==', ...) で
+    // 自分用と公式の 2 クエリに分割している。
     match /caption_templates/{tplId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null && (
+        isOperator()
+        || (
+          resource.data.createdBy is string
+          && (
+            resource.data.createdBy.lower() == 'rymist1@gmail.com'
+            || (request.auth.token.email != null
+                && resource.data.createdBy.lower() == request.auth.token.email.lower())
+          )
+        )
+      );
+      allow create: if request.auth != null
+        && request.auth.token.email != null
+        && request.resource.data.createdBy is string
+        && request.resource.data.createdBy.lower() == request.auth.token.email.lower();
+      allow update, delete: if request.auth != null && (
+        isOperator()
+        || (
+          resource.data.createdBy is string
+          && request.auth.token.email != null
+          && resource.data.createdBy.lower() == request.auth.token.email.lower()
+        )
+      );
     }
 
     match /{document=**} {
