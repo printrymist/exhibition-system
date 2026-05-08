@@ -905,7 +905,7 @@
             <div id="importList" style="max-height:240px; overflow-y:auto;">
               <div style="color:#aaa; font-size:0.85em; text-align:center; padding:12px;">読み込み中...</div>
             </div>
-            <div style="color:#888; font-size:0.78em; margin-top:6px;">項目設定は読み込み後「💾 保存する」で確定。キャプション設定は即時反映されます。</div>
+            <div style="color:#888; font-size:0.78em; margin-top:6px;">「読み込む」を押すと選択した内容が即座にこの展覧会に上書き保存されます。</div>
           </div>
         </div>
         <!-- A-3: 項目設定の Unsaved-changes バナー -->
@@ -1528,8 +1528,10 @@
 
         const copied = [];
         const skipped = [];
+        const failed = [];
 
-        // 項目設定 (registration_fields): UI に流し込み、保存は organizer が「保存する」で確定
+        // 項目設定 (registration_fields): grid を再構築して同じ内容を即時保存
+        // (clone は明示的なユーザー操作なので「読み込む = 確定」と扱う、別途「保存する」を求めない)
         if (wantRegFields) {
           let fields = null;
           try {
@@ -1538,22 +1540,37 @@
           } catch (e) { console.warn('registration_fields parse failed:', e); }
           if (fields && fields.length > 0) {
             buildFieldsGrid(fields);
-            markFieldSettingsDirty();  // A-3: import で未保存状態に
-            copied.push('項目設定');
+            try {
+              await window.fsSaveRegistrationFields(currentEx, JSON.stringify(fields));
+              activeFields = fields;
+              sessionStorage.setItem('fields_' + currentEx, JSON.stringify(fields));
+              buildInputForm();
+              copied.push('項目設定');
+            } catch (e) {
+              console.error('saveRegistrationFields after import failed:', e);
+              // 保存失敗時は未保存状態を明示して、手動「保存する」での再試行を促す
+              markFieldSettingsDirty();
+              failed.push('項目設定 (保存失敗、「💾 保存する」で再試行してください)');
+            }
           } else {
             skipped.push('項目設定 (元に保存無し)');
           }
         }
 
-        // キャプション設定 (caption_fields): caption.html 専用なので即時 Firestore 直書き
+        // キャプション設定 (caption_fields): register.html に編集 UI が無いので Firestore 直書き
         // 文字列のままコピーして parse しない (元の保存形式を保つ)
         if (wantCaptionFields) {
           if (data.caption_fields) {
-            await fsDb.collection('exhibitions').doc(currentEx).set({
-              caption_fields: data.caption_fields,
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-            copied.push('キャプション設定');
+            try {
+              await fsDb.collection('exhibitions').doc(currentEx).set({
+                caption_fields: data.caption_fields,
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+              copied.push('キャプション設定');
+            } catch (e) {
+              console.error('caption_fields save after import failed:', e);
+              failed.push('キャプション設定 (保存失敗: ' + (e.message || 'unknown') + ')');
+            }
           } else {
             skipped.push('キャプション設定 (元に保存無し)');
           }
@@ -1561,23 +1578,16 @@
 
         document.getElementById('importPanel').style.display = 'none';
 
-        if (copied.length === 0) {
+        if (copied.length === 0 && failed.length === 0) {
           alert(`"${exName}" には複製可能な設定がありませんでした (${skipped.join(' / ')})。`);
           return;
         }
 
-        let msg = `📥 "${exName}" から ${copied.join(' / ')} を複製しました。`;
-        if (copied.includes('項目設定') && copied.includes('キャプション設定')) {
-          msg += ' (キャプション設定は即時反映、項目設定は「💾 保存する」で確定)';
-        } else if (copied.includes('項目設定')) {
-          msg += ' 「💾 保存する」を押すと反映されます。';
-        } else {
-          msg += ' (即時反映済み)';
-        }
-        if (skipped.length > 0) {
-          msg += ` ※ スキップ: ${skipped.join(' / ')}`;
-        }
-        showMsg('saveMsgSetup', msg, '#1a73e8');
+        let msg = '';
+        if (copied.length > 0) msg += `✅ "${exName}" から ${copied.join(' / ')} を複製・保存しました。`;
+        if (skipped.length > 0) msg += ` ※ スキップ: ${skipped.join(' / ')}`;
+        if (failed.length > 0) msg += ` ⚠ ${failed.join(' / ')}`;
+        showMsg('saveMsgSetup', msg, failed.length > 0 ? '#d93025' : '#1a73e8');
       } catch (err) {
         console.error('importFromExhibition failed:', err);
         alert('読み込み失敗: ' + (err.message || err));
