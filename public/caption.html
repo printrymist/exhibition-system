@@ -730,7 +730,7 @@
     .field-name {
       font-size: 0.82em;
       color: #444;
-      width: 80px;
+      width: 120px;  /* 日本語ラベル (最長 "タイトル（日本語）" 等) を切らない幅 */
       flex-shrink: 0;
       white-space: nowrap;
       overflow: hidden;
@@ -1066,8 +1066,8 @@
   <div class="card">
     <div class="card-title">Exhibition</div>
     <div class="ex-row">
-      <input type="text" id="exCodeInput" placeholder="Enter exhibition code (e.g. IT26)" value="">
-      <button class="btn-load" id="btnLoad" onclick="loadExhibition()">Load</button>
+      <input type="text" id="exCodeInput" placeholder="展覧会コードを入力 (例: IT26)" value="">
+      <button class="btn-load" id="btnLoad" onclick="loadExhibition()">読込</button>
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
       <div id="exName"></div>
@@ -1079,9 +1079,9 @@
       <input type="text" id="exNameInput"
         style="padding:8px; border:1px solid #ccc; border-radius:6px; font-size:14px; width:70%;">
       <button onclick="saveExName()"
-        style="padding:8px 14px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; margin-left:6px;">Save</button>
+        style="padding:8px 14px; background:#1a73e8; color:white; border:none; border-radius:6px; cursor:pointer; margin-left:6px;">保存</button>
       <button onclick="cancelEditExName()"
-        style="padding:8px 14px; background:#eee; color:#333; border:none; border-radius:6px; cursor:pointer; margin-left:4px;">Cancel</button>
+        style="padding:8px 14px; background:#eee; color:#333; border:none; border-radius:6px; cursor:pointer; margin-left:4px;">キャンセル</button>
     </div>
     <div id="exError"></div>
   </div>
@@ -1155,8 +1155,8 @@
       </div>
       <iframe id="previewFrame" scrolling="auto" style="display:none;"></iframe>
       <div class="btn-row" style="margin-top:12px;">
-        <button class="btn-preview" onclick="generatePreview()" title="設定を反映してプレビューを再生成">🔄 Refresh</button>
-        <button class="btn-print" id="btnPrint" onclick="openPrint()" disabled>🖨️ Print</button>
+        <button class="btn-preview" onclick="generatePreview()" title="設定を反映してプレビューを再生成">🔄 更新</button>
+        <button class="btn-print" id="btnPrint" onclick="openPrint()" disabled>🖨️ 印刷</button>
       </div>
       <!-- D-6: 入りきらないフィールドの警告パネル -->
       <div id="overflowWarning"
@@ -1164,24 +1164,24 @@
     </div>
 
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">Page layout</div>
+      <div class="card-title">ページレイアウト</div>
       <div class="layout-row">
         <div class="layout-item">
-          <label>Paper</label>
+          <label>用紙</label>
           <select id="paperSize">
             <option value="A4">A4</option>
             <option value="Letter">Letter</option>
           </select>
         </div>
         <div class="layout-item">
-          <label>Orientation</label>
+          <label>向き</label>
           <select id="orientation">
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Landscape</option>
+            <option value="portrait">縦</option>
+            <option value="landscape">横</option>
           </select>
         </div>
         <div class="layout-item">
-          <label>Columns</label>
+          <label>列数</label>
           <select id="cols">
             <option value="1">1</option>
             <option value="2" selected>2</option>
@@ -1189,7 +1189,7 @@
           </select>
         </div>
         <div class="layout-item">
-          <label>Rows</label>
+          <label>行数</label>
           <select id="rows">
             <option value="2">2</option>
             <option value="3">3</option>
@@ -1198,49 +1198,49 @@
           </select>
         </div>
         <div class="layout-item">
-          <label>QR position</label>
+          <label>QR 位置</label>
           <select id="qrPosition" onchange="onQrPositionChange()">
-            <optgroup label="Fixed">
-              <option value="top-left">Top left</option>
-              <option value="top-right">Top right</option>
-              <option value="bottom-left">Bottom left</option>
-              <option value="bottom-right" selected>Bottom right</option>
-              <option value="bottom-center">Bottom center</option>
+            <optgroup label="固定配置">
+              <option value="top-left">左上</option>
+              <option value="top-right">右上</option>
+              <option value="bottom-left">左下</option>
+              <option value="bottom-right" selected>右下</option>
+              <option value="bottom-center">下中央</option>
             </optgroup>
-            <optgroup label="Wrap (text flows around QR)">
-              <option value="wrap-left">Wrap left</option>
-              <option value="wrap-right">Wrap right</option>
+            <optgroup label="文字を QR で折り返し">
+              <option value="wrap-left">左に折り返し</option>
+              <option value="wrap-right">右に折り返し</option>
             </optgroup>
           </select>
         </div>
         <div class="layout-item" id="qrOffsetItem">
-          <label>QR vertical offset</label>
+          <label>QR 縦オフセット</label>
           <input type="number" id="qrOffset" min="0" max="50" value="0" style="width:60px;">
           <span>mm</span>
         </div>
         <div class="layout-item">
-          <label>QR size</label>
+          <label>QR サイズ</label>
           <input type="number" id="qrSize" min="10" max="50" value="20" style="width:60px;">
           <span>mm</span>
         </div>
         <div class="layout-item">
-          <label>QR logo</label>
+          <label>QR ロゴ</label>
           <select id="qrLogo">
-            <option value="heart" selected>❤️ Heart</option>
+            <option value="heart" selected>❤️ ハート</option>
             <option value="like">👍 Like</option>
-            <option value="none">None</option>
+            <option value="none">なし</option>
           </select>
         </div>
         <div class="layout-item">
-          <label>Text align</label>
+          <label>テキスト揃え</label>
           <select id="textAlign">
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
+            <option value="left">左</option>
+            <option value="center">中央</option>
+            <option value="right">右</option>
           </select>
         </div>
         <div class="layout-item">
-          <label>Font</label>
+          <label>フォント</label>
           <select id="fontFamily">
             <option value="sans-serif">ゴシック</option>
             <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
@@ -1249,43 +1249,43 @@
       </div>
 
       <div class="sub-section">
-        <div class="sub-section-title">QR margin</div>
+        <div class="sub-section-title">QR 余白</div>
         <div class="margin-row">
-          <label>Horizontal</label>
+          <label>横</label>
           <input type="number" id="qrMarginH" min="0" max="15" value="3" style="width:55px;">
           <span>mm</span>
-          <label style="margin-left:10px;">Vertical</label>
+          <label style="margin-left:10px;">縦</label>
           <input type="number" id="qrMarginV" min="0" max="15" value="3" style="width:55px;">
           <span>mm</span>
         </div>
       </div>
 
       <div class="sub-section">
-        <div class="sub-section-title">Text margin</div>
+        <div class="sub-section-title">テキスト余白</div>
         <div class="margin-row">
-          <label>Left</label>
+          <label>左</label>
           <input type="number" id="textMarginLeft" min="0" max="20" value="5" style="width:55px;">
           <span>mm</span>
-          <label style="margin-left:10px;">Right</label>
+          <label style="margin-left:10px;">右</label>
           <input type="number" id="textMarginRight" min="0" max="20" value="5" style="width:55px;">
           <span>mm</span>
         </div>
       </div>
 
       <div class="sub-section">
-        <div class="sub-section-title">Fixed text (absolute position)</div>
+        <div class="sub-section-title">固定文 (絶対配置)</div>
         <div class="fixed-text-row">
-          <input type="text" id="fixedTextValue" placeholder="e.g. GALLERY NAME">
+          <input type="text" id="fixedTextValue" placeholder="例: ギャラリー名">
           <button class="btn-exname"
-            onclick="document.getElementById('fixedTextValue').value=artworkData?artworkData.exName:''">exName</button>
+            onclick="document.getElementById('fixedTextValue').value=artworkData?artworkData.exName:''">展覧会名</button>
           <select id="fixedTextPos">
-            <option value="none" selected>None (off)</option>
-            <option value="top-left">Top left</option>
-            <option value="top-center">Top center</option>
-            <option value="top-right">Top right</option>
-            <option value="bottom-left">Bottom left</option>
-            <option value="bottom-center">Bottom center</option>
-            <option value="bottom-right">Bottom right</option>
+            <option value="none" selected>なし (非表示)</option>
+            <option value="top-left">左上</option>
+            <option value="top-center">上中央</option>
+            <option value="top-right">右上</option>
+            <option value="bottom-left">左下</option>
+            <option value="bottom-center">下中央</option>
+            <option value="bottom-right">右下</option>
           </select>
           <input type="number" id="fixedTextSize" min="6" max="20" value="9" style="width:55px;">
           <span>pt</span>
@@ -1293,10 +1293,10 @@
           <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
         </div>
         <div class="margin-row">
-          <label>H margin</label>
+          <label>横余白</label>
           <input type="number" id="fixedTextMarginH" min="0" max="15" value="3" style="width:55px;">
           <span>mm</span>
-          <label style="margin-left:10px;">V margin</label>
+          <label style="margin-left:10px;">縦余白</label>
           <input type="number" id="fixedTextMarginV" min="0" max="15" value="3" style="width:55px;">
           <span>mm</span>
         </div>
@@ -1304,10 +1304,10 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Caption style</div>
+      <div class="card-title">キャプション設定</div>
       <div class="tabs">
-        <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 Templates</div>
-        <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ Custom</div>
+        <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 テンプレート</div>
+        <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ 詳細編集</div>
       </div>
 
       <div id="templateTab">
@@ -1444,17 +1444,17 @@
             title="現在の編集を破棄して、選択中のテンプレで再構築する">↻ 選択中テンプレで再構築</button>
         </div>
         <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
-          ↑↓ to reorder · check to show · click ＋ between rows to insert
+          ↑↓ で並び替え · チェックで表示 · ＋ で挿入
         </p>
         <div class="fields-list" id="fieldsGrid"></div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
           <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="saveTemplateName" placeholder="Template name..."
+            <input type="text" id="saveTemplateName" placeholder="テンプレ名…"
               oninput="onTemplateNameInput()"
               style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
             <button id="btnSaveTemplate" onclick="saveTemplate()"
               style="padding:8px 16px;background:#1a73e8;color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;white-space:nowrap;">
-              💾 Save
+              💾 保存
             </button>
           </div>
           <div id="saveMsg" style="font-size:0.82em;margin-top:6px;min-height:16px;"></div>
@@ -1467,17 +1467,17 @@
   <!-- QR Print エリア -->
   <div id="qrPrintArea" style="display:none;">
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">🔲 QR Code Print</div>
+      <div class="card-title">🔲 QR コード印刷</div>
       <div class="layout-row">
         <div class="layout-item">
-          <label>Paper</label>
+          <label>用紙</label>
           <select id="qrPrintPaper">
             <option value="A4" selected>A4</option>
             <option value="Letter">Letter</option>
           </select>
         </div>
         <div class="layout-item">
-          <label>QR size</label>
+          <label>QR サイズ</label>
           <select id="qrPrintSize">
             <option value="15">極小 (15mm) - 6列×8行</option>
             <option value="20">小 (20mm) - 5列×7行</option>
@@ -1488,11 +1488,11 @@
           </select>
         </div>
         <div class="layout-item">
-          <label>Logo</label>
+          <label>ロゴ</label>
           <select id="qrPrintLogo">
-            <option value="heart" selected>❤️ Heart</option>
+            <option value="heart" selected>❤️ ハート</option>
             <option value="like">👍 Like</option>
-            <option value="none">None</option>
+            <option value="none">なし</option>
           </select>
         </div>
         <div class="layout-item">
@@ -1506,7 +1506,7 @@
       </div>
       <div style="margin-top:12px;">
         <button class="btn-print" onclick="openQrPrint()" style="width:100%;padding:13px;">
-          🔲 Print QR Codes
+          🔲 QR コードを印刷
         </button>
       </div>
     </div>
@@ -1708,7 +1708,7 @@
 
     async function runCategorization() {
       const ex = document.getElementById('exCodeInput').value.trim();
-      if (!ex) { alert('展覧会コードを Load してから実行してください'); return; }
+      if (!ex) { alert('展覧会コードを読み込んでから実行してください'); return; }
       if (!artworkData) { alert('作品データが読み込まれていません'); return; }
       const force = document.getElementById('catForceRedo').checked;
 
@@ -1823,7 +1823,7 @@
     // 編集中の内容があれば破棄確認、無ければ即座に再構築。
     function resetCustomFromTemplate() {
       if (!currentTemplate || !PRESETS[currentTemplate]) {
-        alert('テンプレが選択されていません。Templates タブから選んでください。');
+        alert('テンプレが選択されていません。テンプレートタブから選んでください。');
         return;
       }
       const grid = document.getElementById('fieldsGrid');
@@ -1847,7 +1847,7 @@
     function loadExhibition() {
       const ex = document.getElementById('exCodeInput').value.trim();
       if (!ex) return;
-      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> 読み込み中…';
       document.getElementById('exError').innerText = '';
       document.getElementById('btnLoad').disabled = true;
       document.getElementById('mainTabs').style.display = 'none';
@@ -1864,7 +1864,7 @@
           document.getElementById('btnLoad').disabled = false;
           if (!exSnap.exists) {
             document.getElementById('exName').innerText = '';
-            document.getElementById('exError').innerText = `Exhibition code "${ex}" not found.`;
+            document.getElementById('exError').innerText = `展覧会コード「${ex}」が見つかりません。`;
             return;
           }
           const exData = exSnap.data() || {};
@@ -1933,7 +1933,7 @@
     }
 
     function loadAllData(ex) {
-      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> Loading...';
+      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> 読み込み中…';
       window.fsLoadAllData(ex)
         .then(data => {
           if (!data.success) {
@@ -2125,8 +2125,8 @@
       bar.className = 'insert-bar';
       bar.innerHTML = `
       <div class="insert-bar-line"></div>
-      <button class="insert-btn" onclick="insertAt(this,'divider')">＋ divider</button>
-      <button class="insert-btn" onclick="insertAt(this,'spacer')">＋ blank</button>
+      <button class="insert-btn" onclick="insertAt(this,'divider')">＋ 区切り線</button>
+      <button class="insert-btn" onclick="insertAt(this,'spacer')">＋ 空白</button>
       <div class="insert-bar-line"></div>`;
       return bar;
     }
@@ -2148,6 +2148,13 @@
         html += `<option value="${h}" ${h === selected ? 'selected' : ''}>${h}</option>`;
       });
       return html;
+    }
+
+    // FORM_FIELD_DEFS の label を引いて UI 表示用のラベルに変換 (フォーム設定タブと統一)。
+    // 未登録の internal name はそのまま返す (artworkData.headers に出る legacy フィールド対策)。
+    function getFieldLabel(name) {
+      const def = FORM_FIELD_DEFS.find(d => d.name === name);
+      return (def && def.label) ? def.label : name;
     }
 
     function makeFieldEl(name, size, bold, italic, align, checked, maxLines, minSize, currency, comma, prefix, suffix, affixScale) {
@@ -2175,7 +2182,7 @@
         ${moveBtnsHtml()}
         <button class="merge-btn" onclick="mergeWithAbove(this)" title="直前の行と結合">↥結</button>
         <input type="checkbox" id="field_${name}" ${checked ? 'checked' : ''}>
-        <span class="field-name" title="${name}">${name}</span>
+        <span class="field-name" title="${name}">${getFieldLabel(name)}</span>
         <div class="field-controls">
           <select id="align_${name}" title="Align">
             <option value="inherit" ${align === 'inherit' ? 'selected' : ''}>—</option>
@@ -2259,7 +2266,7 @@
       el.setAttribute('data-row', '');
       el.innerHTML = `
       ${moveBtnsHtml()}
-      <hr><span style="flex:1;">── divider ──</span>
+      <hr><span style="flex:1;">── 区切り線 ──</span>
       <button class="del-btn" onclick="removeRow(this)">✕</button>`;
       return el;
     }
@@ -2274,7 +2281,7 @@
       el.setAttribute('data-row', '');
       el.innerHTML = `
       ${moveBtnsHtml()}
-      <span>↕ blank</span>
+      <span>↕ 空白</span>
       <select id="spacer_${spacerCount}">
         <option value="2mm"  ${defSize === '2mm' ? 'selected' : ''}>2mm</option>
         <option value="4mm"  ${defSize === '4mm' ? 'selected' : ''}>4mm</option>
@@ -2570,7 +2577,7 @@
       const settings = getSettings();
 
       if (!settings.items.some(i => i.type === 'field' || i.type === 'group')) {
-        alert('Please select at least one field.');
+        alert('表示する項目を1つ以上選択してください。');
         artworkData = tempData;
         return;
       }
@@ -2984,7 +2991,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
       const loadBtn = document.createElement('button');
       loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
-      loadBtn.textContent = 'Load';
+      loadBtn.textContent = '読込';
       loadBtn.dataset.settings = tpl.settingsJson;
       loadBtn.onclick = function () { loadSavedTemplate(this); };
 
@@ -3161,7 +3168,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         }
         switchTab('custom');
       } catch (e) {
-        alert('Load error: ' + e.message);
+        alert('読み込みエラー: ' + e.message);
       }
     }
 
@@ -3173,7 +3180,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const msg = document.getElementById('saveMsg');
       if (!btn || !msg) return;
       if (!name) {
-        btn.innerHTML = '💾 Save';
+        btn.innerHTML = '💾 保存';
         msg.innerText = '';
         return;
       }
@@ -3182,7 +3189,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         msg.style.color = '#c08400';
         msg.innerText = `既存の「${name}」を上書きします。`;
       } else {
-        btn.innerHTML = '💾 Save';
+        btn.innerHTML = '💾 保存';
         msg.style.color = '#888';
         msg.innerText = '';
       }
@@ -3190,7 +3197,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     function saveTemplate() {
       const name = document.getElementById('saveTemplateName').value.trim();
-      if (!name) { showSaveMsg('Please enter a template name.', '#d93025'); return; }
+      if (!name) { showSaveMsg('テンプレ名を入力してください。', '#d93025'); return; }
       if (!navigator.onLine) {
         showSaveMsg('オフラインです。ネットワーク接続を確認してください。', '#d93025');
         return;
@@ -3199,7 +3206,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       // D-1: confirm は撤廃。oninput で「⚠ 上書き保存」を明示済。
       const settings = getSettings();
       const json = JSON.stringify(settings);
-      showSaveMsg('Saving...', '#888');
+      showSaveMsg('保存中…', '#888');
       const saveBtn = document.getElementById('btnSaveTemplate');
       if (saveBtn) saveBtn.disabled = true;
       const docId = sanitizeTplId(name);
@@ -3218,15 +3225,15 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         .then(() => {
           showSaveMsg(overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`, '#1a73e8');
           document.getElementById('saveTemplateName').value = '';
-          if (saveBtn) saveBtn.innerHTML = '💾 Save';  // ラベルを元に戻す
+          if (saveBtn) saveBtn.innerHTML = '💾 保存';  // ラベルを元に戻す
           loadSavedTemplates();
         })
-        .catch(err => showSaveMsg('Error: ' + err.message, '#d93025'))
+        .catch(err => showSaveMsg('エラー: ' + err.message, '#d93025'))
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
     function deleteSavedTemplate(name, btn) {
-      if (!confirm(`Delete "${name}"?`)) return;
+      if (!confirm(`「${name}」を削除しますか?`)) return;
       if (!navigator.onLine) {
         alert('オフラインです。ネットワーク接続を確認してください。');
         return;
@@ -3235,7 +3242,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const docId = sanitizeTplId(name);
       firebase.firestore().collection('caption_templates').doc(docId).delete()
         .then(() => loadSavedTemplates())
-        .catch(err => { alert('Error: ' + err.message); if (btn) btn.disabled = false; });
+        .catch(err => { alert('エラー: ' + err.message); if (btn) btn.disabled = false; });
     }
 
     function showSaveMsg(msg, color) {
