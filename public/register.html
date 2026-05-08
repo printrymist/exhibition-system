@@ -888,15 +888,24 @@
         <div style="margin:0 0 10px 0;">
           <button type="button" id="btnImportToggle" onclick="toggleImportPanel()"
             style="padding:6px 12px; background:#f0f7ff; color:#1a73e8; border:1px solid #c5d9f7; border-radius:6px; font-size:0.85em; cursor:pointer;">
-            📥 他の展覧会から項目設定を読み込む
+            📥 他の展覧会から設定を複製
           </button>
           <div id="importPanel" style="display:none; margin-top:8px; padding:10px; background:#fafdff; border:1px solid #c5d9f7; border-radius:8px;">
             <input type="text" id="importSearch" placeholder="展覧会名で絞り込み..." oninput="renderImportList()"
               style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:8px;">
+            <div style="margin:0 0 10px 0; padding:8px 10px; background:white; border:1px solid #e3eaf3; border-radius:6px; font-size:0.85em;">
+              <div style="color:#555; margin-bottom:5px; font-weight:bold;">複製する内容:</div>
+              <label style="display:inline-flex; align-items:center; gap:6px; margin-right:14px; cursor:pointer;">
+                <input type="checkbox" id="imp_regFields" checked> 項目設定 (どのフィールドを使うか)
+              </label>
+              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" id="imp_captionFields" checked> キャプション設定
+              </label>
+            </div>
             <div id="importList" style="max-height:240px; overflow-y:auto;">
               <div style="color:#aaa; font-size:0.85em; text-align:center; padding:12px;">読み込み中...</div>
             </div>
-            <div style="color:#888; font-size:0.78em; margin-top:6px;">読み込み後、必要に応じて編集して「保存する」を押してください。</div>
+            <div style="color:#888; font-size:0.78em; margin-top:6px;">項目設定は読み込み後「💾 保存する」で確定。キャプション設定は即時反映されます。</div>
           </div>
         </div>
         <!-- A-3: 項目設定の Unsaved-changes バナー -->
@@ -1495,27 +1504,87 @@
         listEl.appendChild(row);
       });
     }
-    function importFromExhibition(exCode, exName, btn) {
+    async function importFromExhibition(exCode, exName, btn) {
+      const wantRegFields = document.getElementById('imp_regFields').checked;
+      const wantCaptionFields = document.getElementById('imp_captionFields').checked;
+      if (!wantRegFields && !wantCaptionFields) {
+        alert('複製する内容を1つ以上選択してください。');
+        return;
+      }
+      if (!navigator.onLine) {
+        alert('オフラインです。接続を確認してから再試行してください。');
+        return;
+      }
       btn.disabled = true;
       btn.textContent = '読込中...';
-      window.fsGetRegistrationFields(exCode)
-        .then(fields => {
-          btn.disabled = false;
-          btn.textContent = '読み込む';
-          if (!fields || fields.length === 0) {
-            alert(`"${exName}" には項目設定が保存されていません。`);
-            return;
+      try {
+        // 元展覧会の doc を1回 fetch して必要な field を取り出す
+        const snap = await fsDb.collection('exhibitions').doc(exCode).get();
+        if (!snap.exists) {
+          alert(`"${exName}" の展覧会データが見つかりません。`);
+          return;
+        }
+        const data = snap.data() || {};
+
+        const copied = [];
+        const skipped = [];
+
+        // 項目設定 (registration_fields): UI に流し込み、保存は organizer が「保存する」で確定
+        if (wantRegFields) {
+          let fields = null;
+          try {
+            const v = data.registration_fields;
+            fields = v ? (typeof v === 'string' ? JSON.parse(v) : v) : null;
+          } catch (e) { console.warn('registration_fields parse failed:', e); }
+          if (fields && fields.length > 0) {
+            buildFieldsGrid(fields);
+            markFieldSettingsDirty();  // A-3: import で未保存状態に
+            copied.push('項目設定');
+          } else {
+            skipped.push('項目設定 (元に保存無し)');
           }
-          buildFieldsGrid(fields);
-          markFieldSettingsDirty();  // A-3: import で未保存状態に
-          document.getElementById('importPanel').style.display = 'none';
-          showMsg('saveMsgSetup', `📥 "${exName}" の項目設定を読み込みました。「💾 保存する」を押すと反映されます。`, '#1a73e8');
-        })
-        .catch(err => {
-          btn.disabled = false;
-          btn.textContent = '読み込む';
-          alert('読み込み失敗: ' + err.message);
-        });
+        }
+
+        // キャプション設定 (caption_fields): caption.html 専用なので即時 Firestore 直書き
+        // 文字列のままコピーして parse しない (元の保存形式を保つ)
+        if (wantCaptionFields) {
+          if (data.caption_fields) {
+            await fsDb.collection('exhibitions').doc(currentEx).set({
+              caption_fields: data.caption_fields,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            copied.push('キャプション設定');
+          } else {
+            skipped.push('キャプション設定 (元に保存無し)');
+          }
+        }
+
+        document.getElementById('importPanel').style.display = 'none';
+
+        if (copied.length === 0) {
+          alert(`"${exName}" には複製可能な設定がありませんでした (${skipped.join(' / ')})。`);
+          return;
+        }
+
+        let msg = `📥 "${exName}" から ${copied.join(' / ')} を複製しました。`;
+        if (copied.includes('項目設定') && copied.includes('キャプション設定')) {
+          msg += ' (キャプション設定は即時反映、項目設定は「💾 保存する」で確定)';
+        } else if (copied.includes('項目設定')) {
+          msg += ' 「💾 保存する」を押すと反映されます。';
+        } else {
+          msg += ' (即時反映済み)';
+        }
+        if (skipped.length > 0) {
+          msg += ` ※ スキップ: ${skipped.join(' / ')}`;
+        }
+        showMsg('saveMsgSetup', msg, '#1a73e8');
+      } catch (err) {
+        console.error('importFromExhibition failed:', err);
+        alert('読み込み失敗: ' + (err.message || err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '読み込む';
+      }
     }
     function isRequiredField(name) { const r = document.getElementById('req_' + name); return r && r.classList.contains('on-required'); }
     function selectAll(state) {
