@@ -849,6 +849,10 @@
             <div style="color:#888; font-size:0.78em; margin-top:6px;">読み込み後、必要に応じて編集して「保存する」を押してください。</div>
           </div>
         </div>
+        <!-- A-3: 項目設定の Unsaved-changes バナー -->
+        <div id="settingsDirtyBanner" style="display:none; padding:10px 14px; background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; color:#a85700; font-size:0.88em; margin-bottom:10px; line-height:1.55;">
+          ⚠ 未保存の変更があります。下の「💾 保存する」を押してください。
+        </div>
         <div id="sortContainer"></div>
       </div>
       <div class="card">
@@ -917,11 +921,38 @@
             設定 (項目・テンプレート等) はそのまま残し、テストで作成した <strong>作品データ・コメント・いいね・画像ファイル</strong> を一括削除して本番運用を開始します。<br>
             自動削除予定 (14 日後) は解除されます。
           </p>
-          <button id="btnGraduate" onclick="graduateExhibition()"
+          <button id="btnGraduate" onclick="openGraduateModal()"
             style="padding:10px 18px; background:#1a73e8; color:white; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
             🎓 本番運用に切替 (テストデータをクリア)
           </button>
           <div id="graduateMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
+        </div>
+
+        <!-- A-1: graduateExhibition の確認モーダル (ack checkbox で gate) -->
+        <div id="graduateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+          <div style="background:white; border-radius:10px; padding:24px; max-width:520px; width:100%; max-height:90vh; overflow-y:auto;">
+            <h3 style="margin:0 0 12px 0; color:#d93025;">⚠ 本番運用への切替 (取り消し不可)</h3>
+            <p style="font-size:0.9em; line-height:1.6; margin:0 0 12px 0;">以下のデータが<strong> 完全に削除 </strong>され、復元できません:</p>
+            <ul style="font-size:0.9em; line-height:1.7; margin:0 0 12px 20px; color:#333;">
+              <li>テスト作品データ (artwork) すべて</li>
+              <li>来場者からのコメント・いいね</li>
+              <li>アップロードされた画像ファイル</li>
+            </ul>
+            <p style="font-size:0.88em; line-height:1.6; margin:0 0 12px 0; color:#555;">
+              項目設定 / キャプションテンプレート / 展覧会の基本情報 (名前・期間・主催者) は残ります。<br>
+              自動削除予定 (14 日後) も解除されます。
+            </p>
+            <label style="display:flex; align-items:flex-start; gap:8px; margin:14px 0; padding:10px; background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; cursor:pointer; font-size:0.9em; line-height:1.55;">
+              <input type="checkbox" id="graduateAck" onchange="onGraduateAck(this)" style="margin-top:3px; flex-shrink:0;">
+              <span>上記を確認しました。テストデータを完全に削除して本番運用を開始します。</span>
+            </label>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+              <button onclick="closeGraduateModal()"
+                style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
+              <button id="btnGraduateConfirm" onclick="executeGraduate()" disabled
+                style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">本番運用を開始する</button>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -1265,6 +1296,19 @@
     }
 
     // ── 項目設定グリッド ──
+    // A-3: 項目設定の dirty 状態管理
+    let _fieldSettingsDirty = false;
+    function markFieldSettingsDirty() {
+      _fieldSettingsDirty = true;
+      const banner = document.getElementById('settingsDirtyBanner');
+      if (banner) banner.style.display = 'block';
+    }
+    function clearFieldSettingsDirty() {
+      _fieldSettingsDirty = false;
+      const banner = document.getElementById('settingsDirtyBanner');
+      if (banner) banner.style.display = 'none';
+    }
+
     function buildFieldsGrid(savedFields) {
       const container = document.getElementById('sortContainer');
       container.innerHTML = '';
@@ -1283,7 +1327,15 @@
         const s = savedMap[name] || { checked: false, required: false };
         container.appendChild(makeFieldCard(def, s.checked, s.required));
       });
-      sortableInst = Sortable.create(container, { animation: 150, handle: '.drag-handle', ghostClass: 'sortable-ghost', dragClass: 'sortable-drag' });
+      sortableInst = Sortable.create(container, {
+        animation: 150,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onEnd: () => markFieldSettingsDirty()  // A-3: ドラッグ並び替えで dirty
+      });
+      // A-3: 初期構築は「保存済み状態」なので dirty フラグをクリア
+      clearFieldSettingsDirty();
     }
 
     function makeFieldCard(def, checked, required) {
@@ -1303,11 +1355,15 @@
           <button id="opt_${def.name}" onclick="setRequired('${def.name}',false)" class="${!required ? 'on-optional' : ''}">任意</button>
         </div>`;
       const chk = card.querySelector('input[type="checkbox"]');
-      chk.addEventListener('change', function () { card.classList.toggle('active', this.checked); });
+      chk.addEventListener('change', function () {
+        card.classList.toggle('active', this.checked);
+        markFieldSettingsDirty();  // A-3
+      });
       card.addEventListener('click', e => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
         if (e.target.classList.contains('drag-handle')) return;
         chk.checked = !chk.checked; card.classList.toggle('active', chk.checked);
+        markFieldSettingsDirty();  // A-3
       });
       return card;
     }
@@ -1316,6 +1372,7 @@
       const r = document.getElementById('req_' + name), o = document.getElementById('opt_' + name);
       if (!r || !o) return;
       r.className = isReq ? 'on-required' : ''; o.className = !isReq ? 'on-optional' : '';
+      markFieldSettingsDirty();
     }
 
     // ── 感想受付期間 ──
@@ -1417,8 +1474,9 @@
             return;
           }
           buildFieldsGrid(fields);
+          markFieldSettingsDirty();  // A-3: import で未保存状態に
           document.getElementById('importPanel').style.display = 'none';
-          showMsg('saveMsgSetup', `📥 "${exName}" の項目設定を読み込みました。「保存する」を押すと反映されます。`, '#1a73e8');
+          showMsg('saveMsgSetup', `📥 "${exName}" の項目設定を読み込みました。「💾 保存する」を押すと反映されます。`, '#1a73e8');
         })
         .catch(err => {
           btn.disabled = false;
@@ -1427,8 +1485,14 @@
         });
     }
     function isRequiredField(name) { const r = document.getElementById('req_' + name); return r && r.classList.contains('on-required'); }
-    function selectAll(state) { document.querySelectorAll('#sortContainer .field-card').forEach(c => { const chk = c.querySelector('input[type="checkbox"]'); chk.checked = state; c.classList.toggle('active', state); }); }
-    function setAllRequired(state) { document.querySelectorAll('#sortContainer .field-card').forEach(c => setRequired(c.dataset.field, state)); }
+    function selectAll(state) {
+      document.querySelectorAll('#sortContainer .field-card').forEach(c => { const chk = c.querySelector('input[type="checkbox"]'); chk.checked = state; c.classList.toggle('active', state); });
+      markFieldSettingsDirty();
+    }
+    function setAllRequired(state) {
+      document.querySelectorAll('#sortContainer .field-card').forEach(c => setRequired(c.dataset.field, state));
+      markFieldSettingsDirty();
+    }
 
     function saveSettings() {
       const result = [];
@@ -1448,13 +1512,14 @@
             activeFields = result;
             sessionStorage.setItem('fields_' + currentEx, JSON.stringify(result));
             buildInputForm();
+            clearFieldSettingsDirty();  // A-3
           } else {
-            showMsg('saveMsgSetup', 'Error: ' + res.error, '#d93025');
+            showMsg('saveMsgSetup', 'エラー: ' + res.error, '#d93025');
           }
         })
         .catch(err => {
           document.getElementById('btnSaveSetup').disabled = false;
-          showMsg('saveMsgSetup', 'Error: ' + err.message, '#d93025');
+          showMsg('saveMsgSetup', 'エラー: ' + err.message, '#d93025');
         });
     }
 
@@ -2087,11 +2152,34 @@ ${fieldsText}
       }
     });
 
+    // A-3: 項目設定が未保存のままページを離れようとしたらブラウザに警告を出させる
+    window.addEventListener('beforeunload', e => {
+      if (_fieldSettingsDirty) {
+        e.preventDefault();
+        e.returnValue = '';  // ブラウザは独自の "離脱しますか?" ダイアログを出す
+      }
+    });
+
     // 🎓 練習モード卒業: テストデータをクリアして本番運用に切替
-    async function graduateExhibition() {
+    // A-1: confirm() を ack checkbox 付きモーダルに置換
+    function openGraduateModal() {
+      if (!currentEx) return;
+      const user = firebase.auth().currentUser;
+      if (!user || !user.email) { alert('ログインが必要です。'); return; }
+      document.getElementById('graduateAck').checked = false;
+      document.getElementById('btnGraduateConfirm').disabled = true;
+      document.getElementById('graduateModal').style.display = 'flex';
+    }
+    function closeGraduateModal() {
+      document.getElementById('graduateModal').style.display = 'none';
+    }
+    function onGraduateAck(chk) {
+      document.getElementById('btnGraduateConfirm').disabled = !chk.checked;
+    }
+
+    async function executeGraduate() {
       const ex = currentEx;
       if (!ex) return;
-      if (!confirm('本番運用に切替えますか?\n\nテスト作品・コメント・いいね・画像ファイルがすべて削除されます。\n項目設定・キャプションテンプレート等の設定は残ります。')) return;
 
       const user = firebase.auth().currentUser;
       if (!user || !user.email) {
@@ -2099,6 +2187,7 @@ ${fieldsText}
         return;
       }
 
+      closeGraduateModal();
       const btn = document.getElementById('btnGraduate');
       const msgEl = document.getElementById('graduateMsg');
       btn.disabled = true;
@@ -2116,37 +2205,18 @@ ${fieldsText}
           throw new Error(gasRes && gasRes.error ? gasRes.error : 'GAS 更新失敗');
         }
 
-        // 2. Firestore artworks をすべて削除
-        const aSnap = await firebase.firestore().collection('artworks').where('exCode', '==', ex).get();
-        const aDeletes = aSnap.docs.map(d => d.ref.delete());
-        await Promise.all(aDeletes);
-
-        // 3. Firestore likes をすべて削除
-        const lSnap = await firebase.firestore().collection('likes').where('exCode', '==', ex).get();
-        const lDeletes = lSnap.docs.map(d => d.ref.delete());
-        await Promise.all(lDeletes);
-
-        // 4. Storage の画像を削除 (各 artwork の画像ファイル)
-        try {
-          const storageRef = firebase.storage().ref('artworks');
-          const listing = await storageRef.listAll();
-          const imageDeletes = listing.items
-            .filter(item => item.name.startsWith(ex + '_'))
-            .map(item => item.delete());
-          await Promise.all(imageDeletes);
-        } catch (e) {
-          console.warn('Storage cleanup partial failure:', e);
+        // 2. Firestore + Storage cleanup と is_sandbox flag 更新を CF に任せる
+        //    (rules で artworks / likes の delete は operator 限定のため、
+        //     organizer 本人で叩くと permission-denied になる)
+        const fn = firebase.app().functions('asia-northeast1').httpsCallable('graduateExhibition');
+        const cfRes = await fn({ exCode: ex });
+        if (!cfRes || !cfRes.data || !cfRes.data.success) {
+          throw new Error('Cloud Function 失敗');
         }
 
-        // 5. Firestore exhibitions ドキュメントの is_sandbox / expire_at をクリア
-        await firebase.firestore().collection('exhibitions').doc(ex).set({
-          is_sandbox: false,
-          expire_at: null,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-
         msgEl.style.color = '#1a73e8';
-        msgEl.innerText = '✅ 本番運用に切替えました。ページを再読み込みします...';
+        const s = cfRes.data;
+        msgEl.innerText = `✅ 本番運用に切替えました (artwork ${s.artworks}件 / likes ${s.likes}件 / 画像 ${s.artworkImages + s.galleryImages}件 削除)。ページを再読み込みします…`;
         setTimeout(() => location.reload(), 1500);
       } catch (err) {
         console.error('graduate failed:', err);
@@ -2176,46 +2246,77 @@ ${fieldsText}
       }
     }
 
+    // A-2: 同期失敗した seeds を保持して Retry できるように
+    let _addArtworksFailedSeeds = [];
+
+    async function _syncSeedsToFirestore(seeds, msgEl) {
+      const failed = [];
+      let synced = 0;
+      msgEl.style.color = '#888';
+      msgEl.innerHTML = `Firestore に同期中… (0/${seeds.length})`;
+      for (const seed of seeds) {
+        try {
+          await _submitArtworkFn({
+            exCode: currentEx,
+            artworkId: seed.artwork_id,
+            fields: {
+              status: '0',
+              qr_url: seed.qr_url || '',
+            },
+          });
+          synced++;
+        } catch (e) {
+          console.error('artwork seed sync failed:', seed.artwork_id, e);
+          failed.push(seed);
+        }
+        msgEl.innerHTML = `Firestore に同期中… (${synced + failed.length}/${seeds.length})`;
+      }
+      return failed;
+    }
+
+    function _renderAddArtworksResult(addedCount, failed, msgEl) {
+      _addArtworksFailedSeeds = failed;
+      if (failed.length === 0) {
+        msgEl.style.color = '#1a73e8';
+        msgEl.innerText = `✅ ${addedCount}件の作品枠を追加しました。`;
+      } else {
+        const list = failed.map(s => s.artwork_id).join(', ');
+        msgEl.style.color = '#c08400';
+        msgEl.innerHTML = `⚠️ GAS には ${addedCount}件追加されましたが、Firestore 同期に <strong>${failed.length}件失敗</strong> しました: <code>${list}</code><br>` +
+          `<button onclick="retryFailedSeeds()" style="margin-top:6px;padding:5px 12px;background:#1a73e8;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;">⟳ 失敗分を再同期</button>`;
+      }
+    }
+
+    async function retryFailedSeeds() {
+      const seeds = _addArtworksFailedSeeds.slice();
+      if (seeds.length === 0) return;
+      const msg = document.getElementById('addArtworkMsg');
+      _addArtworksFailedSeeds = [];
+      const failed = await _syncSeedsToFirestore(seeds, msg);
+      _renderAddArtworksResult(seeds.length, failed, msg);
+      refreshCurrentArtworkCount();
+    }
+
     async function addArtworks() {
       const addCount = parseInt(document.getElementById('addArtworkCount').value);
       if (!addCount || addCount < 1) return;
       const msg = document.getElementById('addArtworkMsg');
       msg.style.color = '#888';
-      msg.innerText = '追加中...';
+      msg.innerText = '追加中…';
 
       try {
         const res = await gasCall({ action: 'addArtworks', ex: currentEx, addCount: addCount });
         if (!res.success) {
           msg.style.color = '#d93025';
-          msg.innerText = 'Error: ' + res.error;
+          msg.innerText = 'エラー: ' + res.error;
           return;
         }
         // Firestore にも空きスロットを書く (organizer auth で submitArtwork)。
         // GAS Master Sheet と Firestore の整合を取らないと register.html の現在件数や
         // input.html の空き枠検索 (fsSaveArtwork) で齟齬が出る。
         const seeds = Array.isArray(res.artworks) ? res.artworks : [];
-        if (seeds.length > 0) {
-          msg.innerText = `Firestore に同期中... (0/${seeds.length})`;
-          let synced = 0;
-          for (const seed of seeds) {
-            try {
-              await _submitArtworkFn({
-                exCode: currentEx,
-                artworkId: seed.artwork_id,
-                fields: {
-                  status: '0',
-                  qr_url: seed.qr_url || '',
-                },
-              });
-              synced++;
-              msg.innerText = `Firestore に同期中... (${synced}/${seeds.length})`;
-            } catch (e) {
-              console.error('artwork seed sync failed:', seed.artwork_id, e);
-            }
-          }
-        }
-        msg.style.color = '#1a73e8';
-        msg.innerText = `✅ ${addCount}件の作品枠を追加しました。`;
+        const failed = seeds.length > 0 ? await _syncSeedsToFirestore(seeds, msg) : [];
+        _renderAddArtworksResult(addCount, failed, msg);
         document.getElementById('addArtworkCount').value = '';
         refreshCurrentArtworkCount();
       } catch (err) {

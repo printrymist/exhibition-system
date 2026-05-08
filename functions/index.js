@@ -922,6 +922,85 @@ async function purgeExhibitionInternal(exCode) {
   return stats;
 }
 
+// =========================================================
+// graduateExhibition (sandbox → real への切替)
+//   organizer 本人 (or operator) が呼べる onCall。
+//   purge と違って exhibitions ドキュメントは消さず、
+//   is_sandbox=false / expire_at=null に更新する。
+//   client (register.html) がこれを呼ぶ前に、GAS 側で Master SS の
+//   is_sandbox を FALSE に更新しておく必要がある。
+// =========================================================
+exports.graduateExhibition = onCall(async (request) => {
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  if (!authEmail) {
+    throw new HttpsError("permission-denied", "認証が必要です");
+  }
+  const exCode = String((request.data || {}).exCode || "").trim();
+  if (!exCode) throw new HttpsError("invalid-argument", "exCode が必要です");
+  if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+    throw new HttpsError("invalid-argument", "exCode が不正です");
+  }
+
+  const db = admin.firestore();
+  const exDoc = await db.collection("exhibitions").doc(exCode).get();
+  if (!exDoc.exists) {
+    throw new HttpsError("not-found", "exhibition not found");
+  }
+  const exData = exDoc.data() || {};
+  const exEmail = String(exData.email || "").trim().toLowerCase();
+  const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+  if (!isOperator && authEmail !== exEmail) {
+    throw new HttpsError("permission-denied", "この展覧会の主催者ではありません");
+  }
+
+  const bucket = admin.storage().bucket();
+  const stats = { artworks: 0, likes: 0, artworkImages: 0, galleryImages: 0 };
+
+  // artworks 全削除
+  const aSnap = await db.collection("artworks").where("exCode", "==", exCode).get();
+  await Promise.all(aSnap.docs.map((d) => d.ref.delete()));
+  stats.artworks = aSnap.size;
+
+  // likes 全削除
+  const lSnap = await db.collection("likes").where("exCode", "==", exCode).get();
+  await Promise.all(lSnap.docs.map((d) => d.ref.delete()));
+  stats.likes = lSnap.size;
+
+  // Storage artworks/{ex}_*
+  try {
+    const [files] = await bucket.getFiles({ prefix: "artworks/" + exCode + "_" });
+    await Promise.all(files.map((f) => f.delete()));
+    stats.artworkImages = files.length;
+  } catch (e) {
+    logger.warn("graduateExhibition: artwork storage delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  // Storage gallery/{ex}_*
+  try {
+    const [files] = await bucket.getFiles({ prefix: "gallery/" + exCode + "_" });
+    await Promise.all(files.map((f) => f.delete()));
+    stats.galleryImages = files.length;
+  } catch (e) {
+    logger.warn("graduateExhibition: gallery storage delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  // is_sandbox = false にして自動削除予定をクリア
+  await db.collection("exhibitions").doc(exCode).set({
+    is_sandbox: false,
+    expire_at: null,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+
+  logger.info("graduateExhibition success", { exCode, caller: authEmail, stats });
+  return Object.assign({ success: true, exCode }, stats);
+});
+
 exports.purgeExhibition = onCall(async (request) => {
   const authEmail = String(
     (request.auth && request.auth.token && request.auth.token.email) || "",
