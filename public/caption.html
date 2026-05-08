@@ -359,6 +359,16 @@
       max-width: 360px;
     }
 
+    .selected-tpl-preview .tpl-description {
+      font-family: -apple-system, sans-serif;
+      font-size: 11px;
+      color: #1a73e8;
+      line-height: 1.55;
+      margin: -2px -2px 8px -2px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #c5d9f7;
+    }
+
     .tpl-divider {
       border-top: 1px solid #bbb;
       margin: 3px 0;
@@ -1268,39 +1278,43 @@
 
       <div id="templateTab">
         <div class="template-grid">
-          <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')">
-            <h4>📋 Standard</h4>
+          <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')"
+            data-description="標準的な構成。タイトル・作家・年・技法・価格。展覧会全般向けの定番。">
+            <h4>📋 標準</h4>
             <div class="template-preview">
-              <div style="font-weight:bold;">Artwork title</div>
+              <div style="font-weight:bold;">作品タイトル</div>
               <div class="tpl-divider"></div>
-              <div>Artist name</div>
-              <div style="color:#888;">Year · Technique</div>
+              <div>作家名</div>
+              <div style="color:#888;">制作年・技法</div>
               <div style="color:#888;">¥ 000,000</div>
               <div class="tpl-qr">[QR] ↘</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')">
-            <h4>✂️ Minimal</h4>
+          <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')"
+            data-description="タイトルと作家名のみ。最小構成。">
+            <h4>✂️ シンプル</h4>
             <div class="template-preview">
-              <div style="font-weight:bold;">Artwork title</div>
-              <div>Artist name</div>
+              <div style="font-weight:bold;">作品タイトル</div>
+              <div>作家名</div>
               <div class="tpl-qr">[QR] ↘</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_gallery" onclick="selectTemplate('gallery')">
-            <h4>🖼️ Gallery</h4>
+          <div class="template-card" id="tpl_gallery" onclick="selectTemplate('gallery')"
+            data-description="QR が左上、divider が冒頭。画廊風のレイアウト。">
+            <h4>🖼️ ギャラリー</h4>
             <div class="template-preview">
               <div style="color:#1a73e8; font-size:9px;">↖ [QR]</div>
               <div class="tpl-divider"></div>
-              <div style="font-weight:bold;">Artwork title</div>
-              <div>Artist name</div>
+              <div style="font-weight:bold;">作品タイトル</div>
+              <div>作家名</div>
               <div class="tpl-spacer"></div>
-              <div style="color:#888;">Year · Technique</div>
+              <div style="color:#888;">制作年・技法</div>
               <div style="color:#888;">¥ 000,000</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_bilingual" onclick="selectTemplate('bilingual')">
-            <h4>🌐 Bilingual</h4>
+          <div class="template-card" id="tpl_bilingual" onclick="selectTemplate('bilingual')"
+            data-description="タイトル・作家名を日本語と英語で併記。海外向け展示や国際展で。">
+            <h4>🌐 日英併記</h4>
             <div class="template-preview">
               <div style="font-weight:bold;text-align:center;">作品タイトル</div>
               <div style="text-align:center;color:#888;">Title in English</div>
@@ -1308,20 +1322,22 @@
               <div>作家名　Artist Name</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_print" onclick="selectTemplate('print')">
-            <h4>🎨 Print</h4>
+          <div class="template-card" id="tpl_print" onclick="selectTemplate('print')"
+            data-description="技法・エディション・サイズ・額装価格まで表示。版画・限定版作品向け。">
+            <h4>🎨 版画・限定版</h4>
             <div class="template-preview">
-              <div style="font-weight:bold;">Artwork title</div>
-              <div>Artist name</div>
+              <div style="font-weight:bold;">作品タイトル</div>
+              <div>作家名</div>
               <div class="tpl-divider"></div>
-              <div style="color:#888;">Technique · Edition · Size</div>
+              <div style="color:#888;">技法・エディション・サイズ</div>
               <div class="tpl-spacer"></div>
               <div style="color:#888;">¥ 000,000</div>
-              <div style="color:#888;">framed: ¥ 000,000</div>
+              <div style="color:#888;">額装: ¥ 000,000</div>
               <div class="tpl-qr">[QR] ↘</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_jp_standard" onclick="selectTemplate('jp_standard')">
+          <div class="template-card" id="tpl_jp_standard" onclick="selectTemplate('jp_standard')"
+            data-description="作品名がトップ。和風の標準的な構成。整列は Page layout の Text align で変更可。">
             <h4>🇯🇵 作品名先</h4>
             <div class="template-preview">
               <div style="font-weight:bold;">作品名</div>
@@ -1333,7 +1349,8 @@
               <div class="tpl-qr">[QR] ↘</div>
             </div>
           </div>
-          <div class="template-card" id="tpl_jp_artist_first" onclick="selectTemplate('jp_artist_first')">
+          <div class="template-card" id="tpl_jp_artist_first" onclick="selectTemplate('jp_artist_first')"
+            data-description="作家名から始まる和風の構成。整列は Page layout の Text align で変更可。">
             <h4>🇯🇵 作家名先</h4>
             <div class="template-preview">
               <div style="color:#888;">作家名</div>
@@ -1729,11 +1746,15 @@
       const card = document.getElementById('tpl_' + name);
       if (card) card.classList.add('selected');
 
-      // 選択中テンプレの inline プレビューを共通領域にクローン (画面が動かない)
+      // 選択中テンプレの inline プレビュー + 説明文を共通領域にクローン (画面が動かない)
       const sourcePreview = card ? card.querySelector('.template-preview') : null;
       const dest = document.getElementById('selectedTplPreview');
       if (dest && sourcePreview) {
-        dest.innerHTML = sourcePreview.innerHTML;
+        const desc = (card && card.dataset && card.dataset.description) || '';
+        const descHtml = desc
+          ? `<div class="tpl-description">${desc.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</div>`
+          : '';
+        dest.innerHTML = descHtml + sourcePreview.innerHTML;
       }
 
       const p = PRESETS[name];
