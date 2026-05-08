@@ -1556,6 +1556,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="field-defs.js"></script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -3256,31 +3257,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     const LIKE_PCX = 718, LIKE_PCY = 404.5, LIKE_SIZE = 228;
     // QR_CELL_SIZE / QR_MARGIN は D-4 で script 先頭の Config セクションに移動
 
-    const FORM_FIELD_DEFS = [
-      { name: 'title', label: 'タイトル（日本語）', required: true },
-      { name: 'title_en', label: 'タイトル（英語）', required: false },
-      { name: 'artist', label: '作家名（日本語）', required: false },
-      { name: 'artist_en', label: '作家名（英語）', required: false },
-      { name: 'year', label: '制作年', required: false },
-      { name: 'series', label: 'シリーズ名', required: false },
-      { name: 'technique', label: '技法', required: false },
-      { name: 'material', label: '素材・支持体', required: false },
-      { name: 'size', label: 'サイズ', required: false },
-      { name: 'sheet_size', label: 'シートサイズ', required: false },
-      { name: 'image_size', label: 'イメージサイズ', required: false },
-      { name: 'edition', label: 'エディション', required: false },
-      { name: 'price', label: '価格', required: false },
-      { name: 'price_framed', label: '額装価格', required: false },
-      { name: 'certificate', label: '証明書', required: false },
-      { name: 'collection', label: 'コレクション', required: false },
-      { name: 'courtesy', label: 'クレジット', required: false },
-      { name: 'note', label: '備考', required: false },
-      { name: 'artist_note', label: '作家コメント', required: false },
-      { name: 'birth_year', label: '生年', required: false },
-      { name: 'death_year', label: '没年', required: false },
-      { name: 'birthplace', label: '出身地', required: false },
-      { name: 'shop_url', label: '販売 / ショップ', required: false },
-    ];
+    // FORM_FIELD_DEFS は public/field-defs.js で FIELD_DEFS から派生済み
+    // (画像と pure SNS (insta/x/facebook/web) を除外、shop_url は購入リンク用途で残す。
+    // required 値は FIELD_DEFS の isCaptionRequired フラグから決定)。
+    // 並び順は register.html の FIELD_DEFS 並び順を踏襲: 作品 → 作家 → 価格 → 備考 → shop_url。
+    // 旧 caption FORM_FIELD_DEFS は title→title_en→artist→...の順で、artist 系がトップ寄りに
+    // 出ていたが、register との一貫性を優先した。
 
     let qrAllData = null;
 

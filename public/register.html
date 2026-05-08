@@ -1095,6 +1095,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="field-defs.js"></script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -1160,40 +1161,9 @@
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
-    const ARTIST_FIELDS = ['artist', 'artist_en', 'birth_year', 'death_year', 'birthplace'];
-    const SNS_FIELDS = ['insta', 'x', 'facebook', 'web', 'shop_url'];
-    const ALL_ARTIST_FIELDS = [...ARTIST_FIELDS, ...SNS_FIELDS];
-    const ARTIST_LABELS = { artist: '作家名', artist_en: '作家名（英語）', birth_year: '生年', death_year: '没年', birthplace: '出身地', insta: 'Instagram', x: 'X (Twitter)', facebook: 'Facebook', web: 'Web', shop_url: '販売 / ショップ' };
-    const SNS_PLACEHOLDERS = { insta: '@username', x: '@username', facebook: 'URLまたはユーザー名', web: 'https://...', shop_url: 'https://...' };
-    const FIELD_DEFS = [
-      { name: 'image_url', label: '作品画像', desc: '作品の写真（JPEG/PNG）', textarea: false, type: 'image' },
-      { name: 'title', label: 'タイトル', desc: '作品名（日本語）', textarea: false },
-      { name: 'title_en', label: 'タイトル（英語）', desc: '作品名（英語）', textarea: false },
-      { name: 'year', label: '制作年', desc: '制作された年（例：2024）', textarea: false },
-      { name: 'series', label: 'シリーズ名', desc: '連作・シリーズのタイトル', textarea: false },
-      { name: 'technique', label: '技法', desc: '制作技法（例：油彩、版画）', textarea: false },
-      { name: 'material', label: '素材・支持体', desc: '使用素材や支持体', textarea: false },
-      { name: 'size', label: 'サイズ', desc: '作品の寸法（例：530×455mm）', textarea: false },
-      { name: 'sheet_size', label: 'シートサイズ', desc: '版画等の紙寸法（例：530×455mm）', textarea: false },
-      { name: 'image_size', label: 'イメージサイズ', desc: '版画等の刷り部分の寸法（例：300×220mm）', textarea: false },
-      { name: 'edition', label: 'エディション', desc: '版画等のエディション番号（例：3/30）', textarea: false },
-      { name: 'artist', label: '作家名', desc: '作家名（日本語）', textarea: false },
-      { name: 'artist_en', label: '作家名（英語）', desc: '作家名（英語）', textarea: false },
-      { name: 'birth_year', label: '生年', desc: '作家の生まれ年（例：1965）', textarea: false },
-      { name: 'death_year', label: '没年', desc: '作家の没年。存命の場合は空欄', textarea: false },
-      { name: 'birthplace', label: '出身地', desc: '作家の出身地（例：東京都、Paris）', textarea: false },
-      { name: 'price', label: '価格', desc: '税込価格（数字のみ）', textarea: false },
-      { name: 'price_framed', label: '額装価格', desc: '額装込みの価格。数字なら自動でカンマ整形、「別途注文」等の文言もそのまま保存', textarea: false },
-      { name: 'certificate', label: '証明書', desc: '真贋証明書・保証書の有無や種類', textarea: false },
-      { name: 'collection', label: 'コレクション', desc: '所蔵先・コレクション名', textarea: false },
-      { name: 'courtesy', label: 'クレジット', desc: '画廊・提供元のクレジット表記', textarea: false },
-      { name: 'note', label: '備考', desc: 'キャプションに表示するその他の情報', textarea: true },
-      { name: 'artist_note', label: '作家コメント', desc: '作家自身によるコメント・ステートメント', textarea: true },
-      { name: 'shop_url', label: '販売 / ショップ', desc: 'BASE / minne / Creema 等のショップ URL（作家単位、web 展覧会で使用）', textarea: false },
-    ];
-    const FIELD_MAP = {};
-    FIELD_DEFS.forEach(d => { FIELD_MAP[d.name] = d; });
-    const DEFAULT_FIELDS = ['image_url', 'title', 'artist', 'year', 'technique', 'size', 'price'];
+    // FIELD_DEFS / FIELD_MAP / ARTIST_FIELDS / SNS_FIELDS / ALL_ARTIST_FIELDS /
+    // DEFAULT_FIELDS / ARTIST_LABELS / SNS_PLACEHOLDERS は public/field-defs.js で定義済み
+    // (caption.html / input.html と同じ定義を物理的に共有)。
 
     let currentEx = getUrlParam('ex');
     let currentExName = '';
@@ -1379,7 +1349,9 @@
         if (typeof savedFields[0] === 'string') { savedFields.forEach(n => { savedMap[n] = { checked: true, required: false }; }); }
         else { savedOrder = savedFields.map(f => f.name); savedFields.forEach(f => { savedMap[f.name] = { checked: true, required: !!f.required }; }); }
       } else { DEFAULT_FIELDS.forEach(n => { savedMap[n] = { checked: true, required: false }; }); }
-      const allNames = FIELD_DEFS.map(d => d.name);
+      // 項目設定グリッドは pure SNS (insta/x/facebook/web) を除外。
+      // これらは入力フォームで常時表示されるため、設定しても影響しない。
+      const allNames = GRID_FIELDS.map(d => d.name);
       let orderedNames;
       if (savedOrder) { const s = new Set(savedOrder); orderedNames = [...savedOrder.filter(n => allNames.includes(n)), ...allNames.filter(n => !s.has(n))]; }
       else orderedNames = allNames;

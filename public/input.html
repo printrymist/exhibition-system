@@ -504,6 +504,7 @@
     </div>
   </div>
 
+  <script src="field-defs.js"></script>
   <script>
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
 
@@ -533,39 +534,10 @@
       return new URLSearchParams(window.location.search).get(name) || '';
     }
 
-    const ARTIST_FIELDS = ['artist', 'artist_en', 'birth_year', 'death_year'];
-    const SNS_FIELDS = ['insta', 'x', 'facebook', 'web', 'shop_url'];
-    const ALL_ARTIST_FIELDS = [...ARTIST_FIELDS, ...SNS_FIELDS];
-    const FIELD_DEFS = {
-      image_url: { label: '作品画像', desc: '作品の写真（JPEG/PNG）', textarea: false, type: 'image' },
-      title: { label: 'タイトル', desc: '作品名（日本語）', textarea: false },
-      title_en: { label: 'タイトル（英語）', desc: '作品名（英語）', textarea: false },
-      year: { label: '制作年', desc: '制作された年（例：2024）', textarea: false },
-      series: { label: 'シリーズ名', desc: '連作・シリーズのタイトル', textarea: false },
-      technique: { label: '技法', desc: '制作技法（例：油彩、版画）', textarea: false },
-      material: { label: '素材・支持体', desc: '使用素材や支持体', textarea: false },
-      size: { label: 'サイズ', desc: '作品の寸法（例：530×455mm）', textarea: false },
-      sheet_size: { label: 'シートサイズ', desc: '版画等の紙寸法（例：530×455mm）', textarea: false },
-      image_size: { label: 'イメージサイズ', desc: '版画等の刷り部分の寸法（例：300×220mm）', textarea: false },
-      edition: { label: 'エディション', desc: '版画等のエディション番号（例：3/30）', textarea: false },
-      artist: { label: '作家名', desc: '作家名（日本語）', textarea: false },
-      artist_en: { label: '作家名（英語）', desc: '作家名（英語）', textarea: false },
-      birth_year: { label: '生年', desc: '作家の生まれ年（例：1965）', textarea: false },
-      death_year: { label: '没年', desc: '作家の没年。存命の場合は空欄', textarea: false },
-      birthplace: { label: '出身地', desc: '作家の出身地（例：東京都、Paris）', textarea: false },
-      price: { label: '価格', desc: '税込価格（数字のみ）', textarea: false },
-      price_framed: { label: '額装価格', desc: '額装込みの価格。数字なら自動でカンマ整形、「別途注文」等の文言もそのまま保存', textarea: false },
-      certificate: { label: '証明書', desc: '真贋証明書・保証書の有無や種類', textarea: false },
-      collection: { label: 'コレクション', desc: '所蔵先・コレクション名', textarea: false },
-      courtesy: { label: 'クレジット', desc: '画廊・提供元のクレジット表記', textarea: false },
-      note: { label: '備考', desc: 'キャプションに表示するその他の情報', textarea: true },
-      artist_note: { label: '作家コメント', desc: '作家自身によるコメント・ステートメント', textarea: true },
-      insta: { label: 'Instagram', desc: '@username', textarea: false },
-      x: { label: 'X (Twitter)', desc: '@username', textarea: false },
-      facebook: { label: 'Facebook', desc: 'URLまたはユーザー名', textarea: false },
-      web: { label: 'Web', desc: 'https://...', textarea: false },
-      shop_url: { label: '販売 / ショップ', desc: 'BASE / minne / Creema 等のショップ URL（作家単位）', textarea: false },
-    };
+    // ARTIST_FIELDS / SNS_FIELDS / ALL_ARTIST_FIELDS / FIELD_DEFS / FIELD_MAP は
+    // public/field-defs.js で定義済み (register.html / caption.html と同じ定義を共有)。
+    // 旧 input.html の ARTIST_FIELDS は birthplace を含んでいなかったが、共有定義に
+    // 揃えたため、項目設定で出身地を ON にすると作家パネル側で1回入力する形になる。
 
     const ex = getUrlParam('ex');
     let activeFields = [];
@@ -668,7 +640,7 @@
       const panel = document.getElementById('editPanel_' + art.artwork_id);
       panel.innerHTML = '';
       const artLabel = document.createElement('div'); artLabel.className = 'section-label'; artLabel.textContent = '🖼️ 作品情報'; panel.appendChild(artLabel);
-      const artFields = activeFields.filter(f => FIELD_DEFS[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
+      const artFields = activeFields.filter(f => FIELD_MAP[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
       appendFieldsToPanel(panel, artFields, 'ep_' + art.artwork_id + '_', art);
       panel.appendChild(makeDivider());
       const artistLabel = document.createElement('div'); artistLabel.className = 'section-label green'; artistLabel.textContent = '👤 作家情報'; panel.appendChild(artistLabel);
@@ -677,12 +649,12 @@
       ARTIST_FIELDS.forEach(name => {
         const activeDef = activeFields ? activeFields.find(f => f.name === name) : null;
         const required = activeDef ? activeDef.required : false;
-        artistGrid.appendChild(makeField({ name, label: FIELD_DEFS[name].label, desc: FIELD_DEFS[name].desc, textarea: false }, required, 'ep_' + art.artwork_id + '_', art[name] || ''));
+        artistGrid.appendChild(makeField({ name, label: FIELD_MAP[name].label, desc: FIELD_MAP[name].desc, textarea: false }, required, 'ep_' + art.artwork_id + '_', art[name] || ''));
       });
       panel.appendChild(artistGrid);
       const snsLabel = document.createElement('div'); snsLabel.style.cssText = 'font-size:0.78em;font-weight:bold;color:#34a853;margin:8px 0 10px;'; snsLabel.textContent = 'SNS / Web'; panel.appendChild(snsLabel);
       const snsGrid = document.createElement('div'); snsGrid.className = 'sns-grid';
-      SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({ name, label: FIELD_DEFS[name].label, desc: FIELD_DEFS[name].desc, textarea: false }, false, 'ep_' + art.artwork_id + '_', art[name] || '')); });
+      SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({ name, label: FIELD_MAP[name].label, desc: FIELD_MAP[name].desc, textarea: false }, false, 'ep_' + art.artwork_id + '_', art[name] || '')); });
       panel.appendChild(snsGrid);
       const btnRow = document.createElement('div'); btnRow.className = 'btn-row';
       const btnSave = document.createElement('button'); btnSave.className = 'btn-save'; btnSave.textContent = '💾 更新する';
@@ -745,14 +717,14 @@
       ARTIST_FIELDS.forEach(name => {
         const activeDef = activeFields ? activeFields.find(f => f.name === name) : null;
         const required = name === 'artist' ? true : (activeDef ? activeDef.required : false);
-        artistGrid.appendChild(makeField({ name, label: FIELD_DEFS[name].label, desc: FIELD_DEFS[name].desc, textarea: false }, required, 'new_', name === 'artist' ? currentArtist : ''));
+        artistGrid.appendChild(makeField({ name, label: FIELD_MAP[name].label, desc: FIELD_MAP[name].desc, textarea: false }, required, 'new_', name === 'artist' ? currentArtist : ''));
       });
       const snsGrid = document.getElementById('snsFieldsGrid'); snsGrid.innerHTML = '';
       const ead = existingWorks.length > 0 ? existingWorks[0] : null;
-      SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({ name, label: FIELD_DEFS[name].label, desc: FIELD_DEFS[name].desc, textarea: false }, false, 'new_', ead ? (ead[name] || '') : '')); });
+      SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({ name, label: FIELD_MAP[name].label, desc: FIELD_MAP[name].desc, textarea: false }, false, 'new_', ead ? (ead[name] || '') : '')); });
       if (ead) { ['artist_en', 'birth_year', 'death_year'].forEach(name => { const el = document.getElementById('new_' + name); if (el && ead[name]) el.value = ead[name]; }); }
       const artworkGrid = document.getElementById('artworkFieldsGrid'); artworkGrid.innerHTML = '';
-      const artFields = activeFields.filter(f => FIELD_DEFS[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
+      const artFields = activeFields.filter(f => FIELD_MAP[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
       appendFieldsToPanel(artworkGrid, artFields, 'new_', {});
     }
 
@@ -765,7 +737,7 @@
       const artistEl = document.getElementById('new_artist'); artistEl.classList.remove('error');
       if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-        const def = FIELD_DEFS[f.name]; if (!def) return;
+        const def = FIELD_MAP[f.name]; if (!def) return;
         if (def.type === 'image') {
           if (!f.required) return;
           const pending = (document.getElementById('new_' + f.name + '_preview') || {}).dataset || {};
@@ -781,7 +753,7 @@
       const data = {};
       ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById('new_' + name); if (el) data[name] = el.value.trim(); });
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-        const def = FIELD_DEFS[f.name]; if (!def || def.type === 'image') return;
+        const def = FIELD_MAP[f.name]; if (!def || def.type === 'image') return;
         const el = document.getElementById('new_' + f.name);
         if (el) data[f.name] = stripCommasIfPrice(f.name, el.value.trim());
       });
@@ -796,7 +768,7 @@
           return;
         }
         const newId = res.artworkId;
-        const imageField = activeFields.find(f => FIELD_DEFS[f.name] && FIELD_DEFS[f.name].type === 'image');
+        const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
         if (imageField) {
           const preview = document.getElementById('new_' + imageField.name + '_preview');
           const pending = preview && preview.dataset ? preview.dataset.pending : '';
@@ -811,7 +783,7 @@
         setTimeout(() => { banner.style.display = 'none'; }, 3000);
         // 連続入力支援: 画像だけクリア、テキスト系は全部保持。タイトルも保持。
         activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-          const def = FIELD_DEFS[f.name]; if (!def) return;
+          const def = FIELD_MAP[f.name]; if (!def) return;
           if (def.type === 'image') {
             const file = document.getElementById('new_' + f.name); if (file) file.value = '';
             const prev = document.getElementById('new_' + f.name + '_preview');
@@ -835,13 +807,13 @@
       const prefix = 'ep_' + artworkId + '_';
       const artworkData = {};
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-        const def = FIELD_DEFS[f.name]; if (!def || def.type === 'image') return;
+        const def = FIELD_MAP[f.name]; if (!def || def.type === 'image') return;
         const el = document.getElementById(prefix + f.name);
         if (el) artworkData[f.name] = stripCommasIfPrice(f.name, el.value.trim());
       });
       const artistData = {}; ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById(prefix + name); if (el) artistData[name] = el.value.trim(); });
 
-      const imageField = activeFields.find(f => FIELD_DEFS[f.name] && FIELD_DEFS[f.name].type === 'image');
+      const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
       if (imageField && imageField.required) {
         const preview = document.getElementById(prefix + imageField.name + '_preview');
         const existing = (document.getElementById(prefix + imageField.name + '_existing') || {}).value || '';
@@ -885,7 +857,7 @@
     function appendFieldsToPanel(parent, fields, prefix, values) {
       let gridOpen = false, gridEl = null;
       fields.forEach(f => {
-        const def = FIELD_DEFS[f.name]; if (!def) return;
+        const def = FIELD_MAP[f.name]; if (!def) return;
         const val = values[f.name] !== undefined ? values[f.name].toString() : '';
         const isBlock = def.textarea || def.type === 'image';
         if (isBlock) { if (gridOpen) { parent.appendChild(gridEl); gridOpen = false; gridEl = null; } parent.appendChild(makeField({ name: f.name, label: def.label, desc: def.desc, textarea: !!def.textarea, type: def.type }, f.required, prefix, val)); }
