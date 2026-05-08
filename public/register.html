@@ -2393,7 +2393,20 @@ ${fieldsText}
       return { success: true };
     };
     window.fsListExhibitions = async () => {
-      const snap = await fsDb.collection('exhibitions').get();
+      // Firestore rules では list query は全 doc が rule を通過する必要がある。
+      //   allow list: if isOperator() || isOrganizerEmail(resource.data.email);
+      // → 主催者 (organizer) は自分の email を持つ doc だけ where filter する。
+      //   operator (rymist1@gmail.com) は全件取得可能。
+      const user = firebase.auth().currentUser;
+      const myEmail = ((user && user.email) || '').trim().toLowerCase();
+      const isOp = (myEmail === 'rymist1@gmail.com');
+
+      let q = fsDb.collection('exhibitions');
+      if (!isOp) {
+        if (!myEmail) return [];  // 未認証なら空
+        q = q.where('email', '==', myEmail);
+      }
+      const snap = await q.get();
       const out = [];
       snap.forEach(doc => {
         const d = doc.data();
