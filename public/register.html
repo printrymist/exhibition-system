@@ -771,6 +771,56 @@
 
 <body>
 
+  <!-- B-3: オフライン時のバナー (navigator.onLine 連動) -->
+  <div id="offlineBanner"
+    style="display:none; position:sticky; top:0; z-index:900; padding:8px 14px; background:#fff3e0; border-bottom:1px solid #ffb74d; color:#a85700; font-size:0.88em; text-align:center;">
+    ⚠ オフラインです。保存・同期は接続復帰後に行ってください。
+  </div>
+
+  <!-- ========== モーダル群 (タブ外に置かないと該当タブが非表示のとき hidden になる) ========== -->
+
+  <!-- B-2: 作品削除モーダル (innerHTML 書き換え式の削除確認を共通モーダルに統一) -->
+  <div id="deleteArtworkModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:white; border-radius:10px; padding:24px; max-width:440px; width:100%;">
+      <h3 style="margin:0 0 12px 0; color:#d93025;">🗑️ 作品を削除</h3>
+      <p style="font-size:0.92em; line-height:1.6; margin:0 0 8px 0;">以下の作品を削除します。<strong>この操作は取り消せません。</strong></p>
+      <div id="deleteArtworkInfo" style="font-size:0.88em; line-height:1.55; margin:10px 0; padding:10px; background:#f7f7f9; border-radius:6px; color:#333;"></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+        <button onclick="closeDeleteArtworkModal()"
+          style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
+        <button id="btnDeleteArtworkConfirm" onclick="executeDeleteFromModal()"
+          style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">削除する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- A-1: graduateExhibition の確認モーダル (ack checkbox で gate) -->
+  <div id="graduateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:white; border-radius:10px; padding:24px; max-width:520px; width:100%; max-height:90vh; overflow-y:auto;">
+      <h3 style="margin:0 0 12px 0; color:#d93025;">⚠ 本番運用への切替 (取り消し不可)</h3>
+      <p style="font-size:0.9em; line-height:1.6; margin:0 0 12px 0;">以下のデータが<strong> 完全に削除 </strong>され、復元できません:</p>
+      <ul style="font-size:0.9em; line-height:1.7; margin:0 0 12px 20px; color:#333;">
+        <li>テスト作品データ (artwork) すべて</li>
+        <li>来場者からのコメント・いいね</li>
+        <li>アップロードされた画像ファイル</li>
+      </ul>
+      <p style="font-size:0.88em; line-height:1.6; margin:0 0 12px 0; color:#555;">
+        項目設定 / キャプションテンプレート / 展覧会の基本情報 (名前・期間・主催者) は残ります。<br>
+        自動削除予定 (14 日後) も解除されます。
+      </p>
+      <label style="display:flex; align-items:flex-start; gap:8px; margin:14px 0; padding:10px; background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; cursor:pointer; font-size:0.9em; line-height:1.55;">
+        <input type="checkbox" id="graduateAck" onchange="onGraduateAck(this)" style="margin-top:3px; flex-shrink:0;">
+        <span>上記を確認しました。テストデータを完全に削除して本番運用を開始します。</span>
+      </label>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+        <button onclick="closeGraduateModal()"
+          style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
+        <button id="btnGraduateConfirm" onclick="executeGraduate()" disabled
+          style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">本番運用を開始する</button>
+      </div>
+    </div>
+  </div>
+
   <div style="text-align:center; margin-bottom:20px;">
     <h1 style="font-size:1.3em; color:#1a73e8;">⚙️ Exhibition Register</h1>
     <p style="font-size:0.85em; color:#888; margin-top:4px;">作品登録・項目設定</p>
@@ -926,33 +976,6 @@
             🎓 本番運用に切替 (テストデータをクリア)
           </button>
           <div id="graduateMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
-        </div>
-
-        <!-- A-1: graduateExhibition の確認モーダル (ack checkbox で gate) -->
-        <div id="graduateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
-          <div style="background:white; border-radius:10px; padding:24px; max-width:520px; width:100%; max-height:90vh; overflow-y:auto;">
-            <h3 style="margin:0 0 12px 0; color:#d93025;">⚠ 本番運用への切替 (取り消し不可)</h3>
-            <p style="font-size:0.9em; line-height:1.6; margin:0 0 12px 0;">以下のデータが<strong> 完全に削除 </strong>され、復元できません:</p>
-            <ul style="font-size:0.9em; line-height:1.7; margin:0 0 12px 20px; color:#333;">
-              <li>テスト作品データ (artwork) すべて</li>
-              <li>来場者からのコメント・いいね</li>
-              <li>アップロードされた画像ファイル</li>
-            </ul>
-            <p style="font-size:0.88em; line-height:1.6; margin:0 0 12px 0; color:#555;">
-              項目設定 / キャプションテンプレート / 展覧会の基本情報 (名前・期間・主催者) は残ります。<br>
-              自動削除予定 (14 日後) も解除されます。
-            </p>
-            <label style="display:flex; align-items:flex-start; gap:8px; margin:14px 0; padding:10px; background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; cursor:pointer; font-size:0.9em; line-height:1.55;">
-              <input type="checkbox" id="graduateAck" onchange="onGraduateAck(this)" style="margin-top:3px; flex-shrink:0;">
-              <span>上記を確認しました。テストデータを完全に削除して本番運用を開始します。</span>
-            </label>
-            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
-              <button onclick="closeGraduateModal()"
-                style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
-              <button id="btnGraduateConfirm" onclick="executeGraduate()" disabled
-                style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">本番運用を開始する</button>
-            </div>
-          </div>
         </div>
 
       </div>
@@ -2093,33 +2116,40 @@ ${fieldsText}
       el.innerHTML = html; el.style.color = color || '#333';
     }
 
+    // B-2: 削除確認は共通モーダルに統一。innerHTML 書き換え式 (cancelDelete) は撤廃。
+    let _pendingDeleteArtworkId = null;
+
     function confirmDelete(artworkId) {
-      const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = `
-      <div class="delete-confirm">
-        <span>⚠️ 本当に削除しますか？この操作は取り消せません。</span>
-        <button class="btn-delete-cancel" id="btnDelCancel_${artworkId}">キャンセル</button>
-        <button class="btn-delete-ok"     id="btnDelOk_${artworkId}">削除する</button>
-      </div>`;
-      document.getElementById('btnDelCancel_' + artworkId)
-        .addEventListener('click', () => cancelDelete(artworkId));
-      document.getElementById('btnDelOk_' + artworkId)
-        .addEventListener('click', () => executeDelete(artworkId));
+      _pendingDeleteArtworkId = artworkId;
+      const info = document.getElementById('deleteArtworkInfo');
+      // artworkCache から該当作品を引いてラベル化 (タイトル + 作家名 + ID)
+      const a = (artworkCache || []).find(x => x.artwork_id === artworkId);
+      const label = a
+        ? `<strong>${escapeHtmlForModal(a.title || '(タイトル未入力)')}</strong>` +
+          (a.artist ? ` / ${escapeHtmlForModal(a.artist)}` : '') +
+          ` <span style="color:#888;">(${escapeHtmlForModal(artworkId)})</span>`
+        : `<strong>${escapeHtmlForModal(artworkId)}</strong>`;
+      if (info) info.innerHTML = label;
+      document.getElementById('deleteArtworkModal').style.display = 'flex';
     }
 
-    function cancelDelete(artworkId) {
-      const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = '';
-      const btn = document.createElement('button');
-      btn.className = 'btn-delete';
-      btn.textContent = '🗑️ この作品を削除する';
-      btn.addEventListener('click', () => confirmDelete(artworkId));
-      area.appendChild(btn);
+    function closeDeleteArtworkModal() {
+      _pendingDeleteArtworkId = null;
+      document.getElementById('deleteArtworkModal').style.display = 'none';
     }
 
-    function executeDelete(artworkId) {
+    function escapeHtmlForModal(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function executeDeleteFromModal() {
+      const artworkId = _pendingDeleteArtworkId;
+      if (!artworkId) { closeDeleteArtworkModal(); return; }
+      const confirmBtn = document.getElementById('btnDeleteArtworkConfirm');
+      if (confirmBtn) confirmBtn.disabled = true;
+
       const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = '<span class="spinner-sm"></span> 削除中...';
+      if (area) area.innerHTML = '<span class="spinner-sm"></span> 削除中…';
 
       window.fsDeleteArtwork(currentEx, artworkId)
         .then(() => {
@@ -2130,9 +2160,13 @@ ${fieldsText}
           if (artworkCache.length === 0) {
             document.getElementById('artworkList').innerHTML = '<div class="list-empty">まだ登録された作品がありません。</div>';
           }
+          closeDeleteArtworkModal();
+          if (confirmBtn) confirmBtn.disabled = false;
         })
         .catch(err => {
-          area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">Error: ' + err.message + '</span>';
+          if (area) area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">エラー: ' + err.message + '</span>';
+          closeDeleteArtworkModal();
+          if (confirmBtn) confirmBtn.disabled = false;
         });
     }
 
@@ -2159,6 +2193,16 @@ ${fieldsText}
         e.returnValue = '';  // ブラウザは独自の "離脱しますか?" ダイアログを出す
       }
     });
+
+    // B-3: オフライン状態を画面上部のバナーで表示
+    function _updateOnlineStatus() {
+      const banner = document.getElementById('offlineBanner');
+      if (!banner) return;
+      banner.style.display = navigator.onLine ? 'none' : 'block';
+    }
+    window.addEventListener('online', _updateOnlineStatus);
+    window.addEventListener('offline', _updateOnlineStatus);
+    document.addEventListener('DOMContentLoaded', _updateOnlineStatus);
 
     // 🎓 練習モード卒業: テストデータをクリアして本番運用に切替
     // A-1: confirm() を ack checkbox 付きモーダルに置換
