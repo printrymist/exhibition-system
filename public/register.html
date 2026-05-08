@@ -1096,27 +1096,65 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+    // =========================================================
+    // 設定値 (Config) — チューニング可能な定数を一箇所に集約
+    // caption.html の Config セクションと対になる主催者画面共通の設定。
+    // =========================================================
+    const GAS_URL          = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+    const GAS_TIMEOUT_MS   = 25000;  // GAS の通常応答は数秒。25秒を超えたらタイムアウト判定
+    const GAS_RETRY_MAX    = 2;      // 初回 + 最大 2 リトライ = 計 3 回
+    const GAS_RETRY_DELAY  = 2000;   // リトライ前の待機ミリ秒
 
-    function gasCall(params, retries = 3) {
+    // gasCall: GAS Web App (doPost) を叩く共通関数
+    // - AbortController でタイムアウト検出
+    // - timeout / network 系の一時的エラーのみ retry (HTTP 4xx/5xx は即座に失敗)
+    // - ユーザー向けの分かりやすいメッセージを `error` に詰めて返す
+    function gasCall(params, retries) {
+      retries = (retries === undefined) ? GAS_RETRY_MAX : retries;
       const body = new URLSearchParams(params);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), GAS_TIMEOUT_MS);
+
       return fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body
+        body: body,
+        signal: controller.signal
       })
         .then(r => {
-          if (!r.ok) throw new Error('HTTP error: ' + r.status);
+          clearTimeout(timeoutId);
+          if (!r.ok) {
+            const e = new Error('HTTP ' + r.status);
+            e.code = 'http';
+            e.status = r.status;
+            throw e;
+          }
           return r.json();
         })
         .catch(err => {
-          console.error('gasCall error:', err.message);
-          if (retries > 0) {
-            console.log(`リトライします... 残り${retries}回`);
-            return new Promise(resolve => setTimeout(resolve, 2000))
+          clearTimeout(timeoutId);
+          let code = err.code;
+          if (!code) {
+            if (err.name === 'AbortError') code = 'timeout';
+            else if (/Failed to fetch|NetworkError|ERR_INTERNET/.test(err.message || '')) code = 'network';
+            else code = 'unknown';
+          }
+          console.error('gasCall error:', code, err.message);
+
+          // 一時的エラー (timeout / network) のみ再試行。HTTP エラーは再試行しない
+          if (retries > 0 && (code === 'timeout' || code === 'network')) {
+            console.log(`gasCall retry (${code}), 残り ${retries} 回`);
+            return new Promise(resolve => setTimeout(resolve, GAS_RETRY_DELAY))
               .then(() => gasCall(params, retries - 1));
           }
-          return { success: false, error: err.message };
+
+          let userError;
+          if (code === 'timeout')      userError = 'GAS の応答が遅延しています。少し待ってからもう一度お試しください。';
+          else if (code === 'network') userError = 'ネットワーク接続を確認してください。';
+          else if (code === 'http')    userError = `サーバーエラー (HTTP ${err.status}) が発生しました。`;
+          else                          userError = err.message || '通信エラーが発生しました。';
+
+          return { success: false, error: userError, code: code };
         });
     }
     function getUrlParam(name) {
