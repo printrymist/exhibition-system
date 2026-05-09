@@ -1311,6 +1311,20 @@
       </div>
 
       <div id="templateTab">
+        <!-- 規定テンプレ管理: 選択中と保存済みの規定を並べて、明示ボタンで保存 -->
+        <div id="templateChoiceBanner" style="margin-bottom:12px; padding:10px 12px; background:#f0f7ff; border:1px solid #c5d9f7; border-radius:8px; font-size:0.85em;">
+          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:6px;">
+            <div>選択中: <strong id="bannerCurrentName" style="color:#1a73e8;">—</strong></div>
+            <div>この展覧会の規定: <strong id="bannerDefaultName" style="color:#0b8043;">—</strong></div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button id="btnSetAsDefault" onclick="setAsDefaultTemplate()" disabled
+              style="padding:5px 12px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:0.85em; cursor:pointer; opacity:0.5;">
+              📌 選択中を規定に設定
+            </button>
+            <span id="bannerDefaultMsg" style="font-size:0.78em; color:#888;"></span>
+          </div>
+        </div>
         <div class="template-grid">
           <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')"
             data-description="標準的な構成。タイトル・作家・年・技法・価格。展覧会全般向けの定番。">
@@ -1635,50 +1649,103 @@
     let groupCount = 0;
 
     // 起動時に data/caption-presets.json から PRESETS を読み込む。
-    // ── 最後に使ったテンプレを展覧会単位で記憶 ──
-    // exhibitions/{ex}.caption_template_id に "preset:<key>" または "saved:<docId>" を保存。
-    // selectTemplate / loadSavedTemplate の中で呼ぶが、起動時の自動適用 (applyCaptionTemplateChoice)
-    // からの呼び出しは無限ループ防止のため _applyingSavedChoice フラグで抑止。
-    let _applyingSavedChoice = false;
-    let _saveTemplateChoiceTimer = null;
-    function saveCaptionTemplateChoice(id) {
-      if (_applyingSavedChoice) return;
-      if (!artworkData || !artworkData.exCode) return;  // 起動初期で展覧会未ロード時
-      if (_saveTemplateChoiceTimer) clearTimeout(_saveTemplateChoiceTimer);
-      _saveTemplateChoiceTimer = setTimeout(() => {
-        _saveTemplateChoiceTimer = null;
-        fsDb.collection('exhibitions').doc(artworkData.exCode).set({
-          caption_template_id: id,
-          updatedAt: new Date().toISOString()
-        }, { merge: true })
-          .catch(e => console.warn('saveCaptionTemplateChoice failed:', e));
-      }, 800);
+    // ── テンプレ選択の追跡 + 「規定に設定」明示ボタン ──
+    // exhibitions/{ex}.caption_template_id に "preset:<key>" または "saved:<docId>" を保存する仕組み。
+    // 自動保存はしない (テンプレを試しに切り替えただけで永続化されると事故になるため)。
+    // ユーザーが「📌 規定に設定」を押した時だけ書き込む。
+    //
+    // 状態:
+    //   _lastSelectedTemplate = { id, name }  // 現在 UI で選択中のテンプレ
+    //   _savedTemplateId      = string         // Firestore に保存済みの規定 (起動時に読み込む)
+    let _lastSelectedTemplate = null;
+    let _savedTemplateId = '';
+
+    function updateTemplateChoiceBanner() {
+      const curEl = document.getElementById('bannerCurrentName');
+      const defEl = document.getElementById('bannerDefaultName');
+      const btn = document.getElementById('btnSetAsDefault');
+      const msg = document.getElementById('bannerDefaultMsg');
+      if (!curEl || !defEl || !btn) return;
+      curEl.innerText = _lastSelectedTemplate ? _lastSelectedTemplate.name : '—';
+      defEl.innerText = _savedTemplateId ? (_savedTemplateName() || '(不明)') : '(未設定)';
+      // 「規定」と「選択中」が一致する場合はボタン無効化
+      const matches = _lastSelectedTemplate && _lastSelectedTemplate.id === _savedTemplateId;
+      btn.disabled = !_lastSelectedTemplate || matches;
+      btn.style.opacity = btn.disabled ? '0.5' : '1';
+      btn.style.cursor = btn.disabled ? 'default' : 'pointer';
+      if (msg) msg.innerText = matches && _lastSelectedTemplate ? '✓ 選択中が規定です' : '';
     }
+
+    // 保存済みの規定 ID から表示名を引く (preset は getTemplateLabel、saved は data-tpl-name)
+    function _savedTemplateName() {
+      if (!_savedTemplateId) return '';
+      if (_savedTemplateId.indexOf('preset:') === 0) {
+        return getTemplateLabel(_savedTemplateId.slice('preset:'.length));
+      }
+      if (_savedTemplateId.indexOf('saved:') === 0) {
+        const docId = _savedTemplateId.slice('saved:'.length);
+        const btn = document.querySelector('[data-tpl-id="' + _escSel(docId) + '"]');
+        if (btn && btn.dataset.tplName) return btn.dataset.tplName;
+      }
+      return '';
+    }
+
+    function _escSel(s) {
+      return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
+    }
+
+    function setAsDefaultTemplate() {
+      if (!_lastSelectedTemplate) { alert('テンプレが選択されていません。'); return; }
+      if (!artworkData || !artworkData.exCode) { alert('展覧会が読み込まれていません。'); return; }
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してください。');
+        return;
+      }
+      const id = _lastSelectedTemplate.id;
+      const name = _lastSelectedTemplate.name;
+      const btn = document.getElementById('btnSetAsDefault');
+      const msg = document.getElementById('bannerDefaultMsg');
+      btn.disabled = true;
+      if (msg) { msg.style.color = '#888'; msg.innerText = '保存中…'; }
+      fsDb.collection('exhibitions').doc(artworkData.exCode).set({
+        caption_template_id: id,
+        updatedAt: new Date().toISOString()
+      }, { merge: true })
+        .then(() => {
+          _savedTemplateId = id;
+          if (msg) { msg.style.color = '#0b8043'; msg.innerText = `✓ 「${name}」を規定に設定しました`; }
+          updateTemplateChoiceBanner();
+          // 数秒後にメッセージ消す
+          setTimeout(() => { if (msg && msg.innerText.indexOf('規定に設定しました') >= 0) msg.innerText = ''; }, 3000);
+        })
+        .catch(err => {
+          if (msg) { msg.style.color = '#d93025'; msg.innerText = 'エラー: ' + (err.message || err); }
+          updateTemplateChoiceBanner();
+        });
+    }
+
+    // 起動時に読み込んだ caption_template_id を UI に反映 (Firestore には書き込まない)
     function applyCaptionTemplateChoice(id) {
       if (!id) return;
-      _applyingSavedChoice = true;
-      try {
-        if (id.indexOf('preset:') === 0) {
-          const presetName = id.slice('preset:'.length);
-          if (PRESETS[presetName]) {
-            selectTemplate(presetName);
-          } else {
-            console.warn('preset not found:', presetName);
-          }
-        } else if (id.indexOf('saved:') === 0) {
-          const docId = id.slice('saved:'.length);
-          // loadSavedTemplates が既に DOM にカードを描画済みのはずなので data-tpl-id で検索
-          const btn = document.querySelector('[data-tpl-id="' + (window.CSS && CSS.escape ? CSS.escape(docId) : docId.replace(/"/g, '\\"')) + '"]');
-          if (btn) {
-            loadSavedTemplate(btn);
-          } else {
-            console.warn('saved template not found in DOM, fallback to preset standard:', docId);
-            selectTemplate('standard');
-          }
+      _savedTemplateId = id;
+      if (id.indexOf('preset:') === 0) {
+        const presetName = id.slice('preset:'.length);
+        if (PRESETS[presetName]) {
+          selectTemplate(presetName);
+        } else {
+          console.warn('preset not found:', presetName);
         }
-      } finally {
-        _applyingSavedChoice = false;
+      } else if (id.indexOf('saved:') === 0) {
+        const docId = id.slice('saved:'.length);
+        const btn = document.querySelector('[data-tpl-id="' + _escSel(docId) + '"]');
+        if (btn) {
+          loadSavedTemplate(btn);
+        } else {
+          console.warn('saved template not found in DOM, fallback to preset standard:', docId);
+          selectTemplate('standard');
+        }
       }
+      updateTemplateChoiceBanner();
     }
 
     // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
@@ -1865,9 +1932,9 @@
       onQrPositionChange();
       schedulePreviewUpdate();
 
-      // 「最後に使ったテンプレ」を展覧会に紐付けて保存 (debounce 済)
-      // applyCaptionTemplateChoice 経由の呼び出し時は再保存を抑止する
-      saveCaptionTemplateChoice('preset:' + name);
+      // 選択中テンプレを記録 (Firestore 保存は明示的「📌 規定に設定」ボタンが押されたときだけ)
+      _lastSelectedTemplate = { id: 'preset:' + name, name: getTemplateLabel(name) };
+      updateTemplateChoiceBanner();
     }
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。
@@ -1999,15 +2066,16 @@
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
-          // まず 'standard' で初期化 (フィールドグリッドの既定状態 + プレビュー描画のため)
-          // _applyingSavedChoice を立てておき、起動時の selectTemplate が
-          // saveCaptionTemplateChoice を呼んでしまわないようにする (caption_template_id 上書き防止)
-          _applyingSavedChoice = true;
-          try { selectTemplate('standard'); } finally { _applyingSavedChoice = false; }
-          // 保存済みテンプレ一覧を Firestore から取得 → 起動時の自動適用は loadSavedTemplates 完了後
+          // 起動時はまず 'standard' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
+          // 自動保存ロジックは無いので、selectTemplate を呼んでも Firestore は触らない。
+          selectTemplate('standard');
+          // 保存済みテンプレ一覧を Firestore から取得 → 完了後に規定テンプレを自動適用
           loadSavedTemplates().then(() => {
             if (data.captionTemplateId) {
               applyCaptionTemplateChoice(data.captionTemplateId);
+            } else {
+              // 規定が未設定なら banner の表示状態を更新 (規定: 未設定)
+              updateTemplateChoiceBanner();
             }
           });
           document.getElementById('mainTabs').style.display = 'block';
@@ -3054,6 +3122,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       loadBtn.textContent = '読込';
       loadBtn.dataset.settings = tpl.settingsJson;
       loadBtn.dataset.tplId = tpl.id || '';  // applyCaptionTemplateChoice('saved:<id>') から DOM 検索する用
+      loadBtn.dataset.tplName = tpl.name || '';  // banner の「規定」表示用
       loadBtn.onclick = function () { loadSavedTemplate(this); };
 
       card.appendChild(nameDiv);
@@ -3149,9 +3218,13 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     function loadSavedTemplate(btn) {
       try {
-        // 「最後に使ったテンプレ」を保存 (button の data-tpl-id は buildSavedTemplateCard で付与済み)
+        // 選択中テンプレを記録 (Firestore 保存は明示的「📌 規定に設定」ボタンが押されたときだけ)
         if (btn && btn.dataset && btn.dataset.tplId) {
-          saveCaptionTemplateChoice('saved:' + btn.dataset.tplId);
+          _lastSelectedTemplate = {
+            id: 'saved:' + btn.dataset.tplId,
+            name: btn.dataset.tplName || btn.dataset.tplId
+          };
+          updateTemplateChoiceBanner();
         }
         const settings = JSON.parse(btn.dataset.settings);
         if (settings.paperSize) document.getElementById('paperSize').value = settings.paperSize;
