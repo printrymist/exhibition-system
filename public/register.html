@@ -1557,18 +1557,21 @@
           }
         }
 
-        // キャプション設定 (caption_fields): register.html に編集 UI が無いので Firestore 直書き
-        // 文字列のままコピーして parse しない (元の保存形式を保つ)
+        // キャプション設定 (caption_fields + caption_template_id):
+        // - caption_fields: caption.html フォーム設定タブの「どの項目を出すか」
+        // - caption_template_id: caption.html で最後に使ったテンプレ ('preset:xxx' または 'saved:xxx')
+        // どちらも register.html に編集 UI が無いので Firestore 直書き。
         if (wantCaptionFields) {
-          if (data.caption_fields) {
+          const update = {};
+          if (data.caption_fields) update.caption_fields = data.caption_fields;
+          if (data.caption_template_id) update.caption_template_id = data.caption_template_id;
+          if (Object.keys(update).length > 0) {
+            update.updatedAt = new Date().toISOString();
             try {
-              await fsDb.collection('exhibitions').doc(currentEx).set({
-                caption_fields: data.caption_fields,
-                updatedAt: new Date().toISOString()
-              }, { merge: true });
+              await fsDb.collection('exhibitions').doc(currentEx).set(update, { merge: true });
               copied.push('キャプション設定');
             } catch (e) {
-              console.error('caption_fields save after import failed:', e);
+              console.error('caption settings save after import failed:', e);
               failed.push('キャプション設定 (保存失敗: ' + (e.message || 'unknown') + ')');
             }
           } else {

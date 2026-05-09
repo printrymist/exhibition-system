@@ -1635,6 +1635,52 @@
     let groupCount = 0;
 
     // 起動時に data/caption-presets.json から PRESETS を読み込む。
+    // ── 最後に使ったテンプレを展覧会単位で記憶 ──
+    // exhibitions/{ex}.caption_template_id に "preset:<key>" または "saved:<docId>" を保存。
+    // selectTemplate / loadSavedTemplate の中で呼ぶが、起動時の自動適用 (applyCaptionTemplateChoice)
+    // からの呼び出しは無限ループ防止のため _applyingSavedChoice フラグで抑止。
+    let _applyingSavedChoice = false;
+    let _saveTemplateChoiceTimer = null;
+    function saveCaptionTemplateChoice(id) {
+      if (_applyingSavedChoice) return;
+      if (!artworkData || !artworkData.exCode) return;  // 起動初期で展覧会未ロード時
+      if (_saveTemplateChoiceTimer) clearTimeout(_saveTemplateChoiceTimer);
+      _saveTemplateChoiceTimer = setTimeout(() => {
+        _saveTemplateChoiceTimer = null;
+        fsDb.collection('exhibitions').doc(artworkData.exCode).set({
+          caption_template_id: id,
+          updatedAt: new Date().toISOString()
+        }, { merge: true })
+          .catch(e => console.warn('saveCaptionTemplateChoice failed:', e));
+      }, 800);
+    }
+    function applyCaptionTemplateChoice(id) {
+      if (!id) return;
+      _applyingSavedChoice = true;
+      try {
+        if (id.indexOf('preset:') === 0) {
+          const presetName = id.slice('preset:'.length);
+          if (PRESETS[presetName]) {
+            selectTemplate(presetName);
+          } else {
+            console.warn('preset not found:', presetName);
+          }
+        } else if (id.indexOf('saved:') === 0) {
+          const docId = id.slice('saved:'.length);
+          // loadSavedTemplates が既に DOM にカードを描画済みのはずなので data-tpl-id で検索
+          const btn = document.querySelector('[data-tpl-id="' + (window.CSS && CSS.escape ? CSS.escape(docId) : docId.replace(/"/g, '\\"')) + '"]');
+          if (btn) {
+            loadSavedTemplate(btn);
+          } else {
+            console.warn('saved template not found in DOM, fallback to preset standard:', docId);
+            selectTemplate('standard');
+          }
+        }
+      } finally {
+        _applyingSavedChoice = false;
+      }
+    }
+
     // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
     // 呼ばれるため、その時点では fetch は完了している (Firestore 認証や exhibition
     // 取得より先に解決する小さな静的 JSON のため)。
@@ -1818,6 +1864,10 @@
       document.getElementById('textAlign').value = p.textAlign;
       onQrPositionChange();
       schedulePreviewUpdate();
+
+      // 「最後に使ったテンプレ」を展覧会に紐付けて保存 (debounce 済)
+      // applyCaptionTemplateChoice 経由の呼び出し時は再保存を抑止する
+      saveCaptionTemplateChoice('preset:' + name);
     }
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。
@@ -1949,8 +1999,17 @@
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
-          selectTemplate('standard');
-          loadSavedTemplates();
+          // まず 'standard' で初期化 (フィールドグリッドの既定状態 + プレビュー描画のため)
+          // _applyingSavedChoice を立てておき、起動時の selectTemplate が
+          // saveCaptionTemplateChoice を呼んでしまわないようにする (caption_template_id 上書き防止)
+          _applyingSavedChoice = true;
+          try { selectTemplate('standard'); } finally { _applyingSavedChoice = false; }
+          // 保存済みテンプレ一覧を Firestore から取得 → 起動時の自動適用は loadSavedTemplates 完了後
+          loadSavedTemplates().then(() => {
+            if (data.captionTemplateId) {
+              applyCaptionTemplateChoice(data.captionTemplateId);
+            }
+          });
           document.getElementById('mainTabs').style.display = 'block';
           switchMainTab('caption');
         });
@@ -2994,6 +3053,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
       loadBtn.textContent = '読込';
       loadBtn.dataset.settings = tpl.settingsJson;
+      loadBtn.dataset.tplId = tpl.id || '';  // applyCaptionTemplateChoice('saved:<id>') から DOM 検索する用
       loadBtn.onclick = function () { loadSavedTemplate(this); };
 
       card.appendChild(nameDiv);
@@ -3059,7 +3119,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         });
       }
 
-      queryP.then(({ officials, personal }) => {
+      // 起動時の自動適用 (applyCaptionTemplateChoice('saved:...')) のために Promise を返す
+      return queryP.then(({ officials, personal }) => {
         savedTemplateNames = new Set([...officials, ...personal].map(t => t.name));
         const total = officials.length + personal.length;
         if (total === 0) {
@@ -3083,11 +3144,15 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
         section.style.display = 'block';
       })
-      .catch(err => console.warn('loadSavedTemplates error:', err && err.message ? err.message : err));
+      .catch(err => { console.warn('loadSavedTemplates error:', err && err.message ? err.message : err); });
     }
 
     function loadSavedTemplate(btn) {
       try {
+        // 「最後に使ったテンプレ」を保存 (button の data-tpl-id は buildSavedTemplateCard で付与済み)
+        if (btn && btn.dataset && btn.dataset.tplId) {
+          saveCaptionTemplateChoice('saved:' + btn.dataset.tplId);
+        }
         const settings = JSON.parse(btn.dataset.settings);
         if (settings.paperSize) document.getElementById('paperSize').value = settings.paperSize;
         if (settings.orientation) document.getElementById('orientation').value = settings.orientation;
@@ -3497,7 +3562,8 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
           artworks: artworks,
           qrList: qrList,
           registrationFields: registrationFields,
-          captionFields: captionFields
+          captionFields: captionFields,
+          captionTemplateId: ex.caption_template_id || ''
         };
       } catch (err) {
         return { success: false, error: err.message };
