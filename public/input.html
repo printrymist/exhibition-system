@@ -766,7 +766,11 @@
           if (card) card.remove();
           existingWorks = existingWorks.filter(a => a.artwork_id !== artworkId);
           document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
-          if (existingWorks.length === 0) { document.getElementById('listCard').style.display = 'none'; showNewForm(); }
+          if (existingWorks.length === 0) {
+            // Tier 2 D: 全削除後は listCard を空状態で残す (新規入力フォームは自動で開かない)。
+            // ヘッダの「＋ 作品を追加」ボタンが残っているので、追加するなら明示的にクリックする。
+            document.getElementById('artworkCards').innerHTML = '<div class="empty-state">登録済みの作品はありません。</div>';
+          }
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         })
