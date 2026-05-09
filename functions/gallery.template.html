@@ -570,8 +570,8 @@
     let exNameCache = '';
     let exCodeCache = '';
     const likesByWork = Object.create(null);    // {workId: count}
-    const commentsByWork = Object.create(null); // {workId: [{nickname, comment, ts, id}]}
-    const likedLocally = new Set();             // 既にいいね済の workId
+    const commentsByWork = Object.create(null); // {workId: [{id, sessionId, nickname, comment, ts}]}
+    const myLikeIdByWork = Object.create(null); // {workId: docId} — 自分が作成した isLike=true doc の id (Phase A-1, 取消用)
     let currentModalIdx = null;
     let unsubLikes = null;
     let commentsExpanded = false;               // モーダルを閉じるとリセット
@@ -661,9 +661,12 @@
       // visitor 認証 (Phase B-2 / B-3): issueGalleryToken で visibility と sig を一括判定。
       // closed → permission-denied、visitor_only で sig 不足 → invalid-argument、
       // sig 不一致 → permission-denied、期限切れ → deadline-exceeded。
+      // Phase A-1: sessionId を CF に渡して custom token claims に含めてもらう
+      // (likes/comments の update/delete を Firestore Rules で sessionId 一致で許可するため)
       const expRaw = getUrlParam('exp');
       const sigRaw = getUrlParam('sig');
-      const callPayload = { exCode };
+      const sidForToken = getOrCreateSessionId();
+      const callPayload = { exCode, sessionId: sidForToken };
       if (expRaw) callPayload.exp = Number(expRaw);
       if (sigRaw) callPayload.sig = sigRaw;
 
@@ -723,12 +726,8 @@
         artworks.sort((a, b) =>
           String(a.artwork_id || '').localeCompare(String(b.artwork_id || '')));
         artworksCache = artworks;
-        // localStorage から既にいいね済の作品を復元
-        artworks.forEach(a => {
-          if (localStorage.getItem('voted_' + exCode + '_' + a.artwork_id)) {
-            likedLocally.add(a.artwork_id);
-          }
-        });
+        // Phase A-1: 自分のいいね状態は subscribeToLikes の snap.forEach で
+        // sessionId 一致を見て myLikeIdByWork に入れる方式に変更。localStorage 'voted_*' は不使用に。
         renderGrid(artworks);
         if (interactionsMode !== 'none') {
           subscribeToLikes(exCode);
@@ -741,23 +740,30 @@
 
     function subscribeToLikes(exCode) {
       if (unsubLikes) { try { unsubLikes(); } catch(_){} }
+      const mySid = getOrCreateSessionId();
       unsubLikes = fsDb.collection('likes')
         .where('exCode', '==', exCode)
         .onSnapshot(snap => {
           for (const k of Object.keys(likesByWork)) delete likesByWork[k];
           for (const k of Object.keys(commentsByWork)) delete commentsByWork[k];
+          for (const k of Object.keys(myLikeIdByWork)) delete myLikeIdByWork[k];
           snap.forEach(d => {
             const data = d.data();
             const wid = data.workId;
             if (!wid) return;
             if (data.isLike) {
               likesByWork[wid] = (likesByWork[wid] || 0) + 1;
+              // Phase A-1: 自分のいいね doc id を覚えておく (取消で delete する用)
+              if (data.sessionId && data.sessionId === mySid) {
+                myLikeIdByWork[wid] = d.id;
+              }
             }
             const c = (data.comment || '').trim();
             if (c) {
               if (!commentsByWork[wid]) commentsByWork[wid] = [];
               commentsByWork[wid].push({
                 id: d.id,
+                sessionId: data.sessionId || '',
                 nickname: data.nickname || '',
                 comment: c,
                 ts: data.timestamp || ''
@@ -859,9 +865,11 @@
       likeBtn.style.display = showLike ? 'inline-flex' : 'none';
       commentIconBtn.style.display = showComment ? 'inline-flex' : 'none';
 
-      const isLiked = likedLocally.has(a.artwork_id);
+      // Phase A-1: 自分のいいねは myLikeIdByWork に sessionId 一致で入っている。
+      // toggle なので disabled は使わない (再タップで取消が走る)。
+      const isLiked = !!myLikeIdByWork[a.artwork_id];
       likeBtn.classList.toggle('liked', isLiked);
-      likeBtn.disabled = isLiked;
+      likeBtn.disabled = false;
       document.getElementById('modalLikeHeart').innerText = isLiked ? '♥' : '♡';
       const likeCount = likesByWork[a.artwork_id] || 0;
       document.getElementById('modalLikeCountInline').innerText = likeCount > 0 ? String(likeCount) : '';
@@ -986,13 +994,36 @@
       if (items.length === 0) {
         list.innerHTML = '<div class="comment-empty">まだコメントはありません。最初の感想を投稿してみよう。</div>';
       } else {
-        const renderItem = (c) => `
+        const mySidForRender = getOrCreateSessionId();
+        const renderItem = (c) => {
+          // Phase A-1: 自分のコメント (sessionId 一致) には末尾に削除ボタンを出す
+          const mine = c.sessionId && c.sessionId === mySidForRender;
+          const delBtn = mine
+            ? `<button type="button" class="comment-del-btn" onclick="onCommentDelete('${escapeHtml(c.id)}')" title="このコメントを削除"
+                style="background:none; border:none; color:#aaa; cursor:pointer; font-size:14px; padding:2px 6px; margin-left:6px;">✕</button>`
+            : '';
+          return `
               <div class="comment-item">
-                <div class="who">${escapeHtml(c.nickname || '匿名')}<span class="when">${escapeHtml(formatTs(c.ts))}</span></div>
+                <div class="who">${escapeHtml(c.nickname || '匿名')}<span class="when">${escapeHtml(formatTs(c.ts))}</span>${delBtn}</div>
                 <div class="body">${escapeHtml(c.comment)}</div>
               </div>`;
+        };
         list.innerHTML = '<div class="comment-list-title">' + items.length + '件のコメント</div>'
           + items.map(renderItem).join('');
+      }
+    }
+
+    // Phase A-1: 自分のコメント削除 (sessionId 一致のコメントだけ × が出るので、その doc を delete)。
+    // Firestore Rules で delete 権限を auth.token.sessionId == resource.data.sessionId で gate。
+    async function onCommentDelete(commentId) {
+      if (!commentId) return;
+      if (!confirm('このコメントを削除しますか?')) return;
+      try {
+        await fsDb.collection('likes').doc(commentId).delete();
+        // 一覧はリスナー経由で自動更新
+      } catch (e) {
+        console.error('comment 削除失敗:', e);
+        alert('削除に失敗しました: ' + (e && e.message ? e.message : e));
       }
     }
 
@@ -1050,34 +1081,42 @@
       }
     }
 
+    // Phase A-1: いいねボタンは toggle。既に自分が like 中なら delete、未 like なら create。
+    // myLikeIdByWork は subscribeToLikes が sessionId 一致で更新しているので state はそこから引く。
     async function onLikeClick() {
       if (currentModalIdx == null) return;
       const a = artworksCache[currentModalIdx];
       if (!a) return;
-      if (likedLocally.has(a.artwork_id)) return;
       const btn = document.getElementById('modalLikeBtn');
       btn.disabled = true;
       const sid = getOrCreateSessionId();
+      const existingId = myLikeIdByWork[a.artwork_id];
       try {
-        await fsDb.collection('likes').add({
-          exCode: exCodeCache,
-          ex_name: exNameCache,
-          workId: a.artwork_id,
-          title: a.title || '',
-          artist: a.artist || '',
-          sessionId: sid,
-          isLike: true,
-          source: 'gallery',
-          timestamp: new Date().toISOString()
-        });
-        localStorage.setItem('voted_' + exCodeCache + '_' + a.artwork_id, 'true');
-        likedLocally.add(a.artwork_id);
-        updateModalLikeUI();
-        // count はリスナー経由で更新される
+        if (existingId) {
+          // Unlike: 自分の like doc を削除 (Firestore Rules で sessionId 一致を要求)
+          await fsDb.collection('likes').doc(existingId).delete();
+          delete myLikeIdByWork[a.artwork_id];
+        } else {
+          // Like: 新規 doc を作成
+          await fsDb.collection('likes').add({
+            exCode: exCodeCache,
+            ex_name: exNameCache,
+            workId: a.artwork_id,
+            title: a.title || '',
+            artist: a.artist || '',
+            sessionId: sid,
+            isLike: true,
+            source: 'gallery',
+            timestamp: new Date().toISOString()
+          });
+          // doc id は subscribeToLikes が拾い直すので、ここで手動 myLikeIdByWork は触らない
+        }
       } catch (e) {
-        console.error('like 書き込み失敗:', e);
-        btn.disabled = false;
+        console.error('like toggle 失敗:', e);
         alert('いいねの送信に失敗しました: ' + (e && e.message ? e.message : e));
+      } finally {
+        // 成否に関わらず、disabled 解除と楽観 UI 反映 (リスナー届くまでのチラつき防止)
+        updateModalLikeUI();
       }
     }
 

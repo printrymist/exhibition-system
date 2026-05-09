@@ -548,16 +548,32 @@ exports.issueGalleryToken = onCall(
       }
     }
 
-    // Custom token を発行。uid は予測不能な乱数で、claims に exCode / role を入れる。
-    // Firestore Rules で request.auth.token.role / exCode を見て gate する。
+    // Custom token を発行。uid は予測不能な乱数で、claims に exCode / role / sessionId を入れる。
+    // Firestore Rules で request.auth.token.role / exCode / sessionId を見て gate する。
+    // sessionId はクライアントが localStorage で生成・保持する識別子で、いいね取消し / コメント
+    // 削除のとき「自分が書いた doc」を確認するための owner key として token に焼き込む。
     const randomId = crypto.randomBytes(8).toString("hex");
     const uid = `gallery_${exCode}_${randomId}`;
-    const customToken = await admin.auth().createCustomToken(uid, {
+    const claims = {
       role: "visitor",
       exCode: exCode,
-    });
+    };
+    // クライアントから渡された sessionId を claims に同梱 (任意、未指定なら従来どおり)
+    const reqSessionId = String(data.sessionId || "").trim();
+    if (reqSessionId) {
+      if (reqSessionId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(reqSessionId)) {
+        throw new HttpsError("invalid-argument", "sessionId が不正です");
+      }
+      claims.sessionId = reqSessionId;
+    }
+    const customToken = await admin.auth().createCustomToken(uid, claims);
 
-    logger.info("gallery visitor token issued", { exCode, visibility, uid });
+    logger.info("gallery visitor token issued", {
+      exCode,
+      visibility,
+      uid,
+      hasSessionId: !!reqSessionId,
+    });
     return {
       token: customToken,
       exCode,

@@ -23,11 +23,16 @@ service cloud.firestore {
       allow delete: if isOperator();
     }
 
-    // likes：読み取りを許可（ダッシュボード用）、変更・削除は禁止
+    // likes：読み取りを許可（ダッシュボード用）。
     // create:
-    //   - 物理会場 QR (input.html) からの anon は引き続き受け入れる (Phase 2 で anon Auth 化予定)
-    //   - gallery.html 経由は visitor custom token が必要 (claim の exCode と一致すること)
+    //   - 物理会場 QR (index.html anon) は引き続き無認証で受け入れる
+    //   - gallery 経由は visitor custom token が必要 (claim の exCode と一致)
     //   - 運営者はテスト用に常時 OK
+    // update / delete (Phase A-1, 2026-05-10):
+    //   - visitor (Custom Token) で claim の sessionId と doc の sessionId が一致するときのみ許可
+    //   - 自分が投稿したいいね・コメントを SNS と同じ感覚で取り消せるようにする目的
+    //   - 物理 QR (anon) 経由は対象外 (Phase A-2 で別途検討)
+    //   - 運営者はモデレーション目的で update/delete 可
     match /likes/{anyId} {
       allow read: if true;
       allow create: if
@@ -46,8 +51,20 @@ service cloud.firestore {
           )
           || isOperator()
         );
-      allow update: if false;
-      allow delete: if isOperator();
+      allow update: if isOperator() || (
+        request.auth != null
+        && request.auth.token.role == 'visitor'
+        && request.auth.token.exCode == resource.data.exCode
+        && request.auth.token.sessionId is string
+        && request.auth.token.sessionId == resource.data.sessionId
+      );
+      allow delete: if isOperator() || (
+        request.auth != null
+        && request.auth.token.role == 'visitor'
+        && request.auth.token.exCode == resource.data.exCode
+        && request.auth.token.sessionId is string
+        && request.auth.token.sessionId == resource.data.sessionId
+      );
     }
 
     match /exhibitions/{docId} {
