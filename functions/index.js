@@ -1152,7 +1152,11 @@ exports.submitArtwork = onCall(
     }
 
     if (!existingSnap.exists) {
-      if (authMode === "artwork_token") {
+      // artist 経路 (exhibition_token / artwork_token) は新規 doc 作成不可。
+      // 通常の登録は fsSaveArtwork が status='0' の空きスロット (= 既存 doc) を埋める形で、
+      // 任意 artworkId で新規 doc を作る正当な経路は存在しない (新規スロット追加は GAS 経由のみ)。
+      // operator / organizer は救済目的で任意 ID 作成可のまま残す。
+      if (authMode === "artwork_token" || authMode === "exhibition_token") {
         throw new HttpsError("not-found", "対象の作品枠が見つかりません");
       }
     }
