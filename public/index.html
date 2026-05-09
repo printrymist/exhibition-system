@@ -1096,10 +1096,11 @@
       if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
       try {
         const sid = getOrCreateSessionId();
-        // 自分の isLike=true doc を抽出して delete。既存の count クエリと同じ
-        // (exCode + workId) where のあと、client side で sessionId と isLike を絞る。
-        // Firestore Rules で auth.token.sessionId == resource.data.sessionId が要求される。
-        const snap = await fsDb.collection('likes')
+        // 自分の isLike=true doc を抽出して delete。
+        // 重要: delete は visitor app の Firestore (= signIn 済の auth context を持つ) で行う。
+        // default app の fsDb は auth=null のままなので Rules の sessionId 一致チェックを通れない。
+        const visitorFsDb = _visitorApp.firestore();
+        const snap = await visitorFsDb.collection('likes')
           .where('exCode', '==', exVal)
           .where('workId', '==', idVal)
           .get();
