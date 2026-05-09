@@ -681,6 +681,15 @@ function computeArtworkSig(secret, exCode, artworkId, exp) {
     .digest("hex");
 }
 
+// 作家別 URL 用 HMAC (B-1)
+// exhibition_token と違い artistName を sig に含める。
+// 同 token で他作家の作品は編集できない (submitArtwork で artist 値検証)。
+function computeArtistSig(secret, exCode, artistName, exp) {
+  return crypto.createHmac("sha256", secret)
+    .update("artist:" + exCode + ":" + artistName + ":" + exp)
+    .digest("hex");
+}
+
 async function isOrganizerForEx(authEmail, exCode) {
   if (!authEmail || !exCode) return false;
   const exSnap = await admin.firestore()
@@ -742,6 +751,73 @@ exports.mintExhibitionAccessToken = onCall(
       expDays: Math.floor(expDays),
     });
     return { exCode, exp, sig };
+  },
+);
+
+// 作家別 URL 発行 (B-1)
+// 主催者が register.html から「作家ごとに URL を発行」する用途。
+// 発行された URL は ?ex=...&artist=...&exp=...&sig=... で input.html を開き、
+// submitArtwork CF が artist 値の一致を検証する。
+exports.mintArtistAccessToken = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+    }
+
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artistName = String(data.artistName || "").trim();
+    if (!exCode) {
+      throw new HttpsError("invalid-argument", "exCode が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+    if (!artistName) {
+      throw new HttpsError("invalid-argument", "artistName が必要です");
+    }
+    if (artistName.length > 200) {
+      throw new HttpsError("invalid-argument", "artistName が長すぎます");
+    }
+
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (!isOperator) {
+      const ok = await isOrganizerForEx(authEmail, exCode);
+      if (!ok) {
+        throw new HttpsError(
+          "permission-denied",
+          "この展覧会の主催者または運営者の Firebase Auth が必要です",
+        );
+      }
+    }
+
+    const expDays = Number(data.expDays);
+    if (!Number.isFinite(expDays) || expDays < 1 || expDays > 365) {
+      throw new HttpsError(
+        "invalid-argument",
+        "expDays は 1〜365 の整数で指定してください",
+      );
+    }
+
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+
+    const exp = Math.floor(Date.now() / 1000) + Math.floor(expDays) * 86400;
+    const sig = computeArtistSig(secret, exCode, artistName, exp);
+    logger.info("artist access token minted", {
+      exCode,
+      artistName,
+      caller: authEmail,
+      role: isOperator ? "operator" : "organizer",
+      expDays: Math.floor(expDays),
+    });
+    return { exCode, artistName, exp, sig };
   },
 );
 
@@ -1139,6 +1215,25 @@ exports.submitArtwork = onCall(
         if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
           authMode = "artwork_token";
         }
+      } else if (tok.kind === "artist") {
+        // B-1: 作家別 URL の token。HMAC sig には artistName が含まれるので、
+        // 同 exhibition でも他作家の token とは別物。submitArtwork 後段で
+        // 既存 doc の artist と書き込もうとしている artist の一致を強制する。
+        const tokArtist = String(tok.artist || "").trim();
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!tokArtist || !Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "artist token に artist/exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeArtistSig(secret, exCode, tokArtist, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "artist_token";
+        }
       }
       // legacy_key 経路は削除 (artwork doc が公開読み取り可なので key を取れて
       // しまえば誰でも書ける状態だった。本来の安全性確保が目的なので閉じる)
@@ -1152,11 +1247,15 @@ exports.submitArtwork = onCall(
     }
 
     if (!existingSnap.exists) {
-      // artist 経路 (exhibition_token / artwork_token) は新規 doc 作成不可。
+      // artist 経路 (exhibition_token / artwork_token / artist_token) は新規 doc 作成不可。
       // 通常の登録は fsSaveArtwork が status='0' の空きスロット (= 既存 doc) を埋める形で、
       // 任意 artworkId で新規 doc を作る正当な経路は存在しない (新規スロット追加は GAS 経由のみ)。
       // operator / organizer は救済目的で任意 ID 作成可のまま残す。
-      if (authMode === "artwork_token" || authMode === "exhibition_token") {
+      if (
+        authMode === "artwork_token" ||
+        authMode === "exhibition_token" ||
+        authMode === "artist_token"
+      ) {
         throw new HttpsError("not-found", "対象の作品枠が見つかりません");
       }
     }
@@ -1169,10 +1268,14 @@ exports.submitArtwork = onCall(
     }
 
     // 主催者主導 + ロックモデル (Phase 2):
-    // - artist 経路 (exhibition_token / artwork_token) は is_locked=false (unlock) を書けない
+    // - artist 経路 (exhibition_token / artwork_token / artist_token) は is_locked=false 不可
     // - 既にロック済の作品には他フィールドの書き込みも block (作家側からは編集不可)
     // operator / organizer は常に解除可・編集可。
-    const isArtistAuth = (authMode === "exhibition_token" || authMode === "artwork_token");
+    const isArtistAuth = (
+      authMode === "exhibition_token" ||
+      authMode === "artwork_token" ||
+      authMode === "artist_token"
+    );
     if (isArtistAuth) {
       if ("is_locked" in cleanFields && cleanFields.is_locked === false) {
         throw new HttpsError(
@@ -1186,6 +1289,33 @@ exports.submitArtwork = onCall(
           throw new HttpsError(
             "permission-denied",
             "この作品はロックされています。編集が必要な場合は主催者にご連絡ください",
+          );
+        }
+      }
+    }
+
+    // B-1: artist_token は token に紐付いた artistName しか触れない。
+    // - 既存 doc の artist が空でない場合、token の artist と一致すること
+    //   (空きスロット status='0' / artist='' は初回登録なので通る)
+    // - 書き込もうとしている artist 値が token の artist と一致すること
+    //   (作家が登録時に他人の名前を入力しても弾かれる)
+    if (authMode === "artist_token") {
+      const tokArtist = String(tok.artist || "").trim();
+      if (existingSnap.exists) {
+        const existingArtist = String((existingSnap.data() || {}).artist || "").trim();
+        if (existingArtist && existingArtist !== tokArtist) {
+          throw new HttpsError(
+            "permission-denied",
+            "このトークンでは他の作家の作品を編集できません",
+          );
+        }
+      }
+      if ("artist" in cleanFields) {
+        const writeArtist = String(cleanFields.artist || "").trim();
+        if (writeArtist && writeArtist !== tokArtist) {
+          throw new HttpsError(
+            "permission-denied",
+            "このトークンでは指定された作家名のみ書き込み可能です",
           );
         }
       }
