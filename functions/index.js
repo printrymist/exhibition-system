@@ -585,6 +585,72 @@ exports.issueGalleryToken = onCall(
 
 
 // =========================================================
+// issueVisitorToken (Phase A-2):
+//   index.html (物理 QR スキャン経路) の anon visitor を Firebase Auth Custom Token に
+//   昇格させて、いいね・コメントの取消し / 削除を Firestore Rules で sessionId 一致 gate
+//   で許可できるようにする。
+//
+//   入力: { exCode, artworkId, exp, sig, sessionId }
+//   - artwork_token (HMAC) を検証 (= 物理 QR を持っている人) して
+//   - sessionId を claims に焼き込んだ custom token を返す
+//
+//   gallery と同じく claims は { role: 'visitor', exCode, sessionId } で、
+//   既存の Firestore Rules (Phase A-1 で追加) はそのまま使える。
+// =========================================================
+exports.issueVisitorToken = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const exp = Number(data.exp);
+    const sig = String(data.sig || "");
+    const sessionId = String(data.sessionId || "").trim();
+
+    if (!exCode || !artworkId) {
+      throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+    if (!Number.isFinite(exp) || !sig) {
+      throw new HttpsError("invalid-argument", "exp / sig が必要です");
+    }
+    if (!sessionId) {
+      throw new HttpsError("invalid-argument", "sessionId が必要です");
+    }
+    if (sessionId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+      throw new HttpsError("invalid-argument", "sessionId が不正です (英数 / - / _ のみ、200 文字以内)");
+    }
+    if (exp <= Math.floor(Date.now() / 1000)) {
+      throw new HttpsError("deadline-exceeded", "QR コードの有効期限が切れています");
+    }
+
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+    const expected = computeArtworkSig(secret, exCode, artworkId, exp);
+    const a = Buffer.from(expected, "hex");
+    const b = Buffer.from(sig, "hex");
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new HttpsError("permission-denied", "QR の署名が一致しません");
+    }
+
+    const randomId = crypto.randomBytes(8).toString("hex");
+    const uid = `visitor_${exCode}_${randomId}`;
+    const customToken = await admin.auth().createCustomToken(uid, {
+      role: "visitor",
+      exCode: exCode,
+      sessionId: sessionId,
+    });
+
+    logger.info("visitor token issued", { exCode, artworkId, uid });
+    return { token: customToken, exCode };
+  },
+);
+
+// =========================================================
 // galleryPage:
 //   Hosting rewrite で /gallery.html へのリクエストを受け、
 //   exhibitions/{ex} を読んで OG meta タグを差し替えた HTML を返す。

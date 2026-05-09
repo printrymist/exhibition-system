@@ -407,7 +407,12 @@
         <div id="ansLoading">読み込み中...</div>
         <div id="ansMainContent" style="display:none;">
           <div class="ex-header" id="ansDisplayExName"></div>
-          <div id="ansAlreadyLikedMsg">いいね受付済みです、追加コメントを受け付けます。</div>
+          <!-- Phase A-2: いいね受付済み表示 + 取消ボタン (visitor 認証済みのときだけ機能) -->
+          <div id="ansAlreadyLikedMsg" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;">
+            <span id="ansAlreadyLikedText">いいね受付済みです、追加コメントを受け付けます。</span>
+            <button type="button" id="ansLikeUndoBtn" onclick="onLikeUndo()"
+              style="display:none; padding:5px 14px; background:white; color:#d93025; border:1px solid #d93025; border-radius:6px; font-size:0.82em; cursor:pointer;">🔄 いいね取消</button>
+          </div>
           <div id="ansThankYou" style="display:none;">
             <div class="heart-icon">♥</div>
             <div id="ansCountMsg" style="font-size:1.1em; font-weight:bold; margin-bottom:15px;"></div>
@@ -605,6 +610,41 @@
     // =========================================================
     // 🌟 アプリ共通処理
     // =========================================================
+    // Phase A-2: visitor 認証 (CF issueVisitorToken → signInWithCustomToken)。
+    // artwork_token (URL の exp+sig) を CF に渡して検証 → custom token を取得し、
+    // claims に sessionId が乗ったまま signIn することで、Firestore Rules の
+    // sessionId 一致 update/delete をパスできる。
+    // 失敗しても無認証で create 自体は通るので、致命ではない (delete だけ封じられる)。
+    let _visitorAuthReady = null;
+    function ensureVisitorAuth() {
+      if (_visitorAuthReady) return _visitorAuthReady;
+      _visitorAuthReady = (async () => {
+        if (!expVal || !sigVal) {
+          // 旧 URL (exp+sig 無し) では sign in できない。
+          console.warn('visitor auth: exp/sig が無いので skip (anon write のみ可能)');
+          return false;
+        }
+        try {
+          const fn = visitorFunctions.httpsCallable('issueVisitorToken');
+          const res = await fn({
+            exCode: exVal,
+            artworkId: idVal,
+            exp: Number(expVal),
+            sig: sigVal,
+            sessionId: getOrCreateSessionId(),
+          });
+          const token = res && res.data && res.data.token;
+          if (!token) throw new Error('token が空でした');
+          await visitorAuth.signInWithCustomToken(token);
+          return true;
+        } catch (e) {
+          console.warn('visitor auth: signIn 失敗 (delete UI は無効化されます)', e && e.message ? e.message : e);
+          return false;
+        }
+      })();
+      return _visitorAuthReady;
+    }
+
     function reloadApp() {
       document.getElementById('unityGlobalLoading').style.display = 'flex';
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
@@ -652,6 +692,9 @@
         // HMAC 検証して担保する。security_key は URL に乗らない方針)。
         if (data.isRegistered) {
           document.getElementById('ansWrapper').style.display = 'block';
+          // Phase A-2: 登録済 artwork のとき visitor sign-in を裏で走らせる。
+          // 失敗してもいいね・コメントの追加は anon でできる (delete だけ無効になる)。
+          ensureVisitorAuth();
           ansInit(exVal, idVal, data);
         } else {
           document.getElementById('regWrapper').style.display = 'block';
@@ -962,7 +1005,15 @@
       if (localStorage.getItem("voted_" + ex + "_" + id)) {
         document.getElementById('ansIsLikeInput').value = "0";
         document.getElementById('ansSubmitBtn').innerText = t('ansSubmitBtnAdded');
-        document.getElementById('ansAlreadyLikedMsg').style.display = 'block';
+        document.getElementById('ansAlreadyLikedMsg').style.display = 'flex';
+        // Phase A-2: visitor 認証が成功したら「いいね取消」ボタンを有効化。
+        // 失敗時 (旧 URL の exp/sig 無し等) は表示しない (Firestore Rules で delete が通らないため)。
+        ensureVisitorAuth().then(ok => {
+          if (ok) {
+            const btn = document.getElementById('ansLikeUndoBtn');
+            if (btn) btn.style.display = 'inline-block';
+          }
+        });
       }
       var savedNickname = localStorage.getItem("nickname_" + ex);
       if (savedNickname) {
@@ -1026,6 +1077,47 @@
 
     // 旧 ansResetForm (isAdmin_* localStorage で gate していた応援記録リセット) は撤去。
     // localStorage に isAdmin_* を書き込むコードがどこにも無く実質永久に dead だった。
+
+    // Phase A-2: 自分のいいね取消し。Firestore で sessionId 一致の isLike=true doc を全部 delete。
+    // visitor 認証が成功している前提 (ensureVisitorAuth → custom token claims に sessionId)。
+    async function onLikeUndo() {
+      if (!confirm('この作品のいいねを取消します。よろしいですか?')) return;
+      if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
+      const ok = await ensureVisitorAuth();
+      if (!ok) {
+        alert('認証ができませんでした。新しい QR コードで開き直してください。');
+        return;
+      }
+      const btn = document.getElementById('ansLikeUndoBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
+      try {
+        const sid = getOrCreateSessionId();
+        // 自分の isLike=true doc を抽出して delete。既存の count クエリと同じ
+        // (exCode + workId) where のあと、client side で sessionId と isLike を絞る。
+        // Firestore Rules で auth.token.sessionId == resource.data.sessionId が要求される。
+        const snap = await fsDb.collection('likes')
+          .where('exCode', '==', exVal)
+          .where('workId', '==', idVal)
+          .get();
+        const tasks = [];
+        snap.forEach(d => {
+          const data = d.data();
+          if (data.sessionId === sid && data.isLike === true) {
+            tasks.push(d.ref.delete());
+          }
+        });
+        await Promise.all(tasks);
+
+        // localStorage の voted_ も消して状態を初期化、画面をリロード
+        localStorage.removeItem('voted_' + exVal + '_' + idVal);
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 いいね取消'; }
+        reloadApp();
+      } catch (e) {
+        console.error('like undo failed:', e);
+        alert('取消に失敗しました: ' + (e && e.message ? e.message : e));
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 いいね取消'; }
+      }
+    }
 
     // Phase 6a: visitor の comment/like は GAS を経由せず直接 Firestore に書く。
     // 旧 ansProcessForm 経由の二重書き (GAS comments シート + Firestore likes) を
@@ -1122,19 +1214,32 @@
 
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script>
-    firebase.initializeApp({
+    const _firebaseConfig = {
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
       authDomain: "rohei-printer-system.firebaseapp.com",
       projectId: "rohei-printer-system",
       storageBucket: "rohei-printer-system.firebasestorage.app",
       messagingSenderId: "762429995901",
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
-    });
+    };
+    firebase.initializeApp(_firebaseConfig);
+    // Phase A-2: visitor 認証用の named app。default app と auth 状態を分離する
+    // (来場者の visitor session を主催者ログインの IndexedDB に書き込まないため)。
+    // signInWithCustomToken した uid は role='visitor' / sessionId 入りで、
+    // Firestore Rules (Phase A-1) の sessionId 一致 update/delete をパスする。
+    const _visitorApp = firebase.initializeApp(_firebaseConfig, 'visitor');
+    const visitorAuth = _visitorApp.auth();
+    const visitorFunctions = _visitorApp.functions('asia-northeast1');
+    // Persistence は NONE (タブメモリのみ、IndexedDB を汚さない、shared device に優しい)
+    visitorAuth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+      .catch(e => console.warn('visitor auth persistence:', e));
+
     const fsDb = firebase.firestore();
     const fsStorage = firebase.storage();
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
