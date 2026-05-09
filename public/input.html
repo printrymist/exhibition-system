@@ -854,33 +854,114 @@
           const preview = document.getElementById('new_' + imageField.name + '_preview');
           const pending = preview && preview.dataset ? preview.dataset.pending : '';
           if (pending) {
-            const url = await window.fsUploadArtworkImage(ex, newId, pending);
-            await window.fsSetArtwork(ex, newId, { image_url: url });
+            try {
+              const url = await window.fsUploadArtworkImage(ex, newId, pending);
+              await window.fsSetArtwork(ex, newId, { image_url: url });
+            } catch (uploadErr) {
+              // Tier 2 C: 作品 doc は status='1' で書き込まれているが画像アップロード失敗。
+              // このまま戻ると画像なしの作品 (orphan) が残るので、リカバリ UI を表示して
+              // ユーザーに「再試行」または「削除してやり直す」を選んでもらう。
+              console.error('image upload after save failed:', uploadErr);
+              showImageUploadFailureRecovery(newId, pending, uploadErr);
+              return;
+            }
           }
         }
-        document.getElementById('btnNewSave').disabled = false;
-        const banner = document.getElementById('saveBanner');
-        banner.textContent = '✅ ' + newId + ' を登録しました。'; banner.style.display = 'block';
-        setTimeout(() => { banner.style.display = 'none'; }, 3000);
-        // 連続入力支援: 画像だけクリア、テキスト系は全部保持。タイトルも保持。
-        activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-          const def = FIELD_MAP[f.name]; if (!def) return;
-          if (def.type === 'image') {
-            const file = document.getElementById('new_' + f.name); if (file) file.value = '';
-            const prev = document.getElementById('new_' + f.name + '_preview');
-            if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); delete prev.dataset.pending; }
-            return;
-          }
-          const el = document.getElementById('new_' + f.name);
-          if (el) el.classList.remove('error');
-        });
-        const titleEl = document.getElementById('new_title');
-        if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
-        const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
-        if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
+        await finalizeSaveSuccess(newId);
       } catch (err) {
         document.getElementById('btnNewSave').disabled = false;
         document.getElementById('newFormError').innerText = 'Error: ' + err.message;
+      }
+    }
+
+    // 登録成功後の後処理 (banner + 連続入力用フォームリセット + 一覧 refresh)。
+    // 画像アップロード失敗の retry が成功したときも同じ流れに合流させたいので関数化。
+    async function finalizeSaveSuccess(newId) {
+      document.getElementById('btnNewSave').disabled = false;
+      const banner = document.getElementById('saveBanner');
+      banner.textContent = '✅ ' + newId + ' を登録しました。'; banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 3000);
+      // 連続入力支援: 画像だけクリア、テキスト系は全部保持。タイトルも保持。
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_MAP[f.name]; if (!def) return;
+        if (def.type === 'image') {
+          const file = document.getElementById('new_' + f.name); if (file) file.value = '';
+          const prev = document.getElementById('new_' + f.name + '_preview');
+          if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); delete prev.dataset.pending; }
+          return;
+        }
+        const el = document.getElementById('new_' + f.name);
+        if (el) el.classList.remove('error');
+      });
+      const titleEl = document.getElementById('new_title');
+      if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
+      const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
+      if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
+    }
+
+    // ── 画像アップロード部分失敗のリカバリ ──
+    // saveNewArtwork で fsSaveArtwork 成功 → fsUploadArtworkImage 失敗のとき
+    // 画像なしの作品 (orphan) が Firestore に残るので、再試行 or 削除を提示する。
+    let _failedImageUpload = null;  // { artworkId, dataUrl }
+
+    function showImageUploadFailureRecovery(artworkId, dataUrl, err) {
+      _failedImageUpload = { artworkId: artworkId, dataUrl: dataUrl };
+      // 連続クリック防止のため、登録ボタンは disabled のまま (リカバリボタンで触る)
+      document.getElementById('btnNewSave').disabled = true;
+      const errEl = document.getElementById('newFormError');
+      errEl.innerHTML = `
+        <div style="background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; padding:12px; line-height:1.55; text-align:left; color:#a85700;">
+          ⚠️ 作品データは登録されましたが、<b>画像のアップロードに失敗</b>しました<br>
+          <span style="font-size:0.82em; color:#666;">作品 ID: <b>${escapeHtmlForModal(artworkId)}</b><br>原因: ${escapeHtmlForModal((err && err.message) || 'unknown')}</span>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button type="button" onclick="retryFailedImageUpload()"
+              style="padding:6px 14px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:0.9em; font-weight:bold; cursor:pointer;">🔄 画像を再アップロード</button>
+            <button type="button" onclick="rollbackFailedSave()"
+              style="padding:6px 14px; background:#eee; color:#333; border:none; border-radius:6px; font-size:0.9em; cursor:pointer;">🗑️ 作品を削除してやり直す</button>
+          </div>
+        </div>
+      `;
+      errEl.style.minHeight = 'auto';
+    }
+
+    async function retryFailedImageUpload() {
+      if (!_failedImageUpload) return;
+      if (!navigator.onLine) { alert('オフラインです。ネットワーク接続を確認してください。'); return; }
+      const errEl = document.getElementById('newFormError');
+      errEl.innerHTML = '<span class="spinner-sm"></span> 画像を再アップロード中…';
+      const artworkId = _failedImageUpload.artworkId;
+      const dataUrl = _failedImageUpload.dataUrl;
+      try {
+        const url = await window.fsUploadArtworkImage(ex, artworkId, dataUrl);
+        await window.fsSetArtwork(ex, artworkId, { image_url: url });
+        _failedImageUpload = null;
+        errEl.innerText = '';
+        await finalizeSaveSuccess(artworkId);
+      } catch (e) {
+        showImageUploadFailureRecovery(artworkId, dataUrl, e);
+      }
+    }
+
+    async function rollbackFailedSave() {
+      if (!_failedImageUpload) return;
+      if (!confirm('作品データを削除して最初からやり直しますか?\n\n(画像のアップロードができなかったため、画像なしの作品が登録された状態になっています)')) return;
+      if (!navigator.onLine) { alert('オフラインです。ネットワーク接続を確認してください。'); return; }
+      const errEl = document.getElementById('newFormError');
+      errEl.innerHTML = '<span class="spinner-sm"></span> 削除中…';
+      const artworkId = _failedImageUpload.artworkId;
+      const dataUrl = _failedImageUpload.dataUrl;
+      try {
+        await window.fsDeleteArtwork(ex, artworkId);
+        _failedImageUpload = null;
+        errEl.innerText = '✓ 作品を削除しました。改めて登録してください。';
+        setTimeout(() => { errEl.innerText = ''; }, 5000);
+        document.getElementById('btnNewSave').disabled = false;
+        // 一覧も refresh して orphan を消す
+        const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
+        if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
+      } catch (e) {
+        alert('削除に失敗しました: ' + (e.message || e));
+        showImageUploadFailureRecovery(artworkId, dataUrl, e);
       }
     }
 
