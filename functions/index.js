@@ -1321,6 +1321,26 @@ exports.submitArtwork = onCall(
       }
     }
 
+    // B-1.5 (ii): artwork_token (QR 経由) でも、既存 doc に artist が入っていて
+    // 書き込み artist と違う場合は拒否。会場で他人の作品 QR を物理スキャンして
+    // regWrapper で別作家名に上書きする経路を塞ぐ。
+    // - 空きスロット (existingArtist='') からの初回登録は許可
+    // - artist field を payload に含めない書き込み (UNLOCK の status='' だけ等) は通す
+    // - artist 値クリア (writeArtist='') も通す (input.html の fsDeleteArtwork が
+    //   artist を空文字に上書きする経路を維持するため)
+    if (authMode === "artwork_token" && existingSnap.exists) {
+      const existingArtist = String((existingSnap.data() || {}).artist || "").trim();
+      if ("artist" in cleanFields) {
+        const writeArtist = String(cleanFields.artist || "").trim();
+        if (existingArtist && writeArtist && existingArtist !== writeArtist) {
+          throw new HttpsError(
+            "permission-denied",
+            "この作品は既に別の作家のものです。書き換えはできません",
+          );
+        }
+      }
+    }
+
     const writePayload = Object.assign({}, cleanFields, {
       exCode: exCode,
       artworkId: artworkId,
