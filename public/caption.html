@@ -1164,150 +1164,151 @@
     </div>
 
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">ページレイアウト</div>
-      <div class="layout-row">
-        <div class="layout-item">
-          <label>用紙</label>
-          <select id="paperSize">
-            <option value="A4">A4</option>
-            <option value="Letter">Letter</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>向き</label>
-          <select id="orientation">
-            <option value="portrait">縦</option>
-            <option value="landscape">横</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>列数</label>
-          <select id="cols">
-            <option value="1">1</option>
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>行数</label>
-          <select id="rows">
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4" selected>4</option>
-            <option value="5">5</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>QR 位置</label>
-          <select id="qrPosition" onchange="onQrPositionChange()">
-            <optgroup label="固定配置">
-              <option value="top-left">左上</option>
-              <option value="top-right">右上</option>
-              <option value="bottom-left">左下</option>
-              <option value="bottom-right" selected>右下</option>
-              <option value="bottom-center">下中央</option>
-            </optgroup>
-            <optgroup label="文字を QR で折り返し">
-              <option value="wrap-left">左に折り返し</option>
-              <option value="wrap-right">右に折り返し</option>
-            </optgroup>
-          </select>
-        </div>
-        <div class="layout-item" id="qrOffsetItem">
-          <label>QR 縦オフセット</label>
-          <input type="number" id="qrOffset" min="0" max="50" value="0" style="width:60px;">
-          <span>mm</span>
-        </div>
-        <div class="layout-item">
-          <label>QR サイズ</label>
-          <input type="number" id="qrSize" min="10" max="50" value="20" style="width:60px;">
-          <span>mm</span>
-        </div>
-        <div class="layout-item">
-          <label>QR ロゴ</label>
-          <select id="qrLogo">
-            <option value="heart" selected>❤️ ハート</option>
-            <option value="like">👍 Like</option>
-            <option value="none">なし</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>テキスト揃え</label>
-          <select id="textAlign">
-            <option value="left">左</option>
-            <option value="center">中央</option>
-            <option value="right">右</option>
-          </select>
-        </div>
-        <div class="layout-item">
-          <label>フォント</label>
-          <select id="fontFamily">
-            <option value="sans-serif">ゴシック</option>
-            <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="sub-section">
-        <div class="sub-section-title">QR 余白</div>
-        <div class="margin-row">
-          <label>横</label>
-          <input type="number" id="qrMarginH" min="0" max="15" value="3" style="width:55px;">
-          <span>mm</span>
-          <label style="margin-left:10px;">縦</label>
-          <input type="number" id="qrMarginV" min="0" max="15" value="3" style="width:55px;">
-          <span>mm</span>
-        </div>
-      </div>
-
-      <div class="sub-section">
-        <div class="sub-section-title">テキスト余白</div>
-        <div class="margin-row">
-          <label>左</label>
-          <input type="number" id="textMarginLeft" min="0" max="20" value="5" style="width:55px;">
-          <span>mm</span>
-          <label style="margin-left:10px;">右</label>
-          <input type="number" id="textMarginRight" min="0" max="20" value="5" style="width:55px;">
-          <span>mm</span>
-        </div>
-      </div>
-
-      <div class="sub-section">
-        <div class="sub-section-title">固定文 (絶対配置)</div>
-        <div class="fixed-text-row">
-          <input type="text" id="fixedTextValue" placeholder="例: ギャラリー名">
-          <button class="btn-exname"
-            onclick="document.getElementById('fixedTextValue').value=artworkData?artworkData.exName:''">展覧会名</button>
-          <select id="fixedTextPos">
-            <option value="none" selected>なし (非表示)</option>
-            <option value="top-left">左上</option>
-            <option value="top-center">上中央</option>
-            <option value="top-right">右上</option>
-            <option value="bottom-left">左下</option>
-            <option value="bottom-center">下中央</option>
-            <option value="bottom-right">右下</option>
-          </select>
-          <input type="number" id="fixedTextSize" min="6" max="20" value="9" style="width:55px;">
-          <span>pt</span>
-          <button class="ftoggle-btn" id="fixedTextBold" onclick="this.classList.toggle('active')">B</button>
-          <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
-        </div>
-        <div class="margin-row">
-          <label>横余白</label>
-          <input type="number" id="fixedTextMarginH" min="0" max="15" value="3" style="width:55px;">
-          <span>mm</span>
-          <label style="margin-left:10px;">縦余白</label>
-          <input type="number" id="fixedTextMarginV" min="0" max="15" value="3" style="width:55px;">
-          <span>mm</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
       <div class="card-title">キャプション設定</div>
       <div class="tabs">
         <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 テンプレート</div>
         <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ 詳細編集</div>
+        <div class="tab" id="tabPage" onclick="switchTab('page')">📄 ページ設定</div>
+      </div>
+
+      <!-- ページ設定タブ: 用紙 / レイアウト / QR / 余白 / 固定文 -->
+      <div id="pageTab" style="display:none;">
+        <div class="layout-row">
+          <div class="layout-item">
+            <label>用紙</label>
+            <select id="paperSize">
+              <option value="A4">A4</option>
+              <option value="Letter">Letter</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>向き</label>
+            <select id="orientation">
+              <option value="portrait">縦</option>
+              <option value="landscape">横</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>列数</label>
+            <select id="cols">
+              <option value="1">1</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>行数</label>
+            <select id="rows">
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>QR 位置</label>
+            <select id="qrPosition" onchange="onQrPositionChange()">
+              <optgroup label="固定配置">
+                <option value="top-left">左上</option>
+                <option value="top-right">右上</option>
+                <option value="bottom-left">左下</option>
+                <option value="bottom-right" selected>右下</option>
+                <option value="bottom-center">下中央</option>
+              </optgroup>
+              <optgroup label="文字を QR で折り返し">
+                <option value="wrap-left">左に折り返し</option>
+                <option value="wrap-right">右に折り返し</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="layout-item" id="qrOffsetItem">
+            <label>QR 縦オフセット</label>
+            <input type="number" id="qrOffset" min="0" max="50" value="0" style="width:60px;">
+            <span>mm</span>
+          </div>
+          <div class="layout-item">
+            <label>QR サイズ</label>
+            <input type="number" id="qrSize" min="10" max="50" value="20" style="width:60px;">
+            <span>mm</span>
+          </div>
+          <div class="layout-item">
+            <label>QR ロゴ</label>
+            <select id="qrLogo">
+              <option value="heart" selected>❤️ ハート</option>
+              <option value="like">👍 Like</option>
+              <option value="none">なし</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>テキスト揃え</label>
+            <select id="textAlign">
+              <option value="left">左</option>
+              <option value="center">中央</option>
+              <option value="right">右</option>
+            </select>
+          </div>
+          <div class="layout-item">
+            <label>フォント</label>
+            <select id="fontFamily">
+              <option value="sans-serif">ゴシック</option>
+              <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="sub-section-title">QR 余白</div>
+          <div class="margin-row">
+            <label>横</label>
+            <input type="number" id="qrMarginH" min="0" max="15" value="3" style="width:55px;">
+            <span>mm</span>
+            <label style="margin-left:10px;">縦</label>
+            <input type="number" id="qrMarginV" min="0" max="15" value="3" style="width:55px;">
+            <span>mm</span>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="sub-section-title">テキスト余白</div>
+          <div class="margin-row">
+            <label>左</label>
+            <input type="number" id="textMarginLeft" min="0" max="20" value="5" style="width:55px;">
+            <span>mm</span>
+            <label style="margin-left:10px;">右</label>
+            <input type="number" id="textMarginRight" min="0" max="20" value="5" style="width:55px;">
+            <span>mm</span>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="sub-section-title">固定文 (絶対配置)</div>
+          <div class="fixed-text-row">
+            <input type="text" id="fixedTextValue" placeholder="例: ギャラリー名">
+            <button class="btn-exname"
+              onclick="document.getElementById('fixedTextValue').value=artworkData?artworkData.exName:''">展覧会名</button>
+            <select id="fixedTextPos">
+              <option value="none" selected>なし (非表示)</option>
+              <option value="top-left">左上</option>
+              <option value="top-center">上中央</option>
+              <option value="top-right">右上</option>
+              <option value="bottom-left">左下</option>
+              <option value="bottom-center">下中央</option>
+              <option value="bottom-right">右下</option>
+            </select>
+            <input type="number" id="fixedTextSize" min="6" max="20" value="9" style="width:55px;">
+            <span>pt</span>
+            <button class="ftoggle-btn" id="fixedTextBold" onclick="this.classList.toggle('active')">B</button>
+            <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
+          </div>
+          <div class="margin-row">
+            <label>横余白</label>
+            <input type="number" id="fixedTextMarginH" min="0" max="15" value="3" style="width:55px;">
+            <span>mm</span>
+            <label style="margin-left:10px;">縦余白</label>
+            <input type="number" id="fixedTextMarginV" min="0" max="15" value="3" style="width:55px;">
+            <span>mm</span>
+          </div>
+        </div>
       </div>
 
       <div id="templateTab">
@@ -1896,8 +1897,10 @@
     function switchTab(tab) {
       document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
       document.getElementById('tabCustom').classList.toggle('active', tab === 'custom');
+      document.getElementById('tabPage').classList.toggle('active', tab === 'page');
       document.getElementById('templateTab').style.display = tab === 'template' ? 'block' : 'none';
       document.getElementById('customTab').style.display = tab === 'custom' ? 'block' : 'none';
+      document.getElementById('pageTab').style.display = tab === 'page' ? 'block' : 'none';
       // Custom タブに切り替え + グリッドが空なら現在のテンプレで自動構築
       if (tab === 'custom') {
         const grid = document.getElementById('fieldsGrid');
