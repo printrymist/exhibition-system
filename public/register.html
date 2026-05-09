@@ -2044,10 +2044,15 @@ ${fieldsText}
       // ヘッダー
       const header = document.createElement('div');
       header.className = 'artwork-row-header';
+      // is_locked が true なら 🔒 アイコンを chevron の前に表示 (作家側 input.html で編集不可状態)
+      const lockIcon = art.is_locked
+        ? '<span class="artwork-lock" title="作家側で編集不可" style="color:#888; margin-right:4px;">🔒</span>'
+        : '';
       header.innerHTML = `
         <span class="artwork-id">${art.artwork_id}</span>
         <span class="artwork-title">${art.title || art.title_en || '（タイトルなし）'}</span>
         <span class="artwork-artist">${art.artist || art.artist_en || ''}</span>
+        ${lockIcon}
         <span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleEditPanel(row, art));
       row.appendChild(header);
@@ -2074,6 +2079,26 @@ ${fieldsText}
     function buildEditPanel(row, art) {
       const panel = document.getElementById('panel_' + art.artwork_id);
       panel.innerHTML = '';
+
+      // ── ロック状態 + 切替ボタン ──
+      // ロック中は作家側 input.html での編集を不可にする (Phase 2 で input.html 対応)。
+      // 主催者は ここからいつでも切替可能。
+      const lockSection = document.createElement('div');
+      lockSection.style.cssText = 'margin-bottom:14px; padding:8px 12px; background:#f7f7f9; border:1px solid #e0e0e0; border-radius:6px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;';
+      lockSection.innerHTML = `
+        <span id="lockText_${art.artwork_id}" style="font-size:0.88em; color:#555;">${
+          art.is_locked
+            ? '🔒 <b>ロック中</b> — 作家側 (input.html) では編集不可'
+            : '🔓 <b>編集可能</b> — 作家側で編集できる状態'
+        }</span>
+        <button type="button" id="btnToggleLock_${art.artwork_id}"
+          style="padding:5px 12px; background:${art.is_locked ? '#1a73e8' : '#888'}; color:white; border:none; border-radius:5px; font-size:0.85em; cursor:pointer; white-space:nowrap;">
+          ${art.is_locked ? '🔓 ロック解除' : '🔒 ロック'}
+        </button>
+      `;
+      panel.appendChild(lockSection);
+      document.getElementById('btnToggleLock_' + art.artwork_id)
+        .addEventListener('click', () => toggleArtworkLock(art));
 
       // ── 作品情報 ──
       const artLabel = document.createElement('div');
@@ -2151,6 +2176,63 @@ ${fieldsText}
       btnDelete.addEventListener('click', () => confirmDelete(art.artwork_id));
       deleteArea.appendChild(btnDelete);
       panel.appendChild(deleteArea);
+    }
+
+    // ── 作品ロック切替 (主催者主導モデル Phase 1) ──
+    // is_locked=true: 作家側 input.html では read-only (Phase 2 で実装)
+    // is_locked=false: 作家側で編集可
+    // 主催者はここからいつでも切替可能 (作家からの「直したい」依頼に対応する用)。
+    async function toggleArtworkLock(art) {
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+      const newState = !art.is_locked;
+      const lockBtn = document.getElementById('btnToggleLock_' + art.artwork_id);
+      if (lockBtn) lockBtn.disabled = true;
+      try {
+        await window.fsSetArtwork(currentEx, art.artwork_id, { is_locked: newState });
+        // 状態反映 (art / artworkCache / 行ヘッダ / lockSection)
+        art.is_locked = newState;
+        artworkCache = artworkCache.map(a =>
+          a.artwork_id === art.artwork_id ? Object.assign({}, a, { is_locked: newState }) : a
+        );
+        // ヘッダ 🔒 アイコン更新
+        const row = document.querySelector('.artwork-row[data-id="' + art.artwork_id + '"]');
+        if (row) {
+          const header = row.querySelector('.artwork-row-header');
+          const existingLock = header.querySelector('.artwork-lock');
+          if (newState) {
+            if (!existingLock) {
+              const lockEl = document.createElement('span');
+              lockEl.className = 'artwork-lock';
+              lockEl.style.cssText = 'color:#888; margin-right:4px;';
+              lockEl.textContent = '🔒';
+              lockEl.title = '作家側で編集不可';
+              const chevron = header.querySelector('.artwork-chevron');
+              if (chevron) chevron.before(lockEl);
+            }
+          } else {
+            if (existingLock) existingLock.remove();
+          }
+        }
+        // Lock セクションのテキスト + ボタンだけ更新 (パネル全体は再構築しない、編集中の入力を保護)
+        const lockText = document.getElementById('lockText_' + art.artwork_id);
+        if (lockText) {
+          lockText.innerHTML = newState
+            ? '🔒 <b>ロック中</b> — 作家側 (input.html) では編集不可'
+            : '🔓 <b>編集可能</b> — 作家側で編集できる状態';
+        }
+        if (lockBtn) {
+          lockBtn.style.background = newState ? '#1a73e8' : '#888';
+          lockBtn.textContent = newState ? '🔓 ロック解除' : '🔒 ロック';
+        }
+      } catch (e) {
+        console.error('toggleArtworkLock failed:', e);
+        alert('ロック切替に失敗しました: ' + (e && e.message ? e.message : e));
+      } finally {
+        if (lockBtn) lockBtn.disabled = false;
+      }
     }
 
     // ── 作品更新 ──
