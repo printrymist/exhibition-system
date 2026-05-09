@@ -497,7 +497,12 @@
       <div style="font-size:0.78em; font-weight:bold; color:#34a853; margin:8px 0 10px;">SNS / Web</div>
       <div class="sns-grid" id="snsFieldsGrid"></div>
       <hr class="section-divider">
-      <div class="section-label">🖼️ 作品情報</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="section-label" style="margin-bottom:0;">🖼️ 作品情報</div>
+        <button type="button" onclick="clearArtworkFields()"
+          title="同じシリーズではない別の作品を入力する場合に使用"
+          style="font-size:0.78em; padding:4px 10px; background:white; color:#888; border:1px solid #ccc; border-radius:5px; cursor:pointer;">🆕 全項目クリア</button>
+      </div>
       <div id="artworkFieldsGrid"></div>
       <div class="msg-error" id="newFormError" style="margin-bottom:8px; min-height:0;"></div>
       <button class="btn-save" id="btnNewSave" onclick="saveNewArtwork()">💾 登録する</button>
@@ -808,15 +813,19 @@
       appendFieldsToPanel(artworkGrid, artFields, 'new_', {});
     }
 
+    // 練習モード警告は同セッション中で 1 回だけ。連続登録するとき毎回 confirm が出るのを避ける。
+    let _sandboxWarningAcknowledged = false;
+
     async function saveNewArtwork() {
       // オフライン時は Firestore 書き込みが永久 pending になるので事前で弾く
       if (!navigator.onLine) {
         document.getElementById('newFormError').innerText = '⚠ オフラインです。ネットワーク接続を確認してから登録してください。';
         return;
       }
-      // 練習モード展覧会への新規登録は事前確認
-      if (window._exIsSandbox) {
-        if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?')) return;
+      // 練習モード展覧会への新規登録は session 内で 1 回だけ事前確認
+      if (window._exIsSandbox && !_sandboxWarningAcknowledged) {
+        if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?\n\n(同じセッション中はこのメッセージは再表示されません)')) return;
+        _sandboxWarningAcknowledged = true;
       }
       let hasError = false; document.getElementById('newFormError').innerText = '';
       const artistEl = document.getElementById('new_artist'); artistEl.classList.remove('error');
@@ -878,14 +887,20 @@
       }
     }
 
+    // save banner の自動消去タイマーを 1 個だけ持っておく。
+    // 連続登録で重なると「最初の save が hide される時刻に 2 回目の banner も消える」事故になるため。
+    let _saveBannerTimer = null;
+
     // 登録成功後の後処理 (banner + 連続入力用フォームリセット + 一覧 refresh)。
     // 画像アップロード失敗の retry が成功したときも同じ流れに合流させたいので関数化。
     async function finalizeSaveSuccess(newId) {
       document.getElementById('btnNewSave').disabled = false;
       const banner = document.getElementById('saveBanner');
       banner.textContent = '✅ ' + newId + ' を登録しました。'; banner.style.display = 'block';
-      setTimeout(() => { banner.style.display = 'none'; }, 3000);
+      if (_saveBannerTimer) clearTimeout(_saveBannerTimer);
+      _saveBannerTimer = setTimeout(() => { banner.style.display = 'none'; _saveBannerTimer = null; }, 3000);
       // 連続入力支援: 画像だけクリア、テキスト系は全部保持。タイトルも保持。
+      // 別シリーズの作品を入力するときは「🆕 全項目クリア」ボタンで一括クリアできる。
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
         const def = FIELD_MAP[f.name]; if (!def) return;
         if (def.type === 'image') {
@@ -901,6 +916,25 @@
       if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
       const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
       if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
+    }
+
+    // 「🆕 全項目クリア」ボタンの handler。連続入力で前作の値が残ったまま別シリーズに進むときに使う。
+    // 作家情報・SNS は保持 (作家が変わるなら検索からやり直す想定)。作品情報のみクリア。
+    function clearArtworkFields() {
+      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
+        const def = FIELD_MAP[f.name]; if (!def) return;
+        if (def.type === 'image') {
+          const file = document.getElementById('new_' + f.name); if (file) file.value = '';
+          const prev = document.getElementById('new_' + f.name + '_preview');
+          if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); delete prev.dataset.pending; }
+          return;
+        }
+        const el = document.getElementById('new_' + f.name);
+        if (el) { el.value = ''; el.classList.remove('error'); }
+      });
+      document.getElementById('newFormError').innerText = '';
+      const titleEl = document.getElementById('new_title');
+      if (titleEl) titleEl.focus();
     }
 
     // ── 画像アップロード部分失敗のリカバリ ──
