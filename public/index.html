@@ -816,7 +816,11 @@
     }
 
     function regChangeStep(n) {
-      document.querySelectorAll('#regWrapper .step').forEach((s, i) => s.classList.toggle('active', i === n));
+      // ID で直接活性化 (旧版は forEach の index を使っていたが、dead code cleanup で
+      // regStep0 を削除した結果インデックスがずれていた。step 番号 = ID 末尾の数字に統一)
+      document.querySelectorAll('#regWrapper .step').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('regStep' + n);
+      if (target) target.classList.add('active');
       applyLang();
       window.scrollTo(0, 0);
     }
