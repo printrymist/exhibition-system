@@ -504,6 +504,21 @@
     </div>
   </div>
 
+  <!-- 作品削除の確認モーダル (register.html の B-2 と同パターン) -->
+  <div id="deleteArtworkModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:white; border-radius:10px; padding:24px; max-width:440px; width:100%;">
+      <h3 style="margin:0 0 12px 0; color:#d93025;">🗑️ 作品を削除</h3>
+      <p style="font-size:0.92em; line-height:1.6; margin:0 0 8px 0;">以下の作品を削除します。<strong>この操作は取り消せません。</strong></p>
+      <div id="deleteArtworkInfo" style="font-size:0.88em; line-height:1.55; margin:10px 0; padding:10px; background:#f7f7f9; border-radius:6px; color:#333;"></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+        <button onclick="closeDeleteArtworkModal()"
+          style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
+        <button id="btnDeleteArtworkConfirm" onclick="executeDeleteFromModal()"
+          style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">削除する</button>
+      </div>
+    </div>
+  </div>
+
   <script src="field-defs.js"></script>
   <script>
     // =========================================================
@@ -708,24 +723,43 @@
       deleteArea.appendChild(btnDelete); panel.appendChild(deleteArea);
     }
 
+    // 削除モーダル経由のフロー (旧: card 内の innerHTML 書き換え式)
+    let _pendingDeleteArtworkId = null;
+
     function confirmDelete(artworkId) {
-      const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = `<div class="delete-confirm"><span>⚠️ 本当に削除しますか？この操作は取り消せません。</span><button class="btn-delete-cancel" id="btnDelCancel_${artworkId}">キャンセル</button><button class="btn-delete-ok" id="btnDelOk_${artworkId}">削除する</button></div>`;
-      document.getElementById('btnDelCancel_' + artworkId).addEventListener('click', () => cancelDelete(artworkId));
-      document.getElementById('btnDelOk_' + artworkId).addEventListener('click', () => executeDelete(artworkId));
+      _pendingDeleteArtworkId = artworkId;
+      const info = document.getElementById('deleteArtworkInfo');
+      // existingWorks から該当作品を引いてラベル化 (タイトル + 作家名 + ID)
+      const a = (existingWorks || []).find(x => x.artwork_id === artworkId);
+      const label = a
+        ? `<strong>${escapeHtmlForModal(a.title || '(タイトル未入力)')}</strong>` +
+          (a.artist ? ` / ${escapeHtmlForModal(a.artist)}` : '') +
+          ` <span style="color:#888;">(${escapeHtmlForModal(artworkId)})</span>`
+        : `<strong>${escapeHtmlForModal(artworkId)}</strong>`;
+      if (info) info.innerHTML = label;
+      document.getElementById('deleteArtworkModal').style.display = 'flex';
     }
 
-    function cancelDelete(artworkId) {
-      const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = '';
-      const btn = document.createElement('button'); btn.className = 'btn-delete'; btn.textContent = '🗑️ この作品を削除する';
-      btn.addEventListener('click', () => confirmDelete(artworkId));
-      area.appendChild(btn);
+    function closeDeleteArtworkModal() {
+      _pendingDeleteArtworkId = null;
+      document.getElementById('deleteArtworkModal').style.display = 'none';
     }
 
-    function executeDelete(artworkId) {
-      const area = document.getElementById('deleteArea_' + artworkId);
-      area.innerHTML = '<span class="spinner-sm"></span> 削除中...';
+    function escapeHtmlForModal(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function executeDeleteFromModal() {
+      const artworkId = _pendingDeleteArtworkId;
+      if (!artworkId) { closeDeleteArtworkModal(); return; }
+      // オフライン時は Firestore 書き込みが永久 pending になるので事前で弾く
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+      const confirmBtn = document.getElementById('btnDeleteArtworkConfirm');
+      if (confirmBtn) confirmBtn.disabled = true;
+
       window.fsDeleteArtwork(ex, artworkId)
         .then(() => {
           const card = document.querySelector('.artwork-card[data-id="' + artworkId + '"]');
@@ -733,9 +767,13 @@
           existingWorks = existingWorks.filter(a => a.artwork_id !== artworkId);
           document.getElementById('listTitle').textContent = currentArtist + ' さんの作品（' + existingWorks.length + '件）';
           if (existingWorks.length === 0) { document.getElementById('listCard').style.display = 'none'; showNewForm(); }
+          closeDeleteArtworkModal();
+          if (confirmBtn) confirmBtn.disabled = false;
         })
         .catch(err => {
-          area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">Error: ' + err.message + '</span>';
+          alert('削除に失敗しました: ' + (err && err.message ? err.message : err));
+          closeDeleteArtworkModal();
+          if (confirmBtn) confirmBtn.disabled = false;
         });
     }
 
@@ -767,6 +805,11 @@
     }
 
     async function saveNewArtwork() {
+      // オフライン時は Firestore 書き込みが永久 pending になるので事前で弾く
+      if (!navigator.onLine) {
+        document.getElementById('newFormError').innerText = '⚠ オフラインです。ネットワーク接続を確認してから登録してください。';
+        return;
+      }
       // 練習モード展覧会への新規登録は事前確認
       if (window._exIsSandbox) {
         if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?')) return;
@@ -842,6 +885,12 @@
     }
 
     async function updateArtwork(artworkId, originalArtist, card) {
+      // オフライン時は Firestore 書き込みが永久 pending になるので事前で弾く
+      if (!navigator.onLine) {
+        const msgEl = document.getElementById('editMsg_' + artworkId);
+        if (msgEl) { msgEl.textContent = '⚠ オフラインです。ネットワーク接続を確認してから更新してください。'; msgEl.style.color = '#d93025'; }
+        return;
+      }
       const prefix = 'ep_' + artworkId + '_';
       const artworkData = {};
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
