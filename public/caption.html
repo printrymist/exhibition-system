@@ -1570,6 +1570,21 @@
     </div>
   </div>
 
+  <!-- 保存テンプレ削除の確認モーダル (register/input.html B-2 と同パターン) -->
+  <div id="deleteSavedTemplateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:white; border-radius:10px; padding:24px; max-width:440px; width:100%;">
+      <h3 style="margin:0 0 12px 0; color:#d93025;">🗑️ 保存テンプレを削除</h3>
+      <p style="font-size:0.92em; line-height:1.6; margin:0 0 8px 0;">以下のテンプレを削除します。<strong>この操作は取り消せません。</strong></p>
+      <div id="deleteSavedTemplateInfo" style="font-size:0.88em; line-height:1.55; margin:10px 0; padding:10px; background:#f7f7f9; border-radius:6px; color:#333;"></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+        <button onclick="closeDeleteSavedTemplateModal()"
+          style="padding:9px 18px; background:#eee; color:#333; border:none; border-radius:6px; font-size:14px; cursor:pointer;">キャンセル</button>
+        <button id="btnDeleteSavedTemplateConfirm" onclick="executeDeleteSavedTemplateFromModal()"
+          style="padding:9px 18px; background:#d93025; color:white; border:none; border-radius:6px; font-size:14px; font-weight:bold; cursor:pointer;">削除する</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="offline-banner.js"></script>
   <script src="field-defs.js"></script>
@@ -3375,17 +3390,59 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
+    // 保存テンプレ削除: register/input.html の B-2 と同じく共通モーダルに統一。
+    // 旧 confirm() 直書きから _pendingDeleteTemplate にスタッシュ → モーダルで二段確認 →
+    // 確認ボタンで実 delete のフローへ。
+    let _pendingDeleteTemplate = null;
+
     function deleteSavedTemplate(name, btn) {
-      if (!confirm(`「${name}」を削除しますか?`)) return;
+      _pendingDeleteTemplate = { name: name, btn: btn || null };
+      const info = document.getElementById('deleteSavedTemplateInfo');
+      // 保存テンプレ一覧から該当 entry を引いて作成日時等の context を表示
+      // (officials / personals 両方を見る、name 一致で取れる範囲で)
+      let createdAt = '';
+      const cardBtn = document.querySelector('[data-tpl-name="' + (window.CSS && CSS.escape ? CSS.escape(name) : String(name).replace(/"/g, '\\"')) + '"]');
+      if (cardBtn && cardBtn.parentNode) {
+        const dateDiv = cardBtn.parentNode.querySelector('div:nth-of-type(2)');
+        if (dateDiv) createdAt = dateDiv.textContent || '';
+      }
+      const safeName = String(name).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const safeDate = String(createdAt).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      if (info) {
+        info.innerHTML = `<strong>${safeName}</strong>` + (safeDate ? ` <span style="color:#888;">(${safeDate})</span>` : '');
+      }
+      const btnConfirm = document.getElementById('btnDeleteSavedTemplateConfirm');
+      if (btnConfirm) btnConfirm.disabled = false;
+      document.getElementById('deleteSavedTemplateModal').style.display = 'flex';
+    }
+
+    function closeDeleteSavedTemplateModal() {
+      _pendingDeleteTemplate = null;
+      document.getElementById('deleteSavedTemplateModal').style.display = 'none';
+    }
+
+    function executeDeleteSavedTemplateFromModal() {
+      const pending = _pendingDeleteTemplate;
+      if (!pending) { closeDeleteSavedTemplateModal(); return; }
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してください。');
+        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
-      if (btn) btn.disabled = true;
-      const docId = sanitizeTplId(name);
+      const btnConfirm = document.getElementById('btnDeleteSavedTemplateConfirm');
+      if (btnConfirm) btnConfirm.disabled = true;
+      if (pending.btn) pending.btn.disabled = true;
+
+      const docId = sanitizeTplId(pending.name);
       firebase.firestore().collection('caption_templates').doc(docId).delete()
-        .then(() => loadSavedTemplates())
-        .catch(err => { alert('エラー: ' + err.message); if (btn) btn.disabled = false; });
+        .then(() => {
+          closeDeleteSavedTemplateModal();
+          loadSavedTemplates();
+        })
+        .catch(err => {
+          alert('エラー: ' + (err && err.message ? err.message : err));
+          if (btnConfirm) btnConfirm.disabled = false;
+          if (pending.btn) pending.btn.disabled = false;
+        });
     }
 
     function showSaveMsg(msg, color) {
