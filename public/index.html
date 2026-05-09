@@ -211,48 +211,7 @@
       margin-bottom: 15px;
     }
 
-    /* Phase A-2: 自分のコメント一覧 (編集・削除付き) */
-    .my-comment-item {
-      background: #f7f7f9;
-      border-radius: 6px;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      font-size: 0.92em;
-      line-height: 1.55;
-    }
-    .my-comment-body { white-space: pre-wrap; word-break: break-word; color: #333; margin-bottom: 6px; }
-    .my-comment-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 0.8em; color: #888; }
-    .my-comment-meta button {
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 3px 9px;
-      font-size: 0.95em;
-      cursor: pointer;
-      color: #555;
-    }
-    .my-comment-meta button:hover { background: #eee; }
-    .my-comment-meta .delete-btn { color: #d93025; border-color: #d93025; }
-    .my-comment-edit-area textarea {
-      width: 100%;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 6px;
-      font-size: 0.95em;
-      font-family: inherit;
-      resize: vertical;
-    }
-    .my-comment-edit-actions { display: flex; gap: 6px; margin-top: 6px; }
-    .my-comment-edit-actions button {
-      padding: 5px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
-      border: 1px solid #1a73e8;
-    }
-    .my-comment-edit-actions .save-btn { background: #1a73e8; color: white; }
-    .my-comment-edit-actions .cancel-btn { background: white; color: #1a73e8; }
+    /* (Phase A-2 簡素化で my-comment-* CSS は撤去。Thank You ページの単一取消ボタン方式に変更) */
 
     .work-img {
       width: 100%;
@@ -450,17 +409,15 @@
         <div id="ansLoading">読み込み中...</div>
         <div id="ansMainContent" style="display:none;">
           <div class="ex-header" id="ansDisplayExName"></div>
-          <!-- Phase A-2: いいね受付済み表示 + 取消ボタン (visitor 認証済みのときだけ機能)
-               wrapper の display は CSS の #ansAlreadyLikedMsg { display:none } を尊重し、
-               JS 側で voted_* 検出時に flex に切替える。 -->
-          <div id="ansAlreadyLikedMsg">
-            <span id="ansAlreadyLikedText">いいね受付済みです、追加コメントを受け付けます。</span>
-            <button type="button" id="ansLikeUndoBtn" onclick="onLikeUndo()"
-              style="display:none; padding:5px 14px; margin-left:10px; background:white; color:#d93025; border:1px solid #d93025; border-radius:6px; font-size:0.82em; cursor:pointer;">🔄 いいね取消</button>
-          </div>
+          <div id="ansAlreadyLikedMsg">いいね受付済みです、追加コメントを受け付けます。</div>
           <div id="ansThankYou" style="display:none;">
             <div class="heart-icon">♥</div>
             <div id="ansCountMsg" style="font-size:1.1em; font-weight:bold; margin-bottom:15px;"></div>
+            <!-- Phase A-2 簡素化: 直前の投稿だけを取消す軽量 UI。
+                 visitor 認証は ensureVisitorAuth で済んでいる前提 (失敗時は表示しない)。
+                 撤去後はリロードしてフォーム再表示。 -->
+            <button type="button" id="ansSubmittedUndoBtn" onclick="onSubmittedUndo()"
+              style="display:none; padding:6px 16px; margin-bottom:14px; background:white; color:#d93025; border:1px solid #d93025; border-radius:6px; font-size:0.88em; cursor:pointer;">🔄 取消</button>
             <div id="ansSnsSection">
               <p id="ansSnsLabel" style="color:#666; font-size:0.85em;">作家の活動をチェック</p>
               <div id="ansSnsButtons" class="sns-area"></div>
@@ -484,13 +441,6 @@
                 <textarea name="comment" id="ansCommentInput" rows="4" placeholder="作品の感想をどうぞ！" required></textarea>
                 <button type="submit" id="ansSubmitBtn" class="btn-black">感想を送って「いいね」</button>
               </form>
-              <!-- Phase A-2: 自分の過去コメント一覧 (visitor 認証成功時のみ機能)。書き間違い・気が変わった
-                   コメントを編集 / 削除できる。subscribeToMyComments で onSnapshot 購読、書き換えは
-                   _visitorApp.firestore() で auth=visitor 経由 → Firestore Rules の sessionId 一致を通る。 -->
-              <div id="ansMyCommentsSection" style="display:none; margin-top:18px; padding-top:14px; border-top:1px solid #eee;">
-                <div style="font-size:0.85em; color:#555; margin-bottom:8px; font-weight:bold;">あなたのコメント</div>
-                <div id="ansMyCommentsList"></div>
-              </div>
               <!-- 案 C: 作家本人として認識されたとき (ニックネーム = 作家名) のみ表示。
                    搬入時の写真追加・差し替えを「登録解除 → 全項目再入力」せずに済ませる裏口。
                    image_url だけ書き換える。テキスト情報や is_locked は触らない。 -->
@@ -625,9 +575,7 @@
       document.getElementById('langToggleReg').innerText = t('langBtn');
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
       document.getElementById('ansLoading').innerText = t('ansLoading');
-      // Phase A-2: wrapper の innerText を直接書き換えると中の取消ボタンが消えるので、
-      // テキスト用の span だけに反映する。
-      document.getElementById('ansAlreadyLikedText').innerText = t('ansAlreadyLiked');
+      document.getElementById('ansAlreadyLikedMsg').innerText = t('ansAlreadyLiked');
       document.getElementById('ansSnsLabel').innerText = t('ansSnsLabel');
       document.getElementById('ansNicknameInput').placeholder = t('ansNickname');
       document.getElementById('ansCommentInput').placeholder = t('ansComment');
@@ -722,9 +670,7 @@
         if (data.isRegistered) {
           document.getElementById('ansWrapper').style.display = 'block';
           // Phase A-2: visitor 認証 + コメント subscribe
-          ensureVisitorAuth().then(ok => {
-            if (ok) subscribeToMyComments();
-          });
+          ensureVisitorAuth();
           ansInit(exVal, idVal, data);
         } else {
           document.getElementById('regWrapper').style.display = 'block';
@@ -752,9 +698,7 @@
           document.getElementById('ansWrapper').style.display = 'block';
           // Phase A-2: 登録済 artwork のとき visitor sign-in を裏で走らせる。
           // 失敗してもいいね・コメントの追加は anon でできる (delete/edit だけ無効になる)。
-          ensureVisitorAuth().then(ok => {
-            if (ok) subscribeToMyComments();
-          });
+          ensureVisitorAuth();
           ansInit(exVal, idVal, data);
         } else {
           document.getElementById('regWrapper').style.display = 'block';
@@ -1065,15 +1009,7 @@
       if (localStorage.getItem("voted_" + ex + "_" + id)) {
         document.getElementById('ansIsLikeInput').value = "0";
         document.getElementById('ansSubmitBtn').innerText = t('ansSubmitBtnAdded');
-        document.getElementById('ansAlreadyLikedMsg').style.display = 'flex';
-        // Phase A-2: visitor 認証が成功したら「いいね取消」ボタンを有効化。
-        // 失敗時 (旧 URL の exp/sig 無し等) は表示しない (Firestore Rules で delete が通らないため)。
-        ensureVisitorAuth().then(ok => {
-          if (ok) {
-            const btn = document.getElementById('ansLikeUndoBtn');
-            if (btn) btn.style.display = 'inline-block';
-          }
-        });
+        document.getElementById('ansAlreadyLikedMsg').style.display = 'block';
       }
       var savedNickname = localStorage.getItem("nickname_" + ex);
       if (savedNickname) {
@@ -1138,199 +1074,38 @@
     // 旧 ansResetForm (isAdmin_* localStorage で gate していた応援記録リセット) は撤去。
     // localStorage に isAdmin_* を書き込むコードがどこにも無く実質永久に dead だった。
 
-    // Phase A-2: 自分のコメント一覧 (subscribeToMyComments) + 編集 (onMyCommentEdit / Save) + 削除 (onMyCommentDelete)
-    // - visitorApp の Firestore で onSnapshot 購読 (auth=visitor が乗る)
-    // - sessionId 一致 + comment 非空 のみ自分のコメントとして表示
-    // - 編集は inline textarea、保存は update (Rules で comment field のみ書ける制限済)
-    // - 削除は doc.delete (Rules で sessionId 一致が要る)
-    let _unsubMyComments = null;
-    function subscribeToMyComments() {
-      if (_unsubMyComments) { try { _unsubMyComments(); } catch(_){} }
-      const visitorFsDb = _visitorApp.firestore();
-      const mySid = getOrCreateSessionId();
-      _unsubMyComments = visitorFsDb.collection('likes')
-        .where('exCode', '==', exVal)
-        .where('workId', '==', idVal)
-        .onSnapshot(snap => {
-          const mine = [];
-          snap.forEach(d => {
-            const data = d.data();
-            const txt = (data.comment || '').trim();
-            if (data.sessionId === mySid && txt) {
-              mine.push({ id: d.id, comment: txt, ts: data.timestamp || '', nickname: data.nickname || '' });
-            }
-          });
-          mine.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
-          renderMyComments(mine);
-        }, err => console.warn('my comments listener:', err));
-    }
+    // Phase A-2 簡素化: 直前の投稿を Thank You ページ上で取消す軽量 UI。
+    // ページ遷移を跨いだ「過去のコメントを編集・削除」は別セッションの sessionId 不一致で
+    // 動作不安定だったので断念。きちんとした取消は来場者の Auth 化 (将来) で対応する方針。
+    let _lastSubmitted = null; // { docId, wasLike }
 
-    function renderMyComments(items) {
-      const section = document.getElementById('ansMyCommentsSection');
-      const list = document.getElementById('ansMyCommentsList');
-      if (!section || !list) return;
-      if (!items || items.length === 0) {
-        section.style.display = 'none';
-        list.innerHTML = '';
+    async function onSubmittedUndo() {
+      if (!_lastSubmitted || !_lastSubmitted.docId) {
+        alert('取消対象がありません。');
         return;
       }
-      section.style.display = 'block';
-      list.innerHTML = items.map(c => {
-        const idAttr = String(c.id).replace(/[^A-Za-z0-9_-]/g, '');
-        return `
-          <div class="my-comment-item" data-cid="${idAttr}">
-            <div class="my-comment-body">${escapeHtmlForMC(c.comment)}</div>
-            <div class="my-comment-meta">
-              <span style="flex:1;">${escapeHtmlForMC(formatTs(c.ts))}</span>
-              <button type="button" onclick="onMyCommentEdit('${idAttr}')">✏️ 編集</button>
-              <button type="button" class="delete-btn" onclick="onMyCommentDelete('${idAttr}')">🗑 削除</button>
-            </div>
-          </div>`;
-      }).join('');
-    }
-
-    function escapeHtmlForMC(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-
-    function onMyCommentEdit(commentId) {
-      const item = document.querySelector('.my-comment-item[data-cid="' + commentId + '"]');
-      if (!item) return;
-      const bodyEl = item.querySelector('.my-comment-body');
-      const metaEl = item.querySelector('.my-comment-meta');
-      if (!bodyEl || !metaEl) return;
-      const currentText = bodyEl.textContent;
-      // body をテキストエリアに置換、meta を 保存/キャンセル に置換
-      const editArea = document.createElement('div');
-      editArea.className = 'my-comment-edit-area';
-      const ta = document.createElement('textarea');
-      ta.rows = 3;
-      ta.value = currentText;
-      editArea.appendChild(ta);
-      bodyEl.replaceWith(editArea);
-      metaEl.innerHTML = `
-        <div class="my-comment-edit-actions">
-          <button type="button" class="save-btn" onclick="onMyCommentSave('${commentId}')">💾 保存</button>
-          <button type="button" class="cancel-btn" onclick="onMyCommentCancel('${commentId}')">キャンセル</button>
-        </div>
-      `;
-      ta.focus();
-    }
-
-    function onMyCommentCancel(commentId) {
-      // 元の表示に戻す = リスナーの最新 snapshot で再描画させる (= subscribeToMyComments が
-      // 既に最新を持っているので、明示的に subscribe を kick する代わりに 1 回 list を空にしてしまう手もあるが、
-      // 編集中の他コメントを巻き込まないために単純な方法: 該当 item だけ書き戻し)。
-      // 簡便に: ページに残ってる commentsByWork キャッシュは無いので、subscribeToMyComments の最新 snapshot を
-      // 再呼び出し → 再描画する。ここでは listener が既に最新を持っているはずだが、再 render を簡単にやるため、
-      // データを再フェッチして再描画する。
-      const visitorFsDb = _visitorApp.firestore();
-      visitorFsDb.collection('likes').doc(commentId).get()
-        .then(d => {
-          if (!d.exists) return;
-          // 単純に subscribe が再描画する形にしたいので、そのまま小細工なし: 強制再 render
-          // = listener はあるはずなので、何もせず subscribe が次の change を拾うのを待つ手もあるが
-          // 編集モード解除のため、一旦ページの該当 item を「saved」状態に戻す
-          const item = document.querySelector('.my-comment-item[data-cid="' + commentId + '"]');
-          if (!item) return;
-          const data = d.data() || {};
-          item.innerHTML = `
-            <div class="my-comment-body">${escapeHtmlForMC(data.comment || '')}</div>
-            <div class="my-comment-meta">
-              <span style="flex:1;">${escapeHtmlForMC(formatTs(data.timestamp || ''))}</span>
-              <button type="button" onclick="onMyCommentEdit('${commentId}')">✏️ 編集</button>
-              <button type="button" class="delete-btn" onclick="onMyCommentDelete('${commentId}')">🗑 削除</button>
-            </div>
-          `;
-        });
-    }
-
-    async function onMyCommentSave(commentId) {
-      const item = document.querySelector('.my-comment-item[data-cid="' + commentId + '"]');
-      if (!item) return;
-      const ta = item.querySelector('textarea');
-      if (!ta) return;
-      const newText = (ta.value || '').trim();
-      if (!newText) { alert('コメントを入力してください'); return; }
-      if (newText.length > 500) { alert('コメントは 500 文字以内で入力してください'); return; }
-      if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
-      const ok = await ensureVisitorAuth();
-      if (!ok) { alert('認証エラー: 新しい QR コードで開き直してください。'); return; }
-      try {
-        const visitorFsDb = _visitorApp.firestore();
-        await visitorFsDb.collection('likes').doc(commentId).update({ comment: newText });
-        // 一覧はリスナー経由で自動更新
-      } catch (e) {
-        console.error('comment update failed:', e);
-        alert('保存に失敗しました: ' + (e && e.message ? e.message : e));
-      }
-    }
-
-    async function onMyCommentDelete(commentId) {
-      if (!confirm('このコメントを削除しますか?')) return;
-      if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
-      const ok = await ensureVisitorAuth();
-      if (!ok) { alert('認証エラー: 新しい QR コードで開き直してください。'); return; }
-      try {
-        const visitorFsDb = _visitorApp.firestore();
-        await visitorFsDb.collection('likes').doc(commentId).delete();
-        // 一覧はリスナー経由で自動更新
-      } catch (e) {
-        console.error('comment delete failed:', e);
-        alert('削除に失敗しました: ' + (e && e.message ? e.message : e));
-      }
-    }
-
-    function formatTs(ts) {
-      if (!ts) return '';
-      try {
-        const d = new Date(ts);
-        if (isNaN(d.getTime())) return '';
-        const m = (n) => String(n).padStart(2, '0');
-        return d.getFullYear() + '/' + m(d.getMonth()+1) + '/' + m(d.getDate())
-          + ' ' + m(d.getHours()) + ':' + m(d.getMinutes());
-      } catch (e) { return ''; }
-    }
-
-    // Phase A-2: 自分のいいね取消し。Firestore で sessionId 一致の isLike=true doc を全部 delete。
-    // visitor 認証が成功している前提 (ensureVisitorAuth → custom token claims に sessionId)。
-    async function onLikeUndo() {
-      if (!confirm('この作品のいいねを取消します。よろしいですか?')) return;
       if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
       const ok = await ensureVisitorAuth();
       if (!ok) {
         alert('認証ができませんでした。新しい QR コードで開き直してください。');
         return;
       }
-      const btn = document.getElementById('ansLikeUndoBtn');
+      const btn = document.getElementById('ansSubmittedUndoBtn');
       if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
       try {
-        const sid = getOrCreateSessionId();
-        // 自分の isLike=true doc を抽出して delete。
-        // 重要: delete は visitor app の Firestore (= signIn 済の auth context を持つ) で行う。
-        // default app の fsDb は auth=null のままなので Rules の sessionId 一致チェックを通れない。
         const visitorFsDb = _visitorApp.firestore();
-        const snap = await visitorFsDb.collection('likes')
-          .where('exCode', '==', exVal)
-          .where('workId', '==', idVal)
-          .get();
-        const tasks = [];
-        snap.forEach(d => {
-          const data = d.data();
-          if (data.sessionId === sid && data.isLike === true) {
-            tasks.push(d.ref.delete());
-          }
-        });
-        await Promise.all(tasks);
-
-        // localStorage の voted_ も消して状態を初期化、画面をリロード
-        localStorage.removeItem('voted_' + exVal + '_' + idVal);
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 いいね取消'; }
+        await visitorFsDb.collection('likes').doc(_lastSubmitted.docId).delete();
+        if (_lastSubmitted.wasLike) {
+          // 初回 like だった場合は voted_* もクリア (再 submit できるように)
+          localStorage.removeItem('voted_' + exVal + '_' + idVal);
+        }
+        _lastSubmitted = null;
+        // フォームに戻す = reloadApp で状態を再構築
         reloadApp();
       } catch (e) {
-        console.error('like undo failed:', e);
+        console.error('submitted undo failed:', e);
         alert('取消に失敗しました: ' + (e && e.message ? e.message : e));
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 いいね取消'; }
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 取消'; }
       }
     }
 
@@ -1382,8 +1157,10 @@
         }
 
         // 通常の visitor フロー: Firestore likes に直接書き込み。
+        let submittedDocId = null;
+        const wasLikeSubmit = formPayload.isLike === "1";
         if (window.fsAddLike) {
-          await window.fsAddLike({
+          submittedDocId = await window.fsAddLike({
             exCode: exVal,
             ex_name: (document.getElementById('ansDisplayExName') || {}).innerText || '',
             workId: idVal,
@@ -1392,15 +1169,32 @@
             sessionId: formPayload.sessionId,
             nickname: formPayload.nickname,
             comment: formPayload.comment,
-            isLike: formPayload.isLike === "1"
+            isLike: wasLikeSubmit
           });
         }
+
+        // Phase A-2 簡素化: 直前送信を記録 → Thank You ページの取消ボタンを有効化
+        // 同セッション内の同タブだけで使うので、visitor 認証成功時のみ表示する。
+        _lastSubmitted = submittedDocId ? { docId: submittedDocId, wasLike: wasLikeSubmit } : null;
 
         document.getElementById('ansInputView').style.display = 'none';
         var alreadyMsg = document.getElementById('ansAlreadyLikedMsg');
         if (alreadyMsg) alreadyMsg.style.display = 'none';
         document.getElementById('ansThankYou').style.display = 'block';
         document.getElementById('ansThankYou').classList.add('fade-in');
+
+        // 取消ボタンは visitor 認証成功 + docId が取れた時のみ表示
+        const undoBtn = document.getElementById('ansSubmittedUndoBtn');
+        if (undoBtn) {
+          undoBtn.disabled = false;
+          undoBtn.textContent = '🔄 取消';
+          undoBtn.style.display = 'none';
+          if (_lastSubmitted) {
+            ensureVisitorAuth().then(ok => {
+              if (ok && _lastSubmitted) undoBtn.style.display = 'inline-block';
+            });
+          }
+        }
 
         var isAdditional = (formPayload.isLike === "0");
         let fsCount = 0;
@@ -1502,7 +1296,8 @@
       }
     };
     window.fsAddLike = async (data) => {
-      await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
+      const ref = await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
+      return ref.id;
     };
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
 
