@@ -1164,6 +1164,29 @@ exports.submitArtwork = onCall(
       }
     }
 
+    // 主催者主導 + ロックモデル (Phase 2):
+    // - artist 経路 (exhibition_token / artwork_token) は is_locked=false (unlock) を書けない
+    // - 既にロック済の作品には他フィールドの書き込みも block (作家側からは編集不可)
+    // operator / organizer は常に解除可・編集可。
+    const isArtistAuth = (authMode === "exhibition_token" || authMode === "artwork_token");
+    if (isArtistAuth) {
+      if ("is_locked" in cleanFields && cleanFields.is_locked === false) {
+        throw new HttpsError(
+          "permission-denied",
+          "ロック解除は主催者経由でのみ可能です",
+        );
+      }
+      if (existingSnap.exists) {
+        const existing = existingSnap.data() || {};
+        if (existing.is_locked === true) {
+          throw new HttpsError(
+            "permission-denied",
+            "この作品はロックされています。編集が必要な場合は主催者にご連絡ください",
+          );
+        }
+      }
+    }
+
     const writePayload = Object.assign({}, cleanFields, {
       exCode: exCode,
       artworkId: artworkId,

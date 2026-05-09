@@ -678,7 +678,11 @@
       const card = document.createElement('div');
       card.className = 'artwork-card'; card.dataset.id = art.artwork_id;
       const header = document.createElement('div'); header.className = 'artwork-card-header';
-      header.innerHTML = `<span class="artwork-id-badge">${art.artwork_id}</span><span class="artwork-card-title">${art.title || art.title_en || '（タイトルなし）'}</span><span class="artwork-chevron">▼</span>`;
+      // is_locked が true なら 🔒 アイコンを chevron の前に表示 (主催者ロック中)
+      const lockIcon = art.is_locked
+        ? '<span class="artwork-lock" title="主催者ロック中" style="color:#888; margin-right:4px;">🔒</span>'
+        : '';
+      header.innerHTML = `<span class="artwork-id-badge">${art.artwork_id}</span><span class="artwork-card-title">${art.title || art.title_en || '（タイトルなし）'}</span>${lockIcon}<span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleCard(card, art));
       card.appendChild(header);
       const panel = document.createElement('div'); panel.className = 'edit-panel'; panel.id = 'editPanel_' + art.artwork_id;
@@ -697,6 +701,17 @@
     function buildEditPanel(card, art) {
       const panel = document.getElementById('editPanel_' + art.artwork_id);
       panel.innerHTML = '';
+      const locked = !!art.is_locked;
+
+      // ロック中バナー: 上部に表示して文脈を明示
+      if (locked) {
+        const lockBanner = document.createElement('div');
+        lockBanner.style.cssText = 'background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; padding:10px 12px; margin-bottom:14px; font-size:0.88em; color:#a85700; line-height:1.55;';
+        lockBanner.innerHTML = '🔒 <b>主催者によりロックされています</b><br>編集が必要な場合は主催者にご連絡ください。';
+        panel.appendChild(lockBanner);
+      }
+
+      // フィールド (ロック時は後で disabled に)
       const artLabel = document.createElement('div'); artLabel.className = 'section-label'; artLabel.textContent = '🖼️ 作品情報'; panel.appendChild(artLabel);
       const artFields = activeFields.filter(f => FIELD_MAP[f.name] && !ALL_ARTIST_FIELDS.includes(f.name));
       appendFieldsToPanel(panel, artFields, 'ep_' + art.artwork_id + '_', art);
@@ -714,18 +729,90 @@
       const snsGrid = document.createElement('div'); snsGrid.className = 'sns-grid';
       SNS_FIELDS.forEach(name => { snsGrid.appendChild(makeField({ name, label: FIELD_MAP[name].label, desc: FIELD_MAP[name].desc, textarea: false }, false, 'ep_' + art.artwork_id + '_', art[name] || '')); });
       panel.appendChild(snsGrid);
+
+      // 操作ボタン: 更新 (ロック前のみ) + 閉じる/キャンセル
       const btnRow = document.createElement('div'); btnRow.className = 'btn-row';
-      const btnSave = document.createElement('button'); btnSave.className = 'btn-save'; btnSave.textContent = '💾 更新する';
-      btnSave.addEventListener('click', () => updateArtwork(art.artwork_id, art.artist, card));
-      const btnCancel = document.createElement('button'); btnCancel.className = 'btn-cancel'; btnCancel.textContent = 'キャンセル';
+      if (!locked) {
+        const btnSave = document.createElement('button'); btnSave.className = 'btn-save'; btnSave.textContent = '💾 更新する';
+        btnSave.addEventListener('click', () => updateArtwork(art.artwork_id, art.artist, card));
+        btnRow.appendChild(btnSave);
+      }
+      const btnCancel = document.createElement('button'); btnCancel.className = 'btn-cancel'; btnCancel.textContent = locked ? '閉じる' : 'キャンセル';
       btnCancel.addEventListener('click', () => card.classList.remove('open'));
-      btnRow.appendChild(btnSave); btnRow.appendChild(btnCancel); panel.appendChild(btnRow);
+      btnRow.appendChild(btnCancel);
+      panel.appendChild(btnRow);
       const msg = document.createElement('div'); msg.className = 'save-msg'; msg.id = 'editMsg_' + art.artwork_id; panel.appendChild(msg);
-      panel.appendChild(makeDivider());
-      const deleteArea = document.createElement('div'); deleteArea.id = 'deleteArea_' + art.artwork_id;
-      const btnDelete = document.createElement('button'); btnDelete.className = 'btn-delete'; btnDelete.textContent = '🗑️ この作品を削除する';
-      btnDelete.addEventListener('click', () => confirmDelete(art.artwork_id));
-      deleteArea.appendChild(btnDelete); panel.appendChild(deleteArea);
+
+      // 削除ボタン (ロック前のみ)
+      if (!locked) {
+        panel.appendChild(makeDivider());
+        const deleteArea = document.createElement('div'); deleteArea.id = 'deleteArea_' + art.artwork_id;
+        const btnDelete = document.createElement('button'); btnDelete.className = 'btn-delete'; btnDelete.textContent = '🗑️ この作品を削除する';
+        btnDelete.addEventListener('click', () => confirmDelete(art.artwork_id));
+        deleteArea.appendChild(btnDelete); panel.appendChild(deleteArea);
+      }
+
+      // 「✓ 提出する」ボタン (ロック前のみ)。これで is_locked=true を Firestore に書く。
+      if (!locked) {
+        panel.appendChild(makeDivider());
+        const submitBanner = document.createElement('div');
+        submitBanner.style.cssText = 'background:#e8f5e9; border:1px solid #66bb6a; border-radius:6px; padding:10px 12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
+        submitBanner.innerHTML = `
+          <span style="flex:1; min-width:200px; font-size:0.85em; color:#2e7d32; line-height:1.5;">編集が完了したら「✓ 提出する」を押してください。<br>提出後は主催者の許可なしで編集できなくなります。</span>
+          <button type="button" id="btnSubmit_${art.artwork_id}"
+            style="padding:6px 14px; background:#2e7d32; color:white; border:none; border-radius:5px; font-size:0.88em; font-weight:bold; cursor:pointer; white-space:nowrap;">✓ 提出する</button>
+        `;
+        panel.appendChild(submitBanner);
+        document.getElementById('btnSubmit_' + art.artwork_id).addEventListener('click', () => submitArtworkLock(art));
+      }
+
+      // ロック中: 全 input/textarea/select/file を disabled に (read-only モード)
+      if (locked) {
+        panel.querySelectorAll('input, textarea, select').forEach(el => {
+          el.disabled = true;
+        });
+      }
+    }
+
+    // 「✓ 提出する」ボタンの handler。is_locked=true を Firestore に書いて作家側を read-only に固定する。
+    // 解除は主催者が register.html から行う必要がある (CF 側で artist 経路の unlock は禁止)。
+    async function submitArtworkLock(art) {
+      const label = art.title || art.title_en || art.artwork_id;
+      if (!confirm(`作品「${label}」を提出します。\n\n提出後は編集ができなくなります。\n再編集が必要な場合は主催者にご連絡ください。\n\n続行しますか?`)) return;
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+      const btn = document.getElementById('btnSubmit_' + art.artwork_id);
+      if (btn) { btn.disabled = true; btn.textContent = '提出中…'; }
+      try {
+        await window.fsSetArtwork(ex, art.artwork_id, { is_locked: true });
+        // 状態反映
+        art.is_locked = true;
+        existingWorks = existingWorks.map(a =>
+          a.artwork_id === art.artwork_id ? Object.assign({}, a, { is_locked: true }) : a
+        );
+        const card = document.querySelector('.artwork-card[data-id="' + art.artwork_id + '"]');
+        if (card) {
+          // ヘッダ 🔒 アイコン追加
+          const header = card.querySelector('.artwork-card-header');
+          if (header && !header.querySelector('.artwork-lock')) {
+            const lockEl = document.createElement('span');
+            lockEl.className = 'artwork-lock';
+            lockEl.style.cssText = 'color:#888; margin-right:4px;';
+            lockEl.textContent = '🔒';
+            lockEl.title = '主催者ロック中';
+            const chevron = header.querySelector('.artwork-chevron');
+            if (chevron) chevron.before(lockEl);
+          }
+          // パネル全体を read-only モードで再構築
+          buildEditPanel(card, art);
+        }
+      } catch (e) {
+        console.error('submitArtworkLock failed:', e);
+        alert('提出に失敗しました: ' + (e && e.message ? e.message : e));
+        if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
+      }
     }
 
     // 削除モーダル経由のフロー (旧: card 内の innerHTML 書き換え式)
