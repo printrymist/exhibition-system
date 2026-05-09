@@ -624,10 +624,27 @@
           }
         })
         .catch(e => console.warn('exhibition lookup failed:', e));
+      // B-3: URL に artist パラメータがあれば作家別 URL なので、入力欄に pre-fill +
+      //      readonly 化。CF 側は artist token の HMAC 検証 (B-1) で他作家の編集を
+      //      拒否するので、input を変更されても security 影響はない (UX 用途)。
+      const urlArtist = _getUrlArtist();
+      if (urlArtist) {
+        const inputEl = document.getElementById('artistNameInput');
+        if (inputEl) {
+          inputEl.value = urlArtist;
+          inputEl.readOnly = true;
+          inputEl.style.background = '#f0f0f0';
+          inputEl.title = 'この URL は ' + urlArtist + ' さん専用です';
+        }
+      }
+
       window.fsGetRegistrationFields(ex)
         .then(res => {
           activeFields = (res && res.length > 0) ? res
             : ['image_url', 'title', 'artist', 'year', 'technique', 'size', 'price'].map(n => ({ name: n, required: false }));
+          // activeFields ロード完了後に artist URL の自動検索を発火
+          // (showNewForm 等が activeFields に依存するため、loading 後に走らせる必要)
+          if (urlArtist) searchByArtist();
         });
       // 練習モードバッジ (作家向け) + sandbox 状態をグローバルに保持
       fsDb.collection('exhibitions').doc(ex).get()
@@ -1305,16 +1322,20 @@
     const fsStorage = firebase.storage();
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
 
-    // 招待 URL の exp+sig (exhibition token) のみ受け付ける。
+    // 招待 URL の exp+sig (exhibition / artist token) のみ受け付ける。
     // legacy security_key 経路はセッション 3 で撤去済 (誰でも doc を読めるため
     // legacy_key は実質的な認証になっていなかった)。
+    // B-1: artist URL パラメータがあれば artist token として解決 (作家別 URL)。
     function _getUrlExp() { return new URLSearchParams(window.location.search).get('exp') || ''; }
     function _getUrlSig() { return new URLSearchParams(window.location.search).get('sig') || ''; }
+    function _getUrlArtist() { return new URLSearchParams(window.location.search).get('artist') || ''; }
     function _resolveAccessToken() {
       const exp = _getUrlExp();
       const sig = _getUrlSig();
-      if (exp && sig) return { kind: 'exhibition', exp: Number(exp), sig: sig };
-      return null;
+      const artist = _getUrlArtist();
+      if (!exp || !sig) return null;
+      if (artist) return { kind: 'artist', artist: artist, exp: Number(exp), sig: sig };
+      return { kind: 'exhibition', exp: Number(exp), sig: sig };
     }
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       const blob = await (await fetch(dataUrl)).blob();

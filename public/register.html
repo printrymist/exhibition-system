@@ -929,6 +929,11 @@
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作家向け案内メール</p>
           <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">設定した項目の説明と入力URLを記載したメールを管理者宛に送信します。受信したメールをそのまま作家へ転送できます。</p>
+          <div style="margin:0 0 10px 0;">
+            <label style="display:block; font-size:0.82em; color:#555; margin-bottom:4px;">作家名 (任意 — 入力すると<b>その作家専用 URL</b>を発行。空欄なら全作家共通 URL)</label>
+            <input type="text" id="guideArtistName" placeholder="例: 田中太郎"
+              style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; box-sizing:border-box;">
+          </div>
           <button class="btn-wide" id="btnSendGuide" onclick="sendArtistGuide()">📨 案内メールを送信</button>
           <div class="save-msg" id="sendGuideMsg"></div>
         </div>
@@ -1706,26 +1711,39 @@
         : '管理者メールアドレスに案内メールを送信します。よろしいですか？\n（受信後、内容を確認してから作家へ転送してください）';
       if (!confirm(confirmMsg)) return;
 
-      // 作家招待 URL に exhibition access token (HMAC) を埋め込んで発行する。
+      // 作家招待 URL に access token (HMAC) を埋め込んで発行する。
+      // 作家名が指定されていれば作家別 URL (artist token、その作家の作品しか触れない)、
+      // 空欄なら全作家共通 URL (exhibition token、現状互換) を発行。
       // expDays は会期の余裕を含めて 180 日を既定値とする。期限切れ後は再発行が必要。
+      const artistName = (document.getElementById('guideArtistName').value || '').trim();
       let exp, sig;
       try {
-        const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintExhibitionAccessToken');
-        const res = await fn({ exCode: currentEx, expDays: 180 });
-        exp = res.data && res.data.exp;
-        sig = res.data && res.data.sig;
-        if (!exp || !sig) throw new Error('Cloud Function から exp/sig が返りませんでした');
+        if (artistName) {
+          const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintArtistAccessToken');
+          const res = await fn({ exCode: currentEx, artistName: artistName, expDays: 180 });
+          exp = res.data && res.data.exp;
+          sig = res.data && res.data.sig;
+          if (!exp || !sig) throw new Error('Cloud Function から exp/sig が返りませんでした');
+        } else {
+          const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintExhibitionAccessToken');
+          const res = await fn({ exCode: currentEx, expDays: 180 });
+          exp = res.data && res.data.exp;
+          sig = res.data && res.data.sig;
+          if (!exp || !sig) throw new Error('Cloud Function から exp/sig が返りませんでした');
+        }
       } catch (e) {
         showMsg('sendGuideMsg', 'アクセストークン発行失敗: ' + (e && e.message ? e.message : e), '#d93025');
         return;
       }
 
       const exName = currentExName || currentEx;
-      const inputUrl = 'https://rohei-printer-system.web.app/input.html?ex='
-        + encodeURIComponent(currentEx)
-        + '&exp=' + exp + '&sig=' + sig;
+      let inputUrl = 'https://rohei-printer-system.web.app/input.html?ex='
+        + encodeURIComponent(currentEx);
+      if (artistName) inputUrl += '&artist=' + encodeURIComponent(artistName);
+      inputUrl += '&exp=' + exp + '&sig=' + sig;
       const subjectPrefix = isSandbox ? '[練習モード - 転送禁止] ' : '';
-      const subject = subjectPrefix + `【作家向け】作品情報入力のご案内（${exName}）`;
+      const artistTag = artistName ? `（${artistName}様用）` : '';
+      const subject = subjectPrefix + `【作家向け】作品情報入力のご案内${artistTag}（${exName}）`;
 
       const fieldsText = activeFields
         .filter(f => FIELD_MAP[f.name])
