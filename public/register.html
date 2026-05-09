@@ -771,11 +771,7 @@
 
 <body>
 
-  <!-- B-3: オフライン時のバナー (navigator.onLine 連動) -->
-  <div id="offlineBanner"
-    style="display:none; position:sticky; top:0; z-index:900; padding:8px 14px; background:#fff3e0; border-bottom:1px solid #ffb74d; color:#a85700; font-size:0.88em; text-align:center;">
-    ⚠ オフラインです。保存・同期は接続復帰後に行ってください。
-  </div>
+  <!-- B-3: offline-banner.js が body 先頭に #offlineBanner を自動注入する -->
 
   <!-- ========== モーダル群 (タブ外に置かないと該当タブが非表示のとき hidden になる) ========== -->
 
@@ -1111,6 +1107,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="offline-banner.js"></script>
   <script src="field-defs.js"></script>
   <script>
     // =========================================================
@@ -2400,15 +2397,7 @@ ${fieldsText}
       }
     });
 
-    // B-3: オフライン状態を画面上部のバナーで表示
-    function _updateOnlineStatus() {
-      const banner = document.getElementById('offlineBanner');
-      if (!banner) return;
-      banner.style.display = navigator.onLine ? 'none' : 'block';
-    }
-    window.addEventListener('online', _updateOnlineStatus);
-    window.addEventListener('offline', _updateOnlineStatus);
-    document.addEventListener('DOMContentLoaded', _updateOnlineStatus);
+    // B-3: オフラインバナーは public/offline-banner.js が banner DOM 注入 + 監視を担当 (共通化)
 
     // 🎓 練習モード卒業: テストデータをクリアして本番運用に切替
     // A-1: confirm() を ack checkbox 付きモーダルに置換
