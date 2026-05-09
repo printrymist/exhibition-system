@@ -434,6 +434,23 @@
                 <textarea name="comment" id="ansCommentInput" rows="4" placeholder="作品の感想をどうぞ！" required></textarea>
                 <button type="submit" id="ansSubmitBtn" class="btn-black">感想を送って「いいね」</button>
               </form>
+              <!-- 案 C: 作家本人として認識されたとき (ニックネーム = 作家名) のみ表示。
+                   搬入時の写真追加・差し替えを「登録解除 → 全項目再入力」せずに済ませる裏口。
+                   image_url だけ書き換える。テキスト情報や is_locked は触らない。 -->
+              <div id="ansArtistPhotoArea" style="display:none; background:#f0f7ff; border:1px solid #c5d9f7; border-radius:8px; padding:12px; margin-top:14px;">
+                <div style="font-size:0.85em; color:#1a73e8; margin-bottom:6px; font-weight:bold;">
+                  🎨 作家本人として認識: <span id="ansArtistPhotoNameLabel"></span>
+                </div>
+                <div style="font-size:0.78em; color:#666; margin-bottom:10px; line-height:1.5;">
+                  搬入時の写真追加・差し替えに使えます。文字情報は触らず画像だけ更新します。
+                </div>
+                <input type="file" id="ansArtistPhotoInput" accept="image/*" style="display:none;">
+                <button type="button" id="ansArtistPhotoBtn"
+                  style="padding:8px 14px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:0.88em; font-weight:bold; cursor:pointer; width:100%;">
+                  📷 写真を選択して更新
+                </button>
+                <div id="ansArtistPhotoMsg" style="font-size:0.82em; margin-top:8px; min-height:16px; text-align:center;"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1194,6 +1211,88 @@
       }
       return res.data;
     };
+
+    // 案 C: 作家本人 (ニックネーム = 作家名) 限定の写真追加・更新 UI。
+    // 搬入時に複数作品の写真を素早く貼り替えるための裏口。
+    // image_url だけ書き換える。CF 側の artist 整合チェック (B-1.5) と is_locked チェック (Phase 2)
+    // は通常通り効くので、ロック済 / 別作家の作品には書けない。
+    function _checkArtistSelfPhotoUpdate() {
+      const area = document.getElementById('ansArtistPhotoArea');
+      const nicknameEl = document.getElementById('ansNicknameInput');
+      const artistEl = document.getElementById('ansWorkArtistInput');
+      if (!area || !nicknameEl || !artistEl) return;
+      const nick = (nicknameEl.value || '').trim();
+      const artist = (artistEl.value || '').trim();
+      if (nick && artist && nick === artist) {
+        area.style.display = 'block';
+        document.getElementById('ansArtistPhotoNameLabel').textContent = artist;
+      } else {
+        area.style.display = 'none';
+      }
+    }
+
+    async function _onArtistPhotoSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      const fileInput = e.target;
+      if (!file) return;
+      const msgEl = document.getElementById('ansArtistPhotoMsg');
+      const btn = document.getElementById('ansArtistPhotoBtn');
+      if (!navigator.onLine) {
+        msgEl.style.color = '#d93025';
+        msgEl.textContent = '⚠ オフラインです。接続を確認してください。';
+        fileInput.value = '';
+        return;
+      }
+      btn.disabled = true;
+      msgEl.style.color = '#888';
+      msgEl.textContent = '画像をリサイズ中…';
+      try {
+        // regWrapper と同じ 800px center-crop で JPEG 化
+        const dataUrl = await new Promise((resolve, reject) => {
+          const u = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(u);
+            const size = 800;
+            const min = Math.min(img.width, img.height);
+            const canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            canvas.getContext('2d').drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.onerror = () => { URL.revokeObjectURL(u); reject(new Error('画像のデコードに失敗しました')); };
+          img.src = u;
+        });
+        msgEl.textContent = 'アップロード中…';
+        const url = await window.fsUploadArtworkImage(exVal, idVal, dataUrl);
+        msgEl.textContent = '保存中…';
+        await window.fsSetArtwork(exVal, idVal, { image_url: url });
+        msgEl.style.color = '#0b8043';
+        msgEl.textContent = '✅ 写真を更新しました';
+        setTimeout(() => { if (msgEl.textContent.indexOf('更新しました') >= 0) msgEl.textContent = ''; }, 5000);
+      } catch (err) {
+        console.error('artist photo update failed:', err);
+        msgEl.style.color = '#d93025';
+        msgEl.textContent = 'エラー: ' + (err && err.message ? err.message : err);
+      } finally {
+        btn.disabled = false;
+        fileInput.value = '';  // 同じファイルの再選択を可能にする
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const nicknameEl = document.getElementById('ansNicknameInput');
+      if (nicknameEl) {
+        nicknameEl.addEventListener('input', _checkArtistSelfPhotoUpdate);
+        nicknameEl.addEventListener('change', _checkArtistSelfPhotoUpdate);
+      }
+      const btn = document.getElementById('ansArtistPhotoBtn');
+      const fileInput = document.getElementById('ansArtistPhotoInput');
+      if (btn && fileInput) {
+        btn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', _onArtistPhotoSelected);
+      }
+    });
   </script>
 </body>
 
