@@ -943,6 +943,18 @@
           <button class="btn-wide" id="btnRegenQr" onclick="regenerateQrUrls()">🔄 QR URL を再生成</button>
           <div class="save-msg" id="regenQrMsg"></div>
         </div>
+        <!-- ロック Phase 3: 全作品の一括ロック / 解除 -->
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作品の一括ロック</p>
+          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">登録済の全作品の編集権限を切り替えます。会期直前に🔒、編集再開時に🔓。</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btnBulkLock" onclick="bulkSetArtworkLock(true)"
+              style="flex:1; min-width:140px; padding:10px 14px; background:#1a73e8; color:white; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">🔒 全作品をロック</button>
+            <button id="btnBulkUnlock" onclick="bulkSetArtworkLock(false)"
+              style="flex:1; min-width:140px; padding:10px 14px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">🔓 全作品をロック解除</button>
+          </div>
+          <div class="save-msg" id="bulkLockMsg"></div>
+        </div>
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加 <span id="currentArtworkCountLabel" style="color:#1a73e8; font-weight:bold;"></span></p>
           <div style="display:flex; gap:10px;">
@@ -2247,6 +2259,111 @@ ${fieldsText}
         alert('ロック切替に失敗しました: ' + (e && e.message ? e.message : e));
       } finally {
         if (lockBtn) lockBtn.disabled = false;
+      }
+    }
+
+    // ── 一括ロック / 一括解除 (主催者主導モデル Phase 3) ──
+    // 会期直前の「全部固定」/ 撤収後の「全部解除」用。fsGetArtworkList で最新一覧を取得して
+    // 状態が違うものだけ fsSetArtwork で順次書き込み。並列にすると CF 側の rate limit に引っ
+    // かかる可能性があるので逐次。30 件規模なら数秒で終わる想定。
+    async function bulkSetArtworkLock(targetState) {
+      if (!navigator.onLine) {
+        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+
+      const lockBtn = document.getElementById('btnBulkLock');
+      const unlockBtn = document.getElementById('btnBulkUnlock');
+      const msgEl = document.getElementById('bulkLockMsg');
+      msgEl.style.color = '#888';
+      msgEl.innerHTML = '<span class="spinner-sm"></span> 作品一覧を取得中…';
+
+      // 最新の作品一覧を取得 (artworkCache は list タブを開いてないと空のことがあるため)
+      let artworks;
+      try {
+        const res = await window.fsGetArtworkList(currentEx);
+        if (!res.success) throw new Error(res.error || 'fsGetArtworkList failed');
+        artworks = res.artworks || [];
+      } catch (e) {
+        msgEl.style.color = '#d93025';
+        msgEl.textContent = '作品一覧の取得に失敗しました: ' + (e.message || e);
+        return;
+      }
+
+      // 既に target state のものは除外 (無駄な write を避ける + 進捗カウント精度向上)
+      const targets = artworks.filter(a => !!a.is_locked !== targetState);
+      const action = targetState ? 'ロック' : 'ロック解除';
+
+      if (artworks.length === 0) {
+        msgEl.style.color = '#888';
+        msgEl.textContent = '登録済の作品がありません。';
+        return;
+      }
+      if (targets.length === 0) {
+        msgEl.style.color = '#888';
+        msgEl.textContent = `登録済の ${artworks.length} 件はすべて${targetState ? 'ロック済み' : 'ロック解除済み'}です。`;
+        return;
+      }
+
+      const confirmMsg = targetState
+        ? `登録済の ${targets.length} 件の作品をすべてロックします。\n\n作家側で編集できなくなります。\n\nよろしいですか?`
+        : `登録済の ${targets.length} 件の作品をすべてロック解除します。\n\n作家側で再び編集可能になります。\n\nよろしいですか?`;
+      if (!confirm(confirmMsg)) {
+        msgEl.textContent = '';
+        return;
+      }
+
+      lockBtn.disabled = true;
+      unlockBtn.disabled = true;
+
+      const failed = [];
+      let done = 0;
+      for (const art of targets) {
+        msgEl.style.color = '#888';
+        msgEl.innerHTML = `<span class="spinner-sm"></span> ${action}中… (${done + failed.length}/${targets.length})`;
+        try {
+          await window.fsSetArtwork(currentEx, art.artwork_id, { is_locked: targetState });
+          done++;
+          // ローカル状態を更新 (artworkCache + 行ヘッダの 🔒 アイコン)
+          art.is_locked = targetState;
+          if (Array.isArray(artworkCache)) {
+            const ce = artworkCache.find(a => a.artwork_id === art.artwork_id);
+            if (ce) ce.is_locked = targetState;
+          }
+          const row = document.querySelector('.artwork-row[data-id="' + art.artwork_id + '"]');
+          if (row) {
+            const header = row.querySelector('.artwork-row-header');
+            const existingLock = header && header.querySelector('.artwork-lock');
+            if (targetState) {
+              if (header && !existingLock) {
+                const lockEl = document.createElement('span');
+                lockEl.className = 'artwork-lock';
+                lockEl.style.cssText = 'color:#888; margin-right:4px;';
+                lockEl.textContent = '🔒';
+                lockEl.title = '作家側で編集不可';
+                const chevron = header.querySelector('.artwork-chevron');
+                if (chevron) chevron.before(lockEl);
+              }
+            } else {
+              if (existingLock) existingLock.remove();
+            }
+          }
+        } catch (e) {
+          console.error('bulk lock toggle failed:', art.artwork_id, e);
+          failed.push({ id: art.artwork_id, error: (e && e.message) || String(e) });
+        }
+      }
+
+      lockBtn.disabled = false;
+      unlockBtn.disabled = false;
+
+      if (failed.length === 0) {
+        msgEl.style.color = '#0b8043';
+        msgEl.textContent = `✅ ${done} 件をすべて${action}しました。`;
+      } else {
+        msgEl.style.color = '#d93025';
+        const failedIds = failed.map(f => f.id).join(', ');
+        msgEl.innerHTML = `⚠ ${done} 件成功 / ${failed.length} 件失敗。<br>失敗: ${failedIds}`;
       }
     }
 
