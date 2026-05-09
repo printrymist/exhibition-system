@@ -341,33 +341,7 @@
 
   <div id="sandboxBadge" style="display:none; max-width:600px; margin:10px auto;"></div>
 
-  <div id="ansSnsSyncModal"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:30100; align-items:center; justify-content:center;">
-    <div
-      style="background:white; padding:25px; border-radius:12px; width:320px; max-width:85%; box-shadow:0 4px 15px rgba(0,0,0,0.2); text-align:center;">
-      <h3 id="syncModalTitle" style="margin-top:0; font-size:1.1em; color:#1a73e8;">SNS情報を全作品に同期</h3>
-      <p style="font-size:0.85em; color:#666; text-align:left; background:#f9f9f9; padding:10px; border-radius:6px; line-height:1.6;">
-        <span id="syncModalDesc">現在の設定内容：</span><br>
-        <span id="syncPreviewList" style="font-weight:bold; color:#333;"></span>
-      </p>
-      <p id="syncModalConfirm" style="font-size:0.9em; font-weight:bold; color:#d93025; margin:15px 0;">
-        この内容をあなたの全作品に一括反映（上書き）させますか？</p>
-      <button id="ansSnsSyncSubmitBtn" class="btn-black" style="margin-bottom:10px; background:#1a73e8;">はい、一括更新する</button>
-      <button id="ansSnsSyncCancelBtn" class="btn-gray" style="margin-top:0;">キャンセル</button>
-    </div>
-  </div>
-
-  <div id="ansPwModal"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:30000; align-items:center; justify-content:center;">
-    <div
-      style="background:white; padding:25px; border-radius:12px; width:300px; max-width:80%; box-shadow:0 4px 15px rgba(0,0,0,0.2); text-align:center;">
-      <h3 id="pwModalTitle" style="margin-top:0; font-size:1.2em; color:#333;">管理者ログイン</h3>
-      <p id="pwModalDesc" style="font-size:0.9em; color:#666;">パスワードを入力してください</p>
-      <input type="password" id="ansPwInput" style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ccc; border-radius:6px; font-size:16px; box-sizing:border-box;">
-      <button id="ansPwSubmitBtn" class="btn-black" style="margin-bottom:10px;">認証する</button>
-      <button id="ansPwCancelBtn" class="btn-gray" style="margin-top:0;">キャンセル</button>
-    </div>
-  </div>
+  <!-- 旧 PROMPT_PASSWORD / SNS_SYNC_REQUEST モーダル類は Phase 5-B / 6 で機能撤去済 (legacy cleanup 2026-05-09) -->
 
   <div id="unityGlobalLoading">
     <div class="spinner" style="border-top-color: #1a73e8;"></div>
@@ -383,11 +357,7 @@
       <div class="reg-card" id="regMainCard">
         <button id="langToggleReg" onclick="toggleLang()">EN</button>
         <h3 id="regExName" style="color:#1a73e8; margin:0 0 15px 0;">接続中...</h3>
-        <div id="regStep0" class="step">
-          <p id="regPwPrompt">管理パスワードを入力してください</p>
-          <input type="password" id="regPassInput">
-          <button class="btn-blue" onclick="regCheckLogin()" id="regLoginBtn">ログイン</button>
-        </div>
+        <!-- 旧 regStep0 (管理パスワード入力) は Phase 6b で bypass、HMAC URL 認証で代替済 -->
         <div id="regStep1" class="step">
           <div id="regQuickSelectArea" class="quick-box" style="display:none;">
             <small id="regQuickSelectLabel" style="color:#1a73e8; font-weight:bold;">以前の登録情報から選ぶ</small>
@@ -467,7 +437,7 @@
             </div>
           </div>
         </div>
-        <div class="decoration-footer" onclick="ansResetForm()">＊ ♡ ＊ ♥ ＊ ♡ ＊</div>
+        <div class="decoration-footer">＊ ♡ ＊ ♥ ＊ ♡ ＊</div>
       </div>
     </div>
   </div>
@@ -505,27 +475,8 @@
         ansSubmitBtnSyncing:  "同期中...",
         ansCountMsg:          "有難うございました！ 応援数: ",
         ansCountMsgAdded:     "追加のコメント有難うございました！ 応援数: ",
-        ansResetConfirm:      "応援記録をリセットしてテストし直しますか？",
-        pwModalTitle:         "管理者ログイン",
-        pwModalDesc:          "パスワードを入力してください",
-        pwSubmitBtn:          "認証する",
-        pwCancelBtn:          "キャンセル",
-        pwSuccess:            "ログインに成功しました。",
-        pwFail:               "パスワードが違います",
-        syncModalTitle:       "SNS情報を全作品に同期",
-        syncModalDesc:        "現在の設定内容：",
-        syncModalConfirm:     "この内容をあなたの全作品に一括反映（上書き）させますか？",
-        syncSubmitBtn:        "はい、一括更新する",
-        syncCancelBtn:        "キャンセル",
-        syncNotSet:           "未設定",
-        syncWebSet:           "設定あり",
-        syncDone:             "同期完了！",
-        alertLogout:          "ログアウトしました。",
         alertUnlock:          "作品の登録を解除しました。再登録が可能です。",
         regSaving:            "保存しています...",
-        regPwPrompt:          "管理パスワードを入力してください",
-        regLoginBtn:          "ログイン",
-        regPwFail:            "パスワードが違います",
         regQuickSelectLabel:  "以前の登録情報から選ぶ",
         regSelectDefault:     "-- 作家名を選択 --",
         regLabelArtist:       "作家名",
@@ -562,27 +513,8 @@
         ansSubmitBtnSyncing:  "Syncing...",
         ansCountMsg:          "Thank you! Likes: ",
         ansCountMsgAdded:     "Thank you for your comment! Likes: ",
-        ansResetConfirm:      "Reset like record and test again?",
-        pwModalTitle:         "Admin Login",
-        pwModalDesc:          "Please enter the password",
-        pwSubmitBtn:          "Login",
-        pwCancelBtn:          "Cancel",
-        pwSuccess:            "Login successful.",
-        pwFail:               "Incorrect password",
-        syncModalTitle:       "Sync SNS to all artworks",
-        syncModalDesc:        "Current settings:",
-        syncModalConfirm:     "Apply these settings to all your artworks?",
-        syncSubmitBtn:        "Yes, update all",
-        syncCancelBtn:        "Cancel",
-        syncNotSet:           "Not set",
-        syncWebSet:           "Set",
-        syncDone:             "Sync complete!",
-        alertLogout:          "Logged out.",
         alertUnlock:          "Artwork unlocked. You can register again.",
         regSaving:            "Saving...",
-        regPwPrompt:          "Please enter the admin password",
-        regLoginBtn:          "Login",
-        regPwFail:            "Incorrect password",
         regQuickSelectLabel:  "Select from previous entries",
         regSelectDefault:     "-- Select artist --",
         regLabelArtist:       "Artist name",
@@ -628,18 +560,7 @@
         var isAdditional = document.getElementById('ansIsLikeInput').value === "0";
         submitBtn.innerText = isAdditional ? t('ansSubmitBtnAdded') : t('ansSubmitBtn');
       }
-      document.getElementById('pwModalTitle').innerText = t('pwModalTitle');
-      document.getElementById('pwModalDesc').innerText = t('pwModalDesc');
-      document.getElementById('ansPwSubmitBtn').innerText = t('pwSubmitBtn');
-      document.getElementById('ansPwCancelBtn').innerText = t('pwCancelBtn');
-      document.getElementById('syncModalTitle').innerText = t('syncModalTitle');
-      document.getElementById('syncModalDesc').innerText = t('syncModalDesc');
-      document.getElementById('syncModalConfirm').innerText = t('syncModalConfirm');
-      document.getElementById('ansSnsSyncSubmitBtn').innerText = t('syncSubmitBtn');
-      document.getElementById('ansSnsSyncCancelBtn').innerText = t('syncCancelBtn');
       document.getElementById('regSavingMsg').innerText = t('regSaving');
-      document.getElementById('regPwPrompt').innerText = t('regPwPrompt');
-      document.getElementById('regLoginBtn').innerText = t('regLoginBtn');
       document.getElementById('regQuickSelectLabel').innerText = t('regQuickSelectLabel');
       document.getElementById('regSelectDefault').innerText = t('regSelectDefault');
       document.getElementById('regLabelArtist').innerText = t('regLabelArtist');
@@ -731,14 +652,6 @@
     let regConfig = {};
     let regRawImgData = null;
     let regImageRequired = true; // registration_fields に image_url 設定が無い場合のデフォルト
-    const regStorageKey = "rohei_auth_" + exVal;
-
-    async function hashText(text) {
-      const msgBuffer = new TextEncoder().encode(text);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
 
     async function regLoadImageRequired(exCode) {
       try {
@@ -860,13 +773,7 @@
       document.getElementById('regSnsWeb').value = a.web;
     }
 
-    async function regCheckLogin() {
-      if (document.getElementById('regPassInput').value === regConfig.masterPass) {
-        const hash = await hashText(regConfig.masterPass);
-        localStorage.setItem(regStorageKey, hash);
-        regChangeStep(1);
-      } else alert(t('regPwFail'));
-    }
+    // 旧 regCheckLogin (管理パスワード認証) は Phase 6b で撤去 (HMAC URL 認証で代替済)
 
     document.getElementById('regFileInput').onchange = (e) => {
       if (!e.target.files || e.target.files.length === 0) return;
@@ -1096,15 +1003,8 @@
       if (hasSns) document.getElementById('ansSnsSection').style.display = "block";
     }
 
-    function ansResetForm() {
-      var adminKey = "isAdmin_" + exVal;
-      if (localStorage.getItem(adminKey) === "true") {
-        if (confirm(t('ansResetConfirm'))) {
-          localStorage.removeItem("voted_" + exVal + "_" + idVal);
-          reloadApp();
-        }
-      }
-    }
+    // 旧 ansResetForm (isAdmin_* localStorage で gate していた応援記録リセット) は撤去。
+    // localStorage に isAdmin_* を書き込むコードがどこにも無く実質永久に dead だった。
 
     // Phase 6a: visitor の comment/like は GAS を経由せず直接 Firestore に書く。
     // 旧 ansProcessForm 経由の二重書き (GAS comments シート + Firestore likes) を
