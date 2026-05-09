@@ -898,9 +898,16 @@
               <label style="display:inline-flex; align-items:center; gap:6px; margin-right:14px; cursor:pointer;">
                 <input type="checkbox" id="imp_regFields" checked> 項目設定 (どのフィールドを使うか)
               </label>
-              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+              <label style="display:inline-flex; align-items:center; gap:6px; margin-right:14px; cursor:pointer;">
                 <input type="checkbox" id="imp_captionFields" checked> キャプション設定
               </label>
+              <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" id="imp_galleryFields"> 🖼️ Web 公開設定
+              </label>
+              <div style="color:#888; font-size:0.78em; margin-top:5px; line-height:1.5;">
+                ※ Web 公開設定: 公開状態 / いいね・コメント許可 / ヒーロー画像 / 背景画像。<br>
+                &nbsp;&nbsp;&nbsp;意図せず公開されないようデフォルトは OFF。画像は元展覧会の Storage URL を参照します。
+              </div>
             </div>
             <div id="importList" style="max-height:240px; overflow-y:auto;">
               <div style="color:#aaa; font-size:0.85em; text-align:center; padding:12px;">読み込み中...</div>
@@ -1507,7 +1514,8 @@
     async function importFromExhibition(exCode, exName, btn) {
       const wantRegFields = document.getElementById('imp_regFields').checked;
       const wantCaptionFields = document.getElementById('imp_captionFields').checked;
-      if (!wantRegFields && !wantCaptionFields) {
+      const wantGalleryFields = document.getElementById('imp_galleryFields').checked;
+      if (!wantRegFields && !wantCaptionFields && !wantGalleryFields) {
         alert('複製する内容を1つ以上選択してください。');
         return;
       }
@@ -1576,6 +1584,30 @@
             }
           } else {
             skipped.push('キャプション設定 (元に保存無し)');
+          }
+        }
+
+        // Web 公開設定 (gallery_visibility / gallery_interactions / gallery_hero_url / gallery_bg_url):
+        // 画像 URL は元展覧会の Storage を参照する形でコピー (画像本体は移さない)。
+        // 元 ex 削除時に画像が消える可能性はあるが、必要なら web-exhibition.html で再アップロード可。
+        if (wantGalleryFields) {
+          const update = {};
+          ['gallery_visibility', 'gallery_interactions', 'gallery_hero_url', 'gallery_bg_url'].forEach(k => {
+            if (data[k] !== undefined && data[k] !== null && data[k] !== '') {
+              update[k] = data[k];
+            }
+          });
+          if (Object.keys(update).length > 0) {
+            update.updatedAt = new Date().toISOString();
+            try {
+              await fsDb.collection('exhibitions').doc(currentEx).set(update, { merge: true });
+              copied.push('Web 公開設定');
+            } catch (e) {
+              console.error('gallery settings save after import failed:', e);
+              failed.push('Web 公開設定 (保存失敗: ' + (e.message || 'unknown') + ')');
+            }
+          } else {
+            skipped.push('Web 公開設定 (元に保存無し)');
           }
         }
 
