@@ -51,12 +51,18 @@ service cloud.firestore {
           )
           || isOperator()
         );
+      // visitor は自分の sessionId 一致 doc の comment field のみ更新可 (コメントの誤字直し等)。
+      // 他フィールド (isLike / exCode / workId / sessionId / nickname / source 等) は更新不可。
+      // operator はモデレーション目的で何でも更新可。
       allow update: if isOperator() || (
         request.auth != null
         && request.auth.token.role == 'visitor'
         && request.auth.token.exCode == resource.data.exCode
         && request.auth.token.sessionId is string
         && request.auth.token.sessionId == resource.data.sessionId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment'])
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() < 2000
       );
       allow delete: if isOperator() || (
         request.auth != null
