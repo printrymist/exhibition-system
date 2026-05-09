@@ -407,11 +407,13 @@
         <div id="ansLoading">読み込み中...</div>
         <div id="ansMainContent" style="display:none;">
           <div class="ex-header" id="ansDisplayExName"></div>
-          <!-- Phase A-2: いいね受付済み表示 + 取消ボタン (visitor 認証済みのときだけ機能) -->
-          <div id="ansAlreadyLikedMsg" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;">
+          <!-- Phase A-2: いいね受付済み表示 + 取消ボタン (visitor 認証済みのときだけ機能)
+               wrapper の display は CSS の #ansAlreadyLikedMsg { display:none } を尊重し、
+               JS 側で voted_* 検出時に flex に切替える。 -->
+          <div id="ansAlreadyLikedMsg">
             <span id="ansAlreadyLikedText">いいね受付済みです、追加コメントを受け付けます。</span>
             <button type="button" id="ansLikeUndoBtn" onclick="onLikeUndo()"
-              style="display:none; padding:5px 14px; background:white; color:#d93025; border:1px solid #d93025; border-radius:6px; font-size:0.82em; cursor:pointer;">🔄 いいね取消</button>
+              style="display:none; padding:5px 14px; margin-left:10px; background:white; color:#d93025; border:1px solid #d93025; border-radius:6px; font-size:0.82em; cursor:pointer;">🔄 いいね取消</button>
           </div>
           <div id="ansThankYou" style="display:none;">
             <div class="heart-icon">♥</div>
@@ -573,7 +575,9 @@
       document.getElementById('langToggleReg').innerText = t('langBtn');
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
       document.getElementById('ansLoading').innerText = t('ansLoading');
-      document.getElementById('ansAlreadyLikedMsg').innerText = t('ansAlreadyLiked');
+      // Phase A-2: wrapper の innerText を直接書き換えると中の取消ボタンが消えるので、
+      // テキスト用の span だけに反映する。
+      document.getElementById('ansAlreadyLikedText').innerText = t('ansAlreadyLiked');
       document.getElementById('ansSnsLabel').innerText = t('ansSnsLabel');
       document.getElementById('ansNicknameInput').placeholder = t('ansNickname');
       document.getElementById('ansCommentInput').placeholder = t('ansComment');
