@@ -1522,6 +1522,15 @@
             <option value="all">全作品</option>
           </select>
         </div>
+        <div class="layout-item">
+          <label>QR 上部表示</label>
+          <select id="qrPrintHeader">
+            <option value="code" selected>展覧会コード / 作品ID</option>
+            <option value="title_only">作品名のみ</option>
+            <option value="name">展覧会名 + 作品名 (2 行)</option>
+            <option value="none">なし</option>
+          </select>
+        </div>
       </div>
       <div style="margin-top:12px;">
         <button class="btn-print" onclick="openQrPrint()" style="width:100%;padding:13px;">
@@ -2083,7 +2092,7 @@
             return;
           }
           artworkData = data;
-          qrAllData = { artworks: data.qrList, exCode: ex };
+          qrAllData = { artworks: data.qrList, exCode: ex, exName: data.exName || '' };
           document.getElementById('exName').innerText = '✅ ' + data.exName + ' (' + data.artworks.length + ' artworks)';
           document.getElementById('linkToRegister').href = 'register.html?ex=' + ex;
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
@@ -3537,15 +3546,30 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const logo = document.getElementById('qrPrintLogo').value;
       const target = document.getElementById('qrPrintTarget').value;
       const paper = document.getElementById('qrPrintPaper').value;
+      const header = document.getElementById('qrPrintHeader').value;
       let artworks = qrAllData.artworks;
       if (target !== 'all') { artworks = artworks.filter(a => a.status === target); }
       if (artworks.length === 0) { alert('対象の作品がありません。'); return; }
       const layouts = { 15: { cols: 6, rows: 8 }, 20: { cols: 5, rows: 7 }, 25: { cols: 4, rows: 6 }, 30: { cols: 4, rows: 5 }, 45: { cols: 3, rows: 4 }, 60: { cols: 2, rows: 3 } };
       const { cols, rows } = layouts[size] || layouts[25];
-      buildQrPrintHtml(artworks, size, cols, rows, logo);
+      buildQrPrintHtml(artworks, size, cols, rows, logo, paper, header);
     }
 
-    function buildQrPrintHtml(artworks, sizeMm, cols, rows, logo, paper) {
+    // canvas の幅に収まるようにテキストを末尾省略する。
+    // 例: "Independent Tokyo 2026 / 桜咲く春の風景画" → "Independent Tokyo 2026 / 桜咲..."
+    function _truncateTextToWidth(ctx, text, maxWidth) {
+      if (ctx.measureText(text).width <= maxWidth) return text;
+      const ellipsis = '…';
+      let lo = 0, hi = text.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const candidate = text.slice(0, mid) + ellipsis;
+        if (ctx.measureText(candidate).width <= maxWidth) lo = mid; else hi = mid - 1;
+      }
+      return text.slice(0, lo) + ellipsis;
+    }
+
+    function buildQrPrintHtml(artworks, sizeMm, cols, rows, logo, paper, headerStyle) {
       const paperW = { A4: 210, Letter: 216 }[paper] || 210;
       const paperH = { A4: 297, Letter: 279 }[paper] || 297;
       const paperSize = { A4: 'A4', Letter: 'Letter' }[paper] || 'A4';
@@ -3562,17 +3586,48 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         qr.addData(art.qr_url);
         qr.make();
         const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
-        const headerHeight = Math.round(size * 0.15);
+        // ヘッダ高さは表示形式で変える: なし=0、1 行=0.15、2 行=0.24
+        let headerHeight;
+        if (!headerStyle || headerStyle === 'none') headerHeight = 0;
+        else if (headerStyle === 'name') headerHeight = Math.round(size * 0.24);
+        else headerHeight = Math.round(size * 0.15);
         const fontSize = Math.round(size * 0.08);
+        const smallFontSize = Math.round(size * 0.065);
         canvas.width = size;
         canvas.height = size + headerHeight;
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#888888';
-        ctx.font = `bold ${fontSize}px sans-serif`;
+
+        const maxTextWidth = size - 24;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
-        ctx.fillText(`${qrAllData.exCode} / ${art.artwork_id}`, size / 2, fontSize + 36);
+
+        if (headerStyle === 'code') {
+          ctx.fillStyle = '#888888';
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          const headerText = _truncateTextToWidth(ctx, `${qrAllData.exCode} / ${art.artwork_id}`, maxTextWidth);
+          ctx.fillText(headerText, size / 2, fontSize + 36);
+        } else if (headerStyle === 'title_only') {
+          ctx.fillStyle = '#333333';
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          const title = (art.title || art.artwork_id || '').trim();
+          const headerText = _truncateTextToWidth(ctx, title, maxTextWidth);
+          ctx.fillText(headerText, size / 2, fontSize + 36);
+        } else if (headerStyle === 'name') {
+          // 2 行: 上に展覧会名 (小さく薄く)、下に作品名 (大きく濃く)
+          const exLabel = (qrAllData.exName || qrAllData.exCode || '').trim();
+          const workLabel = (art.title || art.artwork_id || '').trim();
+
+          ctx.fillStyle = '#888888';
+          ctx.font = `${smallFontSize}px sans-serif`;
+          const exText = _truncateTextToWidth(ctx, exLabel, maxTextWidth);
+          ctx.fillText(exText, size / 2, smallFontSize + 24);
+
+          ctx.fillStyle = '#333333';
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          const workText = _truncateTextToWidth(ctx, workLabel, maxTextWidth);
+          ctx.fillText(workText, size / 2, smallFontSize + 24 + fontSize + 12);
+        }
         ctx.fillStyle = '#333333';
         for (let row = 0; row < qr.getModuleCount(); row++) {
           for (let col = 0; col < qr.getModuleCount(); col++) {
@@ -3614,10 +3669,20 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const cellW = (paperW - padding * 2 - gap * (cols - 1)) / cols;
       const cellH = (paperH - padding * 2 - gap * (rows - 1)) / rows;
       const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
+<html><head><meta charset="UTF-8"><title> </title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { font-family:sans-serif; background:white; }
+body { font-family:sans-serif; background:#f4f4f4; }
+.toolbar {
+  position: sticky; top: 0; z-index: 10;
+  background: #fff; border-bottom: 1px solid #ddd;
+  padding: 10px 16px; display: flex; gap: 10px; align-items: center;
+}
+.toolbar button {
+  padding: 8px 18px; font-size: 14px; font-weight: bold;
+  background: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer;
+}
+.toolbar .hint { font-size: 12px; color: #666; }
 .page {
   width:${paperW}mm; height:${paperH}mm;
   padding:${padding}mm;
@@ -3625,22 +3690,29 @@ body { font-family:sans-serif; background:white; }
   grid-template-columns:repeat(${cols}, ${cellW.toFixed(2)}mm);
   grid-template-rows:repeat(${rows}, ${cellH.toFixed(2)}mm);
   gap:${gap}mm; overflow:hidden;
+  background: white;
+  margin: 12px auto;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   page-break-after:always; break-after:page;
 }
 .qr-cell { display:flex; align-items:center; justify-content:center; border:1px solid #eee; border-radius:2mm; overflow:hidden; }
 .qr-cell img { width:100%; height:100%; object-fit:contain; }
 @media print {
   @page { size:${paperSize} portrait; margin:0; }
-  body  { margin:0; }
-  .page { page-break-after:always; break-after:page; }
+  body  { margin:0; background:white; }
+  .toolbar { display:none !important; }
+  .page { margin:0; box-shadow:none; page-break-after:always; break-after:page; }
 }
 </style></head><body>
+<div class="toolbar">
+  <button type="button" onclick="window.print()">🖨️ 印刷する</button>
+  <span class="hint">プレビューを確認して、よければ「印刷する」を押してください。</span>
+</div>
 ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><img src="${qrImages[art.artwork_id]}"></div>`).join('')}</div>`).join('')}
 </body></html>`;
       const win = window.open('', '_blank');
       win.document.write(html);
       win.document.close();
-      setTimeout(() => { win.focus(); win.print(); }, 300);
     }
 
   </script>
@@ -3679,7 +3751,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         artSnap.forEach(doc => {
           const d = doc.data();
           if (!d.artwork_id) return;
-          qrList.push({ artwork_id: d.artwork_id, qr_url: d.qr_url || '', status: (d.status || '').toString() });
+          qrList.push({ artwork_id: d.artwork_id, qr_url: d.qr_url || '', status: (d.status || '').toString(), title: d.title || '' });
           if ((d.status || '').toString() === '1') artworks.push(d);
         });
         const cmp = (a, b) => (a.artwork_id || '').localeCompare(b.artwork_id || '');
