@@ -787,7 +787,12 @@
             commentsByWork[wid].sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
           }
           updateGridLikeBadges();
-          if (currentModalIdx != null) updateModalLikeUI();
+          if (currentModalIdx != null) {
+            updateModalLikeUI();
+            // commentsByWork が更新されたのでコメント一覧も再描画する
+            // (これが無いと自分の投稿が即時に下に出ない)
+            updateModalCommentUI();
+          }
         }, err => console.error('likes subscribe failed:', err));
     }
 
