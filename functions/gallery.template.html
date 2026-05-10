@@ -516,8 +516,26 @@
       return /^https?:\/\//i.test(s) ? s : '';
     }
     // 解像度切替を後から差し込めるように関数化 (将来 image_url_hires などに拡張する想定)。
+    // Storage download URL を Hosting CDN 経由 (/img/...) に翻訳して、
+    // egress を Storage ($0.12/GB) → Hosting CDN (無料) に振り替える。
+    // 翻訳できないとき (旧 URL / 外部 URL) は元の URL をそのまま返す。
     function getArtworkImageUrl(artwork, _size) {
-      return artwork && artwork.image_url ? String(artwork.image_url) : '';
+      if (!artwork || !artwork.image_url) return '';
+      const raw = String(artwork.image_url);
+      // 例: https://firebasestorage.googleapis.com/v0/b/.../o/artworks%2FEX001_a123.jpg?alt=media&token=...
+      const m = raw.match(/\/o\/((?:artworks|gallery)%2F[^?]+)/i);
+      if (!m) return raw;
+      let objPath;
+      try { objPath = decodeURIComponent(m[1]); } catch (_e) { return raw; }
+      // ?v=<updatedAt> でキャッシュバスト (再アップロード時に新 URL になる)
+      const u = artwork.updatedAt;
+      let ver = '';
+      if (u) {
+        if (typeof u === 'object' && u.seconds) ver = String(u.seconds);
+        else if (typeof u === 'number') ver = String(u);
+        else ver = String(u).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 32);
+      }
+      return '/img/' + objPath + (ver ? ('?v=' + ver) : '');
     }
 
     function showInfo(icon, heading, body) {

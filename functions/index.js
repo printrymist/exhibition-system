@@ -738,6 +738,65 @@ exports.galleryPage = onRequest(async (req, res) => {
 });
 
 // =========================================================
+// imageProxy:
+//   /img/artworks/{file} などのリクエストを Storage に橋渡しする。
+//   目的は **Firebase Hosting CDN を画像配信に効かせる** こと。
+//   Storage download URL を直接 <img src> に使うと CDN がほぼ効かず、
+//   Storage egress ($0.12/GB) が visitor 数に比例して跳ねる。
+//   Hosting 経由なら CDN egress は無料、CF 起動も CDN ヒット時はゼロ。
+//
+//   キャッシュ戦略:
+//     Cache-Control: public, max-age=31536000, s-maxage=31536000, immutable
+//     再アップロード反映は呼び出し側 (?v=<updatedAt>) に任せる。
+//
+//   許可するパス: artworks/, gallery/ の画像のみ (Storage Rules と一致)
+// =========================================================
+
+const IMG_PATH_RE = /^\/img\/((?:artworks|gallery)\/[A-Za-z0-9._-]+\.(?:jpg|jpeg|png|webp))$/i;
+
+exports.imageProxy = onRequest(
+  { memory: "256MiB", timeoutSeconds: 30 },
+  async (req, res) => {
+    const m = req.path.match(IMG_PATH_RE);
+    if (!m) {
+      res.status(400).send("bad path");
+      return;
+    }
+    const objPath = m[1];
+    try {
+      const file = admin.storage().bucket().file(objPath);
+      const [exists] = await file.exists();
+      if (!exists) {
+        res.status(404).send("not found");
+        return;
+      }
+      const [meta] = await file.getMetadata();
+      res.set(
+        "Cache-Control",
+        "public, max-age=31536000, s-maxage=31536000, immutable",
+      );
+      res.set("Content-Type", meta.contentType || "image/jpeg");
+      if (meta.etag) res.set("ETag", meta.etag);
+      file.createReadStream()
+        .on("error", (err) => {
+          logger.error("imageProxy stream error", {
+            objPath,
+            msg: err && err.message,
+          });
+          if (!res.headersSent) res.status(500).end();
+        })
+        .pipe(res);
+    } catch (err) {
+      logger.error("imageProxy error", {
+        objPath,
+        msg: err && err.message,
+      });
+      if (!res.headersSent) res.status(500).send("error");
+    }
+  },
+);
+
+// =========================================================
 // Artwork access tokens (Plan 5-A: security_key の置換)
 //
 // 4 種類の認証経路をサポートする。

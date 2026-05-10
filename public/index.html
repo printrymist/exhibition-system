@@ -566,6 +566,25 @@
     const browserLang = (navigator.language || "ja").startsWith("ja") ? "ja" : "en";
     let currentLang = localStorage.getItem("rohei_lang") || browserLang;
 
+    // Storage download URL を Hosting CDN 経由 (/img/...) に翻訳して、
+    // egress を Storage ($0.12/GB) → Hosting CDN (無料) に振り替える。
+    // 翻訳できないとき (旧 URL / Drive 等の外部 URL) は元の URL をそのまま返す。
+    function translateImageUrl(url, updatedAt) {
+      if (!url) return '';
+      const raw = String(url);
+      const m = raw.match(/\/o\/((?:artworks|gallery)%2F[^?]+)/i);
+      if (!m) return raw;
+      let objPath;
+      try { objPath = decodeURIComponent(m[1]); } catch (_e) { return raw; }
+      let ver = '';
+      if (updatedAt) {
+        if (typeof updatedAt === 'object' && updatedAt.seconds) ver = String(updatedAt.seconds);
+        else if (typeof updatedAt === 'number') ver = String(updatedAt);
+        else ver = String(updatedAt).replace(/[^0-9A-Za-z_-]/g, '').slice(0, 32);
+      }
+      return '/img/' + objPath + (ver ? ('?v=' + ver) : '');
+    }
+
     function t(key) {
       return (i18n[currentLang] && i18n[currentLang][key]) || i18n["ja"][key] || key;
     }
@@ -776,7 +795,7 @@
           exName: exData.ex_name || ex,
           artistName: awData.artist || '',
           workTitle: awData.title || '',
-          imageUrl: awData.image_url || '',
+          imageUrl: translateImageUrl(awData.image_url, awData.updatedAt),
           sns: {
             insta: awData.insta || '',
             x: awData.x || '',
@@ -1283,7 +1302,7 @@
           commentsEndAt: e.comments_end_at || '',
           title: a.title || '',
           artist: a.artist || '',
-          image: a.image_url ? String(a.image_url) : '',
+          image: translateImageUrl(a.image_url, a.updatedAt),
           sns: {
             insta: a.insta || '',
             x: a.x || '',
