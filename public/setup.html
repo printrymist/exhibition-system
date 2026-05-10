@@ -27,7 +27,110 @@
       padding: 40px 32px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
       width: 100%;
-      max-width: 480px;
+      max-width: 640px;
+    }
+
+    /* Hero (営業セクション) */
+    .hero {
+      text-align: center;
+      margin: 0 0 28px 0;
+      padding: 0 0 24px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .hero h2 {
+      font-size: 1.4em;
+      color: #1a2a4a;
+      margin: 0 0 8px 0;
+      line-height: 1.4;
+    }
+    .hero p {
+      color: #666;
+      font-size: 0.95em;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    /* 機能グリッド */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin: 24px 0;
+    }
+    .feature {
+      background: #f7faff;
+      border: 1px solid #e3eef9;
+      border-radius: 10px;
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .feature .icon { font-size: 1.8em; margin-bottom: 4px; }
+    .feature .name { font-weight: bold; color: #1a2a4a; font-size: 0.92em; }
+    .feature .desc { color: #666; font-size: 0.78em; line-height: 1.5; margin-top: 4px; }
+
+    /* 練習モード強調 */
+    .sandbox-spotlight {
+      background: linear-gradient(135deg, #fff8e1 0%, #fff3c4 100%);
+      border: 1px solid #ffd54f;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 24px 0;
+      text-align: center;
+    }
+    .sandbox-spotlight h3 {
+      margin: 0 0 6px 0;
+      color: #7a5500;
+      font-size: 1.05em;
+    }
+    .sandbox-spotlight p {
+      margin: 4px 0;
+      color: #555;
+      font-size: 0.88em;
+      line-height: 1.6;
+    }
+    .sandbox-spotlight strong { color: #c77700; }
+
+    /* CTA リンク群 */
+    .cta-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 16px 0 8px;
+    }
+    .cta-row a {
+      display: inline-block;
+      padding: 8px 18px;
+      background: white;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+      border-radius: 8px;
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .cta-row a:hover { background: #f0f7ff; }
+
+    /* 申請フォームの見出し */
+    .apply-header {
+      margin: 28px 0 0 0;
+      padding-top: 24px;
+      border-top: 1px solid #eee;
+    }
+    .apply-header h3 {
+      margin: 0 0 6px 0;
+      color: #1a73e8;
+      font-size: 1.1em;
+    }
+    .apply-header p {
+      color: #666;
+      font-size: 0.88em;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    @media (max-width: 480px) {
+      .features { grid-template-columns: 1fr; }
     }
 
     .logo {
@@ -205,17 +308,58 @@
 
     <!-- 申請フォーム -->
     <div class="logo">
-      <h1>🎨 Exhibition Setup</h1>
-      <p>Rohei Printer System</p>
-      <p style="margin-top:6px;">
-        <a href="/docs/?m=organizer" target="_blank" rel="noopener" style="display:inline-block;padding:5px 12px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;text-decoration:none;">📖 主催者向けマニュアル</a>
-      </p>
+      <h1>🎨 Rohei Printer System</h1>
+      <p>展覧会運営の補助ツール</p>
     </div>
     <div id="applyView" style="display:none;">
-      <p style="color:#555; font-size:0.9em; line-height:1.6; margin:0 0 16px 0;">
-        展覧会運営のうち、キャプション印刷・QR いいね・問い合わせ受付を扱う補助ツールです。<br>
-        主催者の方は、こちらから展覧会のセットアップを申し込んでください。申請後、入力されたメールアドレスに確認メールをお送りします。
-      </p>
+
+      <!-- Hero -->
+      <div class="hero">
+        <h2>展覧会運営を、シンプルに。</h2>
+        <p>キャプション印刷・QR いいね・Web 展覧会・データ集計を 1 つのツールで。</p>
+      </div>
+
+      <!-- 機能グリッド -->
+      <div class="features">
+        <div class="feature">
+          <div class="icon">🖨️</div>
+          <div class="name">キャプション印刷</div>
+          <div class="desc">テンプレを選んで一括印刷</div>
+        </div>
+        <div class="feature">
+          <div class="icon">❤️</div>
+          <div class="name">QR でいいね・コメント</div>
+          <div class="desc">来場者がスマホで投稿</div>
+        </div>
+        <div class="feature">
+          <div class="icon">🌐</div>
+          <div class="name">Web 展覧会</div>
+          <div class="desc">SNS や Web で公開可能</div>
+        </div>
+        <div class="feature">
+          <div class="icon">📊</div>
+          <div class="name">リアルタイム集計</div>
+          <div class="desc">いいねランキングが見える</div>
+        </div>
+      </div>
+
+      <!-- 練習モードの強調 -->
+      <div class="sandbox-spotlight">
+        <h3>🧪 いきなり本番は不安?</h3>
+        <p><strong>練習モードで 14 日間お試し可能</strong>。失敗しても自動で消えるので安心。</p>
+        <p>気に入ったら、ワンクリックで本番運用に切り替えできます。</p>
+      </div>
+
+      <!-- マニュアルへのリンク -->
+      <div class="cta-row">
+        <a href="/docs/?m=organizer" target="_blank" rel="noopener">📖 主催者向けマニュアル</a>
+      </div>
+
+      <!-- 申請フォーム -->
+      <div class="apply-header">
+        <h3>📝 申請フォーム</h3>
+        <p>下記を入力してお申し込みください。入力されたメールアドレスに確認メールが届きます。</p>
+      </div>
       <label>展覧会名
         <input type="text" id="applyExName" placeholder="e.g. Independent Tokyo 2026">
       </label>
@@ -237,16 +381,10 @@
       </div>
 
       <div style="margin-top:18px; padding:12px 14px; background:#fff8e1; border:1px solid #ffd54f; border-radius:8px;">
-        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="applySandbox" style="width:18px; height:18px; flex-shrink:0; margin-top:3px;">
-          <div style="font-size:0.9em;">
-            <div style="font-weight:bold; color:#7a5500;">🧪 練習モードで試す (おすすめ)</div>
-            <div style="font-size:0.85em; color:#666; margin-top:4px; line-height:1.5;">
-              いきなり本番運用に入る前に、練習用として試せます。<br>
-              ・<strong>14 日後に自動削除</strong>されるので気軽に試行錯誤できます<br>
-              ・案内メールは作家に届かず、運営者に届くだけになります<br>
-              ・気に入った設定はそのまま「本番運用に切替」できます
-            </div>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="applySandbox" checked style="width:18px; height:18px; flex-shrink:0;">
+          <div style="font-size:0.92em; color:#7a5500;">
+            <strong>🧪 練習モードで試す</strong> <span style="color:#999; font-size:0.85em;">(おすすめ・初回は ON のままで)</span>
           </div>
         </label>
       </div>
