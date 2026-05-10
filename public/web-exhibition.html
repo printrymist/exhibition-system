@@ -620,14 +620,45 @@
       const qr = qrcode(0, 'H');
       qr.addData(url);
       qr.make();
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>会場 QR</title>
-        <style>body{font-family:sans-serif;text-align:center;padding:40px;}
-        img{max-width:80mm;height:auto;}
-        .url{font-family:monospace;font-size:0.7em;color:#555;word-break:break-all;margin-top:12px;}
-        @media print{body{padding:0;}}
+      const exNameSafe = escapeHtml((currentExName || 'Web 展覧会').trim());
+      // @page margin:0 でブラウザの印刷ヘッダ (日付・タイトル) が出ないようにする。
+      // タイトルも空文字にしておく (一部ブラウザは margin:0 でもヘッダを出すことがあるため二重防御)。
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title> </title>
+        <style>
+          @page { size: A4; margin: 0; }
+          html, body { margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
+            text-align: center;
+            color: #1a2a4a;
+            padding: 3cm 2cm;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .ex-name {
+            font-size: 1.6em;
+            font-weight: bold;
+            margin: 0 0 28px 0;
+            line-height: 1.4;
+          }
+          .qr-wrap { margin: 0 auto 24px; }
+          .qr-wrap img { max-width: 80mm; height: auto; display: block; margin: 0 auto; }
+          .hint {
+            font-size: 1em;
+            color: #444;
+            line-height: 1.6;
+            margin-top: 16px;
+          }
+          .hint-sub {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 8px;
+          }
         </style></head><body>
-        ${qr.createImgTag(10, 12)}
-        <div class="url">${escapeHtml(url)}</div>
+        <div class="ex-name">${exNameSafe}</div>
+        <div class="qr-wrap">${qr.createImgTag(10, 12)}</div>
+        <div class="hint">📱 スマホのカメラで読み取って、Web 展覧会をご覧ください</div>
+        <div class="hint-sub">— Web 展覧会 —</div>
         <script>setTimeout(()=>window.print(),300);<\/script>
         </body></html>`;
       const w = window.open('', '_blank');
