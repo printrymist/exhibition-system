@@ -1433,6 +1433,10 @@ exports.submitArtwork = onCall(
       writePayload.security_key = writePayload.security_key || "";
     }
 
+    const existingDataForAudit = existingSnap.exists ?
+      (existingSnap.data() || {}) :
+      {};
+
     await docRef.set(writePayload, { merge: true });
 
     logger.info("artwork submitted", {
@@ -1442,6 +1446,61 @@ exports.submitArtwork = onCall(
       caller: authEmail || "(anon)",
       fieldKeys: Object.keys(cleanFields),
     });
+
+    // Phase E (監査ログ): audit collection に変更内容を append。
+    // - changedFields: 既存値と異なるフィールドのみ
+    // - before / after: そのフィールドだけを抜粋 (doc サイズを抑える)
+    // - callerSessionHash: visitor/artist 経路の sessionId を SHA-256 → 16 文字に切詰め
+    //   (operator が同一セッションを集計するのに十分、生 sessionId は外部に漏れない)
+    // - audit 書込み失敗は本処理を止めない (logger.warn に降ろす)
+    try {
+      const changedFields = [];
+      const beforeFields = {};
+      const afterFields = {};
+      for (const k of Object.keys(cleanFields)) {
+        const oldV = existingDataForAudit[k];
+        const newV = cleanFields[k];
+        if (oldV !== newV) {
+          changedFields.push(k);
+          beforeFields[k] = oldV !== undefined ? oldV : null;
+          afterFields[k] = newV;
+        }
+      }
+      if (changedFields.length > 0) {
+        const auditEntry = {
+          exCode,
+          artworkId,
+          timestamp: writePayload.updatedAt,
+          authMode,
+          callerEmail: authEmail || null,
+          changedFields,
+          before: beforeFields,
+          after: afterFields,
+          isNew: !existingSnap.exists,
+        };
+        if (tok && tok.kind) {
+          auditEntry.tokenKind = tok.kind;
+        }
+        if (authMode === "artist_token" && tok && tok.artist) {
+          auditEntry.callerArtist = String(tok.artist);
+        }
+        if (tok && tok.sessionId) {
+          auditEntry.callerSessionHash = crypto
+            .createHash("sha256")
+            .update(String(tok.sessionId))
+            .digest("hex")
+            .slice(0, 16);
+        }
+        await admin.firestore().collection("audit").add(auditEntry);
+      }
+    } catch (auditErr) {
+      logger.warn("audit log write failed", {
+        exCode,
+        artworkId,
+        error: auditErr && auditErr.message ? auditErr.message : String(auditErr),
+      });
+    }
+
     return { success: true, exCode, artworkId, authMode };
   },
 );

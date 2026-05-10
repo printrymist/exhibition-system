@@ -150,6 +150,14 @@ service cloud.firestore {
       );
     }
 
+    // Phase E (2026-05-10): submitArtwork CF が変更履歴を append する監査ログ。
+    // クライアントからの書き込みは禁止 (admin SDK 経由の CF だけが書ける)。
+    // 読み取りは operator のみ (主催者の作品履歴閲覧 UI を後付けする場合は別の経路で渡す)。
+    match /audit/{auditId} {
+      allow read: if isOperator();
+      allow create, update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
