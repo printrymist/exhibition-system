@@ -82,6 +82,19 @@
       grid-template-columns: 1fr 1fr;
       gap: 18px;
       margin-bottom: 28px;
+      align-items: start;
+    }
+    .rankings-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+    .ranking-sub {
+      font-size: 0.7em;
+      font-weight: normal;
+      color: #888;
+      margin-left: 8px;
     }
     .ranking-card, .feed-card {
       background: rgba(255,255,255,0.75);
@@ -301,9 +314,19 @@
   </div>
 
   <div class="main-content">
-    <div class="ranking-card">
-      <div class="ranking-title">🏆 いいねランキング</div>
-      <div id="likesRanking"><div class="empty">まだいいねがありません</div></div>
+    <div class="rankings-column">
+      <div class="ranking-card">
+        <div class="ranking-title">🏆 総合いいねランキング <span class="ranking-sub">会場 + Web 合算</span></div>
+        <div id="likesRanking"><div class="empty">まだいいねがありません</div></div>
+      </div>
+      <div class="ranking-card">
+        <div class="ranking-title">🏛️ 会場いいねランキング <span class="ranking-sub">物理 QR 経由のみ</span></div>
+        <div id="physicalRanking"><div class="empty">まだ会場でのいいねがありません</div></div>
+      </div>
+      <div class="ranking-card">
+        <div class="ranking-title">🌐 Web いいねランキング <span class="ranking-sub">バーチャル展覧会経由のみ</span></div>
+        <div id="webRanking"><div class="empty">まだ Web からのいいねがありません</div></div>
+      </div>
     </div>
     <div class="feed-card">
       <div class="ranking-title">📝 最新コメント</div>
@@ -429,7 +452,12 @@
         document.getElementById('statComments').textContent = totalComments.toLocaleString();
         document.getElementById('statArtworks').textContent = totalArtworks.toLocaleString();
 
+        // 合算: 物理 + Web 両方を含むいいね数
         renderRanking('likesRanking', countByWork(l => l.isLike), 'いいね');
+        // 会場 (物理 QR): source が 'gallery' でない doc。旧 doc も source 未設定 = 物理扱い
+        renderRanking('physicalRanking', countByWork(l => l.isLike && l.source !== 'gallery'), 'いいね');
+        // Web ギャラリー: source === 'gallery'
+        renderRanking('webRanking', countByWork(l => l.isLike && l.source === 'gallery'), 'いいね');
         renderFeed(newCommentIds || []);
 
         document.getElementById('updatedAt').textContent = '最終更新: ' + new Date().toLocaleTimeString('ja-JP');
