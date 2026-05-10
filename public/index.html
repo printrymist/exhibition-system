@@ -467,6 +467,7 @@
   </div>
 
   <script src="offline-banner.js" data-message="⚠ オフラインです。いいねは接続復帰後に反映されます。"></script>
+  <script src="sessionid.js"></script>
   <script>
     // =========================================================
     // 🌟 URL パラメータ取得
@@ -700,7 +701,9 @@
       });
     }
 
-    window.onload = () => {
+    window.onload = async () => {
+      // sessionId を localStorage / cookie / IndexedDB から復元する (Phase V1)
+      try { await window.restoreSessionIdFromIDB(); } catch (_e) { /* fall through */ }
       applyLang();
       document.getElementById('unityGlobalLoading').style.display = 'flex';
 
@@ -967,16 +970,7 @@
       }
     }
 
-    function getOrCreateSessionId() {
-      // localStorage を使うとブラウザ単位（≒ 1人）で同じ sessionId が維持される
-      let sid = localStorage.getItem("rohei_session_id") || sessionStorage.getItem("rohei_session_id");
-      if (!sid) {
-        sid = "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-      }
-      localStorage.setItem("rohei_session_id", sid);
-      sessionStorage.setItem("rohei_session_id", sid);
-      return sid;
-    }
+    // getOrCreateSessionId / restoreSessionIdFromIDB は sessionid.js (Phase V1 三重冗長化) で提供。
 
     // =========================================================
     // 🟡 回答用ロジック

@@ -501,6 +501,7 @@
     const visitorFunctions = visitorApp.functions('asia-northeast1');
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="/sessionid.js"></script>
   <script>
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
@@ -631,18 +632,11 @@
       }
     }
 
-    function getOrCreateSessionId() {
-      // index.html と同じキーを共有 (ブラウザ単位 ≒ 1人)。
-      let sid = localStorage.getItem("rohei_session_id") || sessionStorage.getItem("rohei_session_id");
-      if (!sid) {
-        sid = "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-      }
-      localStorage.setItem("rohei_session_id", sid);
-      sessionStorage.setItem("rohei_session_id", sid);
-      return sid;
-    }
+    // getOrCreateSessionId / restoreSessionIdFromIDB は sessionid.js (Phase V1 三重冗長化) で提供。
 
     async function init() {
+      // sessionId を localStorage / cookie / IndexedDB から復元する (Phase V1)
+      try { await window.restoreSessionIdFromIDB(); } catch (_e) { /* fall through */ }
       const exCode = getUrlParam('ex').trim();
       if (!exCode) {
         document.getElementById('exTitle').innerText = 'Web 展覧会';
