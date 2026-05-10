@@ -78,6 +78,107 @@ const SMTP_FROM_NAME = "Rohei Printer System";
 const SMTP_FROM_ADDR = "noreply.rohei.printer@gmail.com";
 const SMTP_REPLY_TO = "\"Rohei Printer Support\" <noreply.rohei.printer+contact@gmail.com>";
 
+// continueUrl からサインインリンクの目的を推定して、
+// 件名 / 本文 / ボタン文言を文脈ごとに切り替える。
+// 後でメールを見返したときに「どの操作のためのリンクか」が一目で分かるようにする。
+const SIGN_IN_LINK_CONTEXTS = {
+  "/setup.html": {
+    label: "展覧会セットアップの確認",
+    intro: "展覧会セットアップを続けるため、下のボタンを押して確認を完了してください。",
+    button: "確認を完了する",
+  },
+  "/register.html": {
+    label: "作品登録/設定 のログイン",
+    intro: "作品登録/設定 画面にログインするため、下のボタンを押してください。",
+    button: "作品登録/設定 にログイン",
+  },
+  "/caption.html": {
+    label: "キャプション印刷 のログイン",
+    intro: "キャプション印刷 画面にログインするため、下のボタンを押してください。",
+    button: "キャプション印刷 にログイン",
+  },
+  "/reports.html": {
+    label: "出力・レポート のログイン",
+    intro: "出力・レポート画面にログインするため、下のボタンを押してください。",
+    button: "出力・レポート にログイン",
+  },
+  "/dashboard.html": {
+    label: "ダッシュボード のログイン",
+    intro: "ダッシュボード画面にログインするため、下のボタンを押してください。",
+    button: "ダッシュボード にログイン",
+  },
+  "/web-exhibition.html": {
+    label: "Web 展覧会設定 のログイン",
+    intro: "Web 展覧会設定 画面にログインするため、下のボタンを押してください。",
+    button: "Web 展覧会設定 にログイン",
+  },
+  "/admin/exports.html": {
+    label: "データダウンロード のログイン",
+    intro: "データダウンロード画面にログインするため、下のボタンを押してください。",
+    button: "データダウンロード にログイン",
+  },
+};
+
+const SIGN_IN_LINK_DEFAULT = {
+  label: "ログインの確認",
+  intro: "下のボタンを押してログインを完了してください。",
+  button: "ログインを完了する",
+};
+
+function escapeHtmlText(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function deriveSignInLinkContext(continueUrl) {
+  let pathname = "";
+  let exCode = "";
+  try {
+    const u = new URL(continueUrl);
+    pathname = u.pathname || "";
+    const ex = u.searchParams.get("ex");
+    if (ex && /^[A-Za-z0-9_-]+$/.test(ex)) exCode = ex;
+  } catch (_e) {
+    /* 無効な URL でも下のデフォルトでフォールバックする */
+  }
+
+  const ctx = SIGN_IN_LINK_CONTEXTS[pathname] || SIGN_IN_LINK_DEFAULT;
+
+  // 展覧会名を Firestore から best-effort で引いて件名に含める。
+  // 失敗しても件名生成は続行 (展覧会コードのみ表示)。
+  let exName = "";
+  if (exCode) {
+    try {
+      const snap = await admin.firestore()
+        .collection("exhibitions").doc(exCode).get();
+      if (snap.exists) {
+        const d = snap.data() || {};
+        exName = String(d.ex_name || "").trim();
+      }
+    } catch (e) {
+      logger.warn("exhibitions lookup for sign-in link subject failed", {
+        exCode, msg: e && e.message,
+      });
+    }
+  }
+
+  let subjectExPart = "";
+  if (exCode && exName) {
+    subjectExPart = "「" + exName + "」(" + exCode + ") — ";
+  } else if (exCode) {
+    subjectExPart = "(" + exCode + ") — ";
+  }
+  const subject = "[Rohei Printer System] " + subjectExPart + ctx.label;
+
+  return {
+    subject,
+    intro: ctx.intro,
+    button: ctx.button,
+  };
+}
+
 exports.sendSignInLink = onCall(
   { secrets: [SMTP_PASSWORD] },
   async (request) => {
@@ -100,6 +201,11 @@ exports.sendSignInLink = onCall(
       throw new HttpsError("internal", "サインインリンクの生成に失敗しました: " + err.message);
     }
 
+    // continueUrl から目的・展覧会コードを推定して、件名と本文を出し分ける。
+    // 旧実装はすべて「展覧会セットアップの確認」だったため、
+    // 後でメールを見返したときどれがどの操作のリンクか分からなくなる問題を解消する。
+    const ctx = await deriveSignInLinkContext(continueUrl);
+
     // Gmail SMTP 経由で送信
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -111,13 +217,13 @@ exports.sendSignInLink = onCall(
       },
     });
 
-    const subject = "[Rohei Printer System] 展覧会セットアップの確認";
+    const subject = ctx.subject;
 
     // プレーンテキスト版: URL をそのまま含める (テキスト表示でも見える)
     const text = [
       "Rohei Printer System をご利用いただきありがとうございます。",
       "",
-      "展覧会セットアップを続けるため、下記の URL を開いて確認を完了してください。",
+      ctx.intro,
       "",
       link,
       "",
@@ -132,9 +238,9 @@ exports.sendSignInLink = onCall(
       "<html lang=\"ja\">\n" +
       "<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #222; line-height: 1.6;\">\n" +
       "  <p>Rohei Printer System をご利用いただきありがとうございます。</p>\n" +
-      "  <p>展覧会セットアップを続けるため、下のボタンを押して確認を完了してください。</p>\n" +
+      "  <p>" + escapeHtmlText(ctx.intro) + "</p>\n" +
       "  <p>\n" +
-      "    <a href=\"" + link + "\" style=\"display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;\">確認を完了する</a>\n" +
+      "    <a href=\"" + link + "\" style=\"display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;\">" + escapeHtmlText(ctx.button) + "</a>\n" +
       "  </p>\n" +
       "  <p style=\"color:#555;\">もしボタンが押せない場合は、以下の URL をブラウザに貼り付けて開いてください:</p>\n" +
       "  <p style=\"word-break:break-all;color:#555;font-size:0.9em;\">" + link + "</p>\n" +

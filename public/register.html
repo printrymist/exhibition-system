@@ -1257,6 +1257,15 @@
           }
           document.getElementById('linkToCaption').href = 'caption.html?ex=' + ex;
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
+          // アドレスバーの ?ex= を最新に揃える。
+          // これで主催者ログインメールの continueUrl も最新の ex_code を持つ。
+          try {
+            const url = new URL(window.location.href);
+            if (url.searchParams.get('ex') !== ex) {
+              url.searchParams.set('ex', ex);
+              window.history.replaceState({}, '', url.toString());
+            }
+          } catch (_e) { /* URL 操作失敗は無視 */ }
           refreshCurrentArtworkCount();
           applyAuthorizationUI();
         })

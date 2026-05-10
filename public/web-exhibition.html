@@ -365,6 +365,14 @@
           appearancePending.bg = null;
           appearanceCleared.hero = false;
           appearanceCleared.bg = false;
+          // アドレスバーの ?ex= を最新に揃える (主催者ログインメールが正しい ex_code を持つように)
+          try {
+            const u = new URL(window.location.href);
+            if (u.searchParams.get('ex') !== ex) {
+              u.searchParams.set('ex', ex);
+              window.history.replaceState({}, '', u.toString());
+            }
+          } catch (_e) { /* URL 操作失敗は無視 */ }
           applyAuthorizationUI();
         })
         .catch(err => {
