@@ -6,6 +6,8 @@
 
 ## 0. 前提
 
+このマニュアルは **Web 展覧会の公開設定が済んでいること** を前提とします。設定方法は **`manual_operator.md` の §5.5「Web 展覧会 (gallery) を公開する」** を参照してください。
+
 - web-exhibition.html で **公開状態 = public** にしておく (誰でも URL からアクセス可能な状態)
 - ヒーロー画像 / タイトル / サブタイトルを設定しておくと SNS 上でリッチなプレビューカードになる (web-exhibition.html → ギャラリー外観)
 - gallery URL は `https://rohei-printer-system.web.app/gallery.html?ex=<展覧会コード>` の形
