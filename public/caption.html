@@ -2634,7 +2634,10 @@
     }
 
     function makeFieldEl(name, size, bold, italic, align, checked, maxLines, minSize, currency, comma, prefix, suffix, affixScale) {
-      maxLines = maxLines !== undefined ? maxLines : 2;
+      // 既定の最大行数はフィールド単位で field-defs.js が持つ (タイトル系は 2、それ以外は 1)。
+      // 旧コードは全フィールド一律 2 だったが、年・価格などで autoFit が無駄に動いて
+      // 「サイズ指定通りに表示されない」混乱の原因になっていた。
+      maxLines = maxLines !== undefined ? maxLines : ((FIELD_MAP[name] && FIELD_MAP[name].maxLines) || 1);
       minSize = minSize !== undefined ? minSize : (name === 'title' ? 8 : 7);
       currency = currency !== undefined ? currency : '';
       comma = comma !== undefined ? comma : false;
@@ -3238,7 +3241,7 @@
           const align = item.align !== 'inherit' ? item.align : s.textAlign;
           const weight = item.bold ? 'bold' : 'normal';
           const fstyle = item.italic ? 'italic' : 'normal';
-          const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
+          const maxLines = item.maxLines !== undefined ? item.maxLines : ((FIELD_MAP[item.name] && FIELD_MAP[item.name].maxLines) || 1);
           const minSize = item.minSize !== undefined ? item.minSize : 7;
           // サンプル値は preview 上でグレー化して「実データではない」と分かるようにする
           const sampleStyle = resolved.isSample ? 'color:#aaa;' : '';

@@ -15,8 +15,8 @@
 const FIELD_DEFS = [
   // 作品基本情報
   { name: 'image_url',   label: '作品画像',         desc: '作品の写真（JPEG/PNG）',                              textarea: false, type: 'image', isDefault: true },
-  { name: 'title',       label: 'タイトル',         desc: '作品名（日本語）',                                    textarea: false, isDefault: true, isCaptionRequired: true },
-  { name: 'title_en',    label: 'タイトル（英語）', desc: '作品名（英語）',                                      textarea: false },
+  { name: 'title',       label: 'タイトル',         desc: '作品名（日本語）',                                    textarea: false, isDefault: true, isCaptionRequired: true, maxLines: 2 },
+  { name: 'title_en',    label: 'タイトル（英語）', desc: '作品名（英語）',                                      textarea: false, maxLines: 2 },
   { name: 'year',        label: '制作年',           desc: '制作された年（例：2024）',                            textarea: false, isDefault: true },
   { name: 'series',      label: 'シリーズ名',       desc: '連作・シリーズのタイトル',                            textarea: false },
   { name: 'technique',   label: '技法',             desc: '制作技法（例：油彩、版画）',                          textarea: false, isDefault: true },
@@ -46,8 +46,8 @@ const FIELD_DEFS = [
   // 来歴・クレジット・備考
   { name: 'collection',  label: 'コレクション',     desc: '所蔵先・コレクション名',                              textarea: false },
   { name: 'courtesy',    label: 'クレジット',       desc: '画廊・提供元のクレジット表記',                        textarea: false },
-  { name: 'note',        label: '備考',             desc: 'キャプションに表示するその他の情報',                  textarea: true  },
-  { name: 'artist_note', label: '作家コメント',     desc: '作家自身によるコメント・ステートメント',              textarea: true  },
+  { name: 'note',        label: '備考',             desc: 'キャプションに表示するその他の情報',                  textarea: true,  maxLines: 2 },
+  { name: 'artist_note', label: '作家コメント',     desc: '作家自身によるコメント・ステートメント',              textarea: true,  maxLines: 2 },
 
   // 作家リンク (web 展覧会で外部発信用)
   // 順序は旧 SNS_FIELDS = [insta, x, facebook, web, shop_url] に合わせている。
