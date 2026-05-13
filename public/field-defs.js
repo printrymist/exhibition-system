@@ -26,6 +26,11 @@ const FIELD_DEFS = [
   { name: 'image_size',  label: 'イメージサイズ',   desc: '版画等の刷り部分の寸法（例：300×220mm）',             textarea: false },
   { name: 'edition',     label: 'エディション',     desc: '版画等のエディション番号（例：3/30）',                textarea: false },
 
+  // 写真展用フィールド (公式テンプレ「📷 写真展 推奨」が使用)
+  { name: 'shooting_location', label: '撮影地',     desc: '撮影した場所（例：北アルプス・常念岳）',              textarea: false },
+  { name: 'shooting_year',     label: '撮影年',     desc: '撮影した年',                                          textarea: false },
+  { name: 'camera',            label: 'カメラ・印画', desc: '使用カメラ・印画方式（例：SONY α7R IV、ジクレー）', textarea: false },
+
   // 作家情報 (作品ではなく作家単位で同じ値を共有)
   { name: 'artist',      label: '作家名',           desc: '作家名（日本語）',                                    textarea: false, isArtist: true, isDefault: true },
   { name: 'artist_en',   label: '作家名（英語）',   desc: '作家名（英語）',                                      textarea: false, isArtist: true },

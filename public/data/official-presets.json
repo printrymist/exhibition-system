@@ -1,0 +1,131 @@
+{
+  "templates": {
+    "official_solo": {
+      "label": "🎨 個展 推奨",
+      "tagline": "1 人の作家・ゆったり展示用",
+      "size": "A7 縦 (74×105mm)",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "items": [
+        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
+    },
+
+    "official_group": {
+      "label": "🎭 グループ展 推奨",
+      "tagline": "多人数展・効率印刷用",
+      "size": "A8 (52×74mm) コンパクト",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "items": [
+        { "type": "field", "name": "title",     "size": 9, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "artist",    "size": 8, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "year",      "size": 7, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "technique", "size": 7, "bold": false, "italic": false, "align": "inherit", "maxLines": 2, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "price",     "size": 8, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
+    },
+
+    "official_photo": {
+      "label": "📷 写真展 推奨",
+      "tagline": "撮影地・カメラなど写真特有の情報",
+      "size": "A7 横 (105×74mm)",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "items": [
+        { "type": "field", "name": "title",             "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "shooting_location", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "shooting_year",     "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "camera",            "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "price",             "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
+    },
+
+    "official_intl": {
+      "label": "🌐 国際展 推奨",
+      "tagline": "日英併記、海外作家・観客向け",
+      "size": "A7 縦 (74×105mm) 中央寄せ",
+      "qrPosition": "bottom-left",
+      "qrOffset": 0,
+      "textAlign": "center",
+      "items": [
+        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "title_en",  "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "group", "sep": " / ", "align": "center", "children": [
+          { "type": "field", "name": "artist",     "size": 9, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+          { "type": "field", "name": "artist_en",  "size": 9, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" }
+        ] },
+        { "type": "field", "name": "year",      "size": 7, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "price",     "size": 9, "bold": true,  "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
+    }
+  },
+
+  "samples": {
+    "official_solo": {
+      "artwork_id": "demo_solo",
+      "title": "桜咲く春の風景",
+      "title_en": "Spring Cherry Blossoms",
+      "artist": "田中花子",
+      "artist_en": "Hanako Tanaka",
+      "year": "2024",
+      "technique": "油彩・キャンバス",
+      "size": "530×455mm",
+      "price": "85000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_group": {
+      "artwork_id": "demo_group",
+      "title": "青の交響",
+      "title_en": "Symphony in Blue",
+      "artist": "鈴木一郎",
+      "artist_en": "Ichiro Suzuki",
+      "year": "2024",
+      "technique": "アクリル・パネル",
+      "size": "410×318mm",
+      "price": "45000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_photo": {
+      "artwork_id": "demo_photo",
+      "title": "朝霧の山頂",
+      "title_en": "Misty Summit",
+      "artist": "佐藤翔太",
+      "artist_en": "Shota Sato",
+      "year": "2023",
+      "technique": "ジクレー印刷",
+      "shooting_location": "北アルプス・常念岳",
+      "shooting_year": "2023",
+      "camera": "SONY α7R IV",
+      "size": "300×450mm",
+      "price": "28000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_intl": {
+      "artwork_id": "demo_intl",
+      "title": "月光のソナタ",
+      "title_en": "Moonlight Sonata",
+      "artist": "山田太郎",
+      "artist_en": "Taro Yamada",
+      "year": "2024",
+      "technique": "ミクストメディア",
+      "size": "600×500mm",
+      "price": "120000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    }
+  }
+}

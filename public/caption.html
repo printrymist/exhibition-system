@@ -300,10 +300,13 @@
        下の専用領域に集約 (選択するたびにグリッドが動かない、画面が安定) */
     .template-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       margin-bottom: 12px;
       align-items: start;
+    }
+    @media (max-width: 720px) {
+      .template-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     .template-card {
@@ -323,6 +326,83 @@
     .template-card.selected {
       border-color: #1a73e8;
       background: #f0f7ff;
+    }
+
+    /* 🏛️ 公式テンプレ: ゴールド系のアクセント枠で差別化 */
+    .template-card.official {
+      border-color: #f0c14b;
+      background: linear-gradient(180deg, #fffdf5 0%, #ffffff 30%);
+      position: relative;
+    }
+    .template-card.official::after {
+      content: "⭐ 推奨";
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #b8860b;
+      background: rgba(255,255,255,0.7);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .template-card.official:hover {
+      border-color: #d49b1f;
+      background: linear-gradient(180deg, #fff8e1 0%, #fffdf5 30%);
+    }
+    .template-card.official.selected {
+      border-color: #d49b1f;
+      background: linear-gradient(180deg, #fff3c4 0%, #fff8e1 30%);
+    }
+    .template-card.official h4 {
+      color: #7a5500;
+    }
+    /* 採用ボタン (全テンプレ共通) */
+    .template-card .btn-adopt {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 5px 10px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .template-card .btn-adopt:hover {
+      background: #1557b0;
+    }
+    .template-card .btn-adopt:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    /* 採用中バッジ */
+    .template-card.adopted {
+      border-color: #0b8043 !important;
+      background: linear-gradient(180deg, #e6f4ea 0%, #ffffff 40%) !important;
+      position: relative;
+    }
+    .template-card.adopted::before {
+      content: "✅ 採用中";
+      position: absolute;
+      top: -8px;
+      left: 8px;
+      background: #0b8043;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 10px;
+      z-index: 1;
+    }
+    .template-card.adopted .btn-adopt {
+      background: #0b8043;
+    }
+    .template-card.adopted .btn-adopt:hover {
+      background: #086930;
     }
 
     .template-card h4 {
@@ -1316,21 +1396,84 @@
       </div>
 
       <div id="templateTab">
-        <!-- 規定テンプレ管理: 選択中と保存済みの規定を並べて、明示ボタンで保存 -->
-        <div id="templateChoiceBanner" style="margin-bottom:12px; padding:10px 12px; background:#f0f7ff; border:1px solid #c5d9f7; border-radius:8px; font-size:0.85em;">
-          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:6px;">
-            <div>選択中: <strong id="bannerCurrentName" style="color:#1a73e8;">—</strong></div>
-            <div>この展覧会の規定: <strong id="bannerDefaultName" style="color:#0b8043;">—</strong></div>
-          </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button id="btnSetAsDefault" onclick="setAsDefaultTemplate()" disabled
-              style="padding:5px 12px; background:#1a73e8; color:white; border:none; border-radius:6px; font-size:0.85em; cursor:pointer; opacity:0.5;">
-              📌 選択中を規定に設定
-            </button>
-            <span id="bannerDefaultMsg" style="font-size:0.78em; color:#888;"></span>
-          </div>
+        <!-- 規定テンプレ管理 banner は撤去。
+             公式テンプレは 📥 採用 ボタン + ✅ 採用中 バッジ で状態管理する。
+             カード選択ハイライトで「いまプレビュー中」も視覚的に分かるため redundant だった。 -->
+        <!-- テンプレ一覧 (公式 + ベース統合)。⭐ 推奨 マーク付きは「すぐ使える」公式テンプレ。 -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span style="font-size:0.95em; font-weight:bold; color:#444;">📋 テンプレ一覧</span>
+          <span style="font-size:0.78em; color:#aaa;">⭐ マークは公式推奨 (項目とサイズが詰めてあり、そのまま使えます)</span>
         </div>
         <div class="template-grid">
+          <div class="template-card official" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
+            data-description="1 人の作家・ゆったり展示用。A7 縦 (74×105mm) で A4 に 8 枚並ぶ。タイトル大きめ・余白多め。">
+            <h4>🎨 個展 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:13px;font-weight:bold;">桜咲く春の風景</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:10px;">田中花子</div>
+                <div style="font-size:9px;color:#777;">2024</div>
+                <div style="font-size:9px;color:#777;">油彩・キャンバス</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:10px;font-weight:bold;">¥ 85,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_solo')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_group" onclick="selectTemplate('official_group')"
+            data-description="多人数展・効率印刷用。A8 (52×74mm) で A4 に 16 枚並ぶ。コンパクト・情報密度高め。">
+            <h4>🎭 グループ展 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:11px;font-weight:bold;">青の交響</div>
+                <div style="font-size:10px;font-weight:bold;">鈴木一郎</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:8.5px;color:#777;">2024</div>
+                <div style="font-size:8.5px;color:#777;">アクリル・パネル</div>
+                <div style="font-size:9px;font-weight:bold;">¥ 45,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_group')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_photo" onclick="selectTemplate('official_photo')"
+            data-description="写真展・撮影情報重視。A7 横 (105×74mm)。撮影地・撮影年・カメラの項目が必要 (項目設定に追加)。">
+            <h4>📷 写真展 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:12px;font-weight:bold;">朝霧の山頂</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:9px;color:#777;">北アルプス・常念岳</div>
+                <div style="font-size:9px;color:#777;">2023</div>
+                <div style="font-size:8.5px;color:#777;">SONY α7R IV</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:10px;font-weight:bold;">¥ 28,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_photo')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_intl" onclick="selectTemplate('official_intl')"
+            data-description="日英併記、海外作家・観客向け。A7 縦 (74×105mm) で中央寄せ。">
+            <h4>🌐 国際展 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-left">
+                <div style="font-size:13px;font-weight:bold;text-align:center;">月光のソナタ</div>
+                <div style="font-size:9.5px;color:#777;text-align:center;">Moonlight Sonata</div>
+                <div class="tpl-divider"></div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:10px;text-align:center;">山田太郎 / Taro Yamada</div>
+                <div style="font-size:8.5px;color:#777;text-align:center;">2024 ミクストメディア</div>
+                <div style="font-size:10px;font-weight:bold;text-align:center;">¥ 120,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_intl')">📥 採用</button>
+          </div>
+
+          <!-- ベース (PRESETS) — 同じ template-grid 内で続く -->
           <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')"
             data-description="標準的な構成。タイトル・作家・年・技法・価格。展覧会全般向けの定番。">
             <h4>📋 標準</h4>
@@ -1345,6 +1488,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('standard')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')"
             data-description="タイトルと作家名のみ。最小構成。">
@@ -1356,13 +1500,13 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('minimal')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_gallery" onclick="selectTemplate('gallery')"
             data-description="QR が左上、その下に divider と本文。画廊風のレイアウト。">
             <h4>🖼️ ギャラリー</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="top-left">
-                <!-- QR の高さ分のクリアランス (実印刷でも自動付与) -->
                 <div style="height:24px;"></div>
                 <div class="tpl-divider"></div>
                 <div style="font-size:13px;font-weight:bold;">作品タイトル</div>
@@ -1372,6 +1516,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('gallery')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_bilingual" onclick="selectTemplate('bilingual')"
             data-description="タイトル・作家名を日本語と英語で併記。海外向け展示や国際展で。">
@@ -1386,6 +1531,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('bilingual')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_print" onclick="selectTemplate('print')"
             data-description="技法・エディション・サイズ・額装価格まで表示。版画・限定版作品向け。">
@@ -1402,6 +1548,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('print')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_jp_standard" onclick="selectTemplate('jp_standard')"
             data-description="作品名がトップ。和風の標準的な構成。整列は Page layout の Text align で変更可。">
@@ -1417,6 +1564,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('jp_standard')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_jp_artist_first" onclick="selectTemplate('jp_artist_first')"
             data-description="作家名から始まる和風の構成。整列は Page layout の Text align で変更可。">
@@ -1433,6 +1581,7 @@
                 <div class="tpl-qr-marker"></div>
               </div>
             </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('jp_artist_first')">📥 採用</button>
           </div>
         </div>
         <div class="selected-tpl-preview-wrap">
@@ -1440,12 +1589,13 @@
           <div id="selectedTplPreview" class="selected-tpl-preview"></div>
         </div>
 
+        <!-- 旧「🏛️ 公式テンプレ (運営者作成)」セクションは official-presets.json (新公式 4 つ) に置換済みのため削除。
+             「💾 自分のテンプレ」は引き続き利用するため復活。 -->
         <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
+          <!-- officialTemplatesWrap は使われないが loadSavedTemplates() の DOM 参照を生かすため
+               空のスタブとして残しておく (display:none で見えない)。 -->
           <div id="officialTemplatesWrap" style="display:none;">
-            <div style="font-size:0.78em;color:#888;margin-bottom:8px;padding-top:10px;border-top:1px solid #eee;">
-              🏛️ 公式テンプレ <span style="color:#aaa;font-size:0.92em;">(運営者作成・共通)</span>
-            </div>
-            <div id="officialTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+            <div id="officialTemplatesGrid" style="display:none;"></div>
           </div>
           <div id="personalTemplatesWrap" style="display:none;">
             <div style="font-size:0.78em;color:#888;margin:14px 0 8px 0;padding-top:10px;border-top:1px solid #eee;">
@@ -1761,7 +1911,8 @@
       if (id.indexOf('preset:') === 0) {
         const presetName = id.slice('preset:'.length);
         if (PRESETS[presetName]) {
-          selectTemplate(presetName);
+          selectTemplate(presetName, { commit: true });
+          updateAdoptedBadges(presetName);
         } else {
           console.warn('preset not found:', presetName);
         }
@@ -1772,7 +1923,7 @@
           loadSavedTemplate(btn);
         } else {
           console.warn('saved template not found in DOM, fallback to preset standard:', docId);
-          selectTemplate('standard');
+          selectTemplate('standard', { commit: true });
         }
       }
       updateTemplateChoiceBanner();
@@ -1781,16 +1932,34 @@
     // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
     // 呼ばれるため、その時点では fetch は完了している (Firestore 認証や exhibition
     // 取得より先に解決する小さな静的 JSON のため)。
+    // 標準プリセット + 公式プリセット を同じ PRESETS object に統合 (selectTemplate 互換)。
+    // 2 つの fetch がレース状態になっても両方が確実にマージされるように、
+    // それぞれの完了時に PRESETS への代入ではなく Object.assign で追加していく。
     let PRESETS = {};
+    let OFFICIAL_PRESETS = {};
+    let OFFICIAL_SAMPLES = {};
     fetch('data/caption-presets.json')
       .then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
-      .then(data => { PRESETS = data; })
+      .then(data => { Object.assign(PRESETS, data || {}); })
       .catch(err => {
         console.error('PRESETS load failed:', err);
         alert('プリセット読み込みに失敗しました: ' + (err && err.message ? err.message : err));
+      });
+    fetch('data/official-presets.json')
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(data => {
+        OFFICIAL_PRESETS = (data && data.templates) || {};
+        OFFICIAL_SAMPLES = (data && data.samples) || {};
+        Object.assign(PRESETS, OFFICIAL_PRESETS);
+      })
+      .catch(err => {
+        console.warn('OFFICIAL_PRESETS load failed:', err && err.message ? err.message : err);
       });
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1923,6 +2092,143 @@
         (pos.startsWith('top') || pos.startsWith('wrap')) ? 'flex' : 'none';
     }
 
+    // ─────────────────────────────────────────────────────────
+    // テンプレの「📥 採用」: 項目設定 (registration_fields) に不足分を追加 +
+    // フォーム設定 (caption_fields) をテンプレに置換 + caption_template_id を保存。
+    // クリック (selectTemplate) はプレビューだけで設定は触らない、採用は明示的アクション。
+    // 公式テンプレ (official_*) も標準プリセットも同じロジックで動く。
+    // ─────────────────────────────────────────────────────────
+    function _extractTemplateFieldNames(items) {
+      const out = [];
+      if (!Array.isArray(items)) return out;
+      for (const item of items) {
+        if (!item) continue;
+        if (item.type === 'field' && item.name) out.push(item.name);
+        if (item.type === 'group' && Array.isArray(item.children)) {
+          for (const child of item.children) {
+            if (child && child.type === 'field' && child.name) out.push(child.name);
+          }
+        }
+      }
+      return Array.from(new Set(out));
+    }
+
+    async function adoptTemplate(name) {
+      const preset = PRESETS[name];
+      if (!preset) {
+        alert('テンプレが読み込まれていません。');
+        return;
+      }
+      const ex = window._currentEx;
+      if (!ex) {
+        alert('展覧会が読み込まれていません。');
+        return;
+      }
+      if (!artworkData) {
+        alert('展覧会データが読み込まれていません。');
+        return;
+      }
+
+      const neededFields = _extractTemplateFieldNames(preset.items);
+      const currentRegFields = Array.isArray(artworkData.registrationFields) ? artworkData.registrationFields : [];
+      const currentRegNames = new Set(currentRegFields.map(f => f && f.name).filter(Boolean));
+      const missing = neededFields.filter(n => !currentRegNames.has(n));
+
+      // FIELD_DEFS に未定義のフィールドがあるとラベル等が出ないので弾く
+      const unknown = missing.filter(n => !FIELD_MAP[n]);
+      if (unknown.length > 0) {
+        alert('テンプレが使う未定義フィールドがあります: ' + unknown.join(', ')
+          + '\n運営者にお問い合わせください。');
+        return;
+      }
+
+      const label = getTemplateLabel(name);
+      const missingLabels = missing.map(n => (FIELD_MAP[n] && FIELD_MAP[n].label) || n);
+
+      let confirmMsg = label + ' をこの展覧会に採用しますか?\n\n';
+      if (missing.length > 0) {
+        confirmMsg += '項目設定に追加されます (既存項目はそのまま):\n';
+        missingLabels.forEach(l => { confirmMsg += '  + ' + l + '\n'; });
+        confirmMsg += '\n';
+      } else {
+        confirmMsg += '項目設定への追加はありません (必要項目は既に設定済み)。\n\n';
+      }
+      confirmMsg += 'フォーム設定 (キャプション項目) はテンプレに合わせて置き換わります。';
+
+      if (!confirm(confirmMsg)) return;
+
+      const newRegFields = [
+        ...currentRegFields,
+        ...missing.map(n => ({ name: n, required: false })),
+      ];
+
+      // 新 caption_fields: テンプレが使う field 名を列挙 (重複除去済)
+      // required は既存 captionFields の値を引き継ぎ (なければ false)
+      const currentCaptionFields = Array.isArray(artworkData.captionFields) ? artworkData.captionFields : [];
+      const captionRequiredMap = Object.fromEntries(
+        currentCaptionFields.map(f => [f && f.name, !!(f && f.required)])
+      );
+      const newCaptionFields = neededFields.map(n => ({
+        name: n,
+        required: !!captionRequiredMap[n],
+      }));
+
+      const templateId = 'preset:' + name;
+
+      try {
+        await fsDb.collection('exhibitions').doc(ex).set({
+          registration_fields: JSON.stringify(newRegFields),
+          caption_fields: JSON.stringify(newCaptionFields),
+          caption_template_id: templateId,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+
+        // in-memory 更新
+        artworkData.registrationFields = newRegFields;
+        artworkData.captionFields = newCaptionFields;
+        // headers にも不足分を追加 (buildFieldsGridFromPreset が headers でフィルタするため)
+        if (!Array.isArray(artworkData.headers)) artworkData.headers = [];
+        missing.forEach(n => {
+          if (!artworkData.headers.includes(n)) artworkData.headers.push(n);
+        });
+        _savedTemplateId = templateId;
+        _lastSelectedTemplate = { id: templateId, name: label };
+
+        // テンプレ反映 (preview + Custom タブの fieldsGrid + フォーム設定 を強制再構築)
+        selectTemplate(name, { commit: true });
+        buildFieldsGridFromPreset(name);
+        if (typeof buildFieldSettingGrid === 'function') {
+          buildFieldSettingGrid(newCaptionFields, newRegFields);
+        }
+        schedulePreviewUpdate();
+
+        // 採用バッジを更新
+        updateAdoptedBadges(name);
+        updateTemplateChoiceBanner();
+
+        alert('✅ ' + label + ' を採用しました。\n'
+          + (missing.length > 0
+              ? '項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
+              : 'フォーム設定が更新されました。'));
+      } catch (err) {
+        console.error('adoption save failed:', err);
+        alert('保存に失敗しました: ' + (err && err.message ? err.message : err));
+      }
+    }
+
+    function updateAdoptedBadges(adoptedKey) {
+      document.querySelectorAll('.template-card').forEach(card => {
+        card.classList.remove('adopted');
+      });
+      if (adoptedKey) {
+        const card = document.getElementById('tpl_' + adoptedKey);
+        if (card) card.classList.add('adopted');
+      }
+    }
+
+    // 後方互換 (旧名). adoptTemplate に統合済み。
+    function adoptOfficialTemplate(name) { return adoptTemplate(name); }
+
     function switchTab(tab) {
       document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
       document.getElementById('tabCustom').classList.toggle('active', tab === 'custom');
@@ -1939,13 +2245,20 @@
       }
     }
 
-    function selectTemplate(name) {
+    // テンプレカード選択。
+    // browse モード (default): カードのハイライト + 下の構造プレビューだけ更新。
+    //   メインの実印刷プレビューや Page Layout の qrPosition 等は触らない。
+    // commit モード: フォーム値 (qrPosition / textAlign / qrOffset) も更新 + メイン preview 再描画。
+    //   採用 (adoptTemplate) と起動時の applyCaptionTemplateChoice から呼ぶ。
+    function selectTemplate(name, opts) {
+      opts = opts || {};
+      const commit = !!opts.commit;
       currentTemplate = name;
       document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
       const card = document.getElementById('tpl_' + name);
       if (card) card.classList.add('selected');
 
-      // 選択中テンプレの inline プレビュー + 説明文を共通領域にクローン (画面が動かない)
+      // 構造プレビュー (小) は常に更新 — クリックでテンプレの中身を比較する用途
       const sourcePreview = card ? card.querySelector('.template-preview') : null;
       const dest = document.getElementById('selectedTplPreview');
       if (dest && sourcePreview) {
@@ -1958,15 +2271,18 @@
 
       const p = PRESETS[name];
       if (!p) return;  // 起動直後 PRESETS 未ロードのケース
-      document.getElementById('qrPosition').value = p.qrPosition;
-      document.getElementById('qrOffset').value = p.qrOffset || 0;
-      document.getElementById('textAlign').value = p.textAlign;
-      onQrPositionChange();
-      schedulePreviewUpdate();
 
-      // 選択中テンプレを記録 (Firestore 保存は明示的「📌 規定に設定」ボタンが押されたときだけ)
       _lastSelectedTemplate = { id: 'preset:' + name, name: getTemplateLabel(name) };
       updateTemplateChoiceBanner();
+
+      // commit モードでのみ Page Layout 反映 + メイン preview 再描画
+      if (commit) {
+        document.getElementById('qrPosition').value = p.qrPosition;
+        document.getElementById('qrOffset').value = p.qrOffset || 0;
+        document.getElementById('textAlign').value = p.textAlign;
+        onQrPositionChange();
+        schedulePreviewUpdate();
+      }
     }
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。
@@ -2100,7 +2416,7 @@
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
           // 起動時はまず 'standard' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
           // 自動保存ロジックは無いので、selectTemplate を呼んでも Firestore は触らない。
-          selectTemplate('standard');
+          selectTemplate('standard', { commit: true });
           // 保存済みテンプレ一覧を Firestore から取得 → 完了後に規定テンプレを自動適用
           loadSavedTemplates().then(() => {
             if (data.captionTemplateId) {
@@ -2561,10 +2877,19 @@
         ? artworkData.registrationFields.map(f => f.name)
         : null;
 
+      // フィールド可視性判定: 登録項目 (registrationFields) があればそれを真実とする。
+      // 作品データ未登録 (artworks 0 件) のとき headers は空配列になるので、
+      // headers でフィルタすると登録済 field が全部弾かれて divider/spacer だけ残ってしまう。
+      // → registrationFields があるならそれで判定、無いときだけ headers にフォールバック。
+      const isFieldVisible = (fieldName) => {
+        if (regFieldNames) return regFieldNames.includes(fieldName);
+        if (artworkData) return artworkData.headers.includes(fieldName);
+        return true;
+      };
+
       preset.items.forEach(item => {
         if (item.type === 'field') {
-          if (artworkData && !artworkData.headers.includes(item.name)) return;
-          if (regFieldNames && !regFieldNames.includes(item.name)) return;
+          if (!isFieldVisible(item.name)) return;
           usedFields.push(item.name);
           const checked = capFieldNames ? capFieldNames.includes(item.name) : false;
           grid.appendChild(makeFieldEl(
@@ -2581,8 +2906,7 @@
           const groupEl = makeGroupEl(item.sep, item.align);
           const childContainer = groupEl.querySelector('.group-children');
           (item.children || []).forEach(c => {
-            if (artworkData && !artworkData.headers.includes(c.name)) return;
-            if (regFieldNames && !regFieldNames.includes(c.name)) return;
+            if (!isFieldVisible(c.name)) return;
             usedFields.push(c.name);
             childContainer.appendChild(makeFieldEl(
               c.name, c.size, c.bold, c.italic, c.align, true,
@@ -2708,26 +3032,43 @@
 
     function generatePreview() {
       // 1. まずuseDataを定義
-      const useData = (artworkData && artworkData.artworks.length > 0)
-        ? artworkData
-        : {
-          artworks: [{
-            title: '作品タイトル',
-            title_en: 'Artwork Title',
-            artist: '作家名',
-            artist_en: 'Artist Name',
-            year: '2024',
-            technique: '油彩・キャンバス',
-            material: 'キャンバス',
-            size: '530×455mm',
-            price: '100000',
-            price_framed: '120000',
-            qr_url: 'https://rohei-printer-system.web.app/'
-          }],
-          headers: ['title', 'title_en', 'artist', 'artist_en', 'year', 'technique', 'material', 'size', 'price', 'price_framed'],
+      let useData;
+      if (artworkData && artworkData.artworks.length > 0) {
+        useData = artworkData;
+      } else {
+        // 作品データ未登録時の preview 用ダミー作品
+        const dummyArt = {
+          title: '作品タイトル',
+          title_en: 'Artwork Title',
+          artist: '作家名',
+          artist_en: 'Artist Name',
+          year: '2024',
+          technique: '油彩・キャンバス',
+          material: 'キャンバス',
+          size: '530×455mm',
+          price: '100000',
+          price_framed: '120000',
+          qr_url: 'https://rohei-printer-system.web.app/'
+        };
+        const dummyHeaders = ['title','title_en','artist','artist_en','year','technique','material','size','price','price_framed'];
+        // 公式テンプレ選択中なら、そのテンプレ用のサンプル作品データをダミーにマージ
+        // (撮影地・撮影年・カメラ など、ダミーに無いフィールドを補う)
+        const tplKey = currentTemplate || '';
+        if (tplKey.indexOf('official_') === 0 && OFFICIAL_SAMPLES && OFFICIAL_SAMPLES[tplKey]) {
+          const sample = OFFICIAL_SAMPLES[tplKey];
+          Object.keys(sample).forEach(k => {
+            if (k === 'artwork_id' || k === 'exCode') return;
+            if (dummyArt[k] === undefined || dummyArt[k] === '') dummyArt[k] = sample[k];
+            if (!dummyHeaders.includes(k)) dummyHeaders.push(k);
+          });
+        }
+        useData = {
+          artworks: [dummyArt],
+          headers: dummyHeaders,
           exName: 'テスト展覧会',
           exCode: 'TEST'
         };
+      }
 
       // 2. tempDataを保存してartworkDataをセット
       const tempData = artworkData;
@@ -2868,12 +3209,29 @@
       return style;
     }
 
+    // 公式テンプレ選択中で、その作品で当該フィールドが空のとき、
+    // 該当 official 用サンプル値で穴埋めする。これでプレビューが「テンプレで使う項目だが
+    // この作品にはまだ未入力」のとき、何が出るかを実感できる。
+    // 戻り値: { value: string, isSample: boolean }
+    function _resolveFieldValue(art, fieldName) {
+      const real = (art[fieldName] || '').toString().trim();
+      if (real) return { value: real, isSample: false };
+      const tplKey = currentTemplate || '';
+      if (tplKey.indexOf('official_') === 0 && OFFICIAL_SAMPLES && OFFICIAL_SAMPLES[tplKey]) {
+        const sample = OFFICIAL_SAMPLES[tplKey];
+        const sampleVal = (sample[fieldName] || '').toString().trim();
+        if (sampleVal) return { value: sampleVal, isSample: true };
+      }
+      return { value: '', isSample: false };
+    }
+
     // 1作品分の本文 (s.items を field / group / divider / spacer 別に HTML 化)
     function buildContent(s, art) {
       let html = '';
       s.items.forEach(item => {
         if (item.type === 'field') {
-          let val = (art[item.name] || '').toString().trim();
+          const resolved = _resolveFieldValue(art, item.name);
+          let val = resolved.value;
           if (!val) return;
           val = formatValue(val, item.currency || '', item.comma || false);
           val = buildAffix(item.prefix, item.affixScale) + val + buildAffix(item.suffix, item.affixScale);
@@ -2882,23 +3240,28 @@
           const fstyle = item.italic ? 'italic' : 'normal';
           const maxLines = item.maxLines !== undefined ? item.maxLines : 2;
           const minSize = item.minSize !== undefined ? item.minSize : 7;
-          html += `<div class="auto-fit" data-field="${item.name}" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
-            + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};`
+          // サンプル値は preview 上でグレー化して「実データではない」と分かるようにする
+          const sampleStyle = resolved.isSample ? 'color:#aaa;' : '';
+          const sampleAttr = resolved.isSample ? ' data-sample="true"' : '';
+          html += `<div class="auto-fit"${sampleAttr} data-field="${item.name}" data-size="${item.size}" data-min-size="${minSize}" data-max-lines="${maxLines}" `
+            + `style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};line-height:1.3;${sampleStyle}`
             + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
             + `${val}</div>`;
         } else if (item.type === 'group') {
           const parts = (item.children || []).map(c => {
-            const raw = (art[c.name] || '').toString().trim();
+            const resolved = _resolveFieldValue(art, c.name);
+            const raw = resolved.value;
             if (!raw) return null;
             const v = buildAffix(c.prefix, c.affixScale) + formatValue(raw, c.currency || '', c.comma || false) + buildAffix(c.suffix, c.affixScale);
             const w = c.bold ? 'bold' : 'normal';
             const fs = c.italic ? 'italic' : 'normal';
-            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};">${v}</span>`;
+            const sampleStyle = resolved.isSample ? 'color:#aaa;' : '';
+            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};${sampleStyle}">${v}</span>`;
           }).filter(Boolean);
           if (parts.length === 0) return;
           const align = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
           const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          html += `<div style="text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+          html += `<div style="text-align:${align};line-height:1.3;margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
             + parts.join(sepHtml)
             + `</div>`;
         } else if (item.type === 'divider') {
@@ -3087,7 +3450,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         var origSize = parseFloat(el.dataset.size);
         var size = origSize;
         var lh = parseFloat(win.getComputedStyle(el).lineHeight);
-        if (!lh || isNaN(lh)) lh = size * 1.4;
+        // フォールバック係数: browser のデフォルト line-height 'normal' は 1.2〜1.5。
+        // 1.5 を採用しておくと、line-height 未指定時の誤判定 (短いテキストが
+        // 「収まらない」になる) を抑える。
+        if (!lh || isNaN(lh)) lh = size * 1.5;
         var maxH = lh * maxLines;
         el.style.overflow = 'hidden';
         while (el.scrollHeight > maxH + 2 && size > minSize) {
@@ -3178,6 +3544,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const personalWrap = document.getElementById('personalTemplatesWrap');
       const officialGrid = document.getElementById('officialTemplatesGrid');
       const personalGrid = document.getElementById('personalTemplatesGrid');
+      // 旧 savedTemplatesSection 撤去済み (official-presets.json に置換)。
+      // DOM 要素が無い場合は Promise を返して呼び出し側の .then を壊さない。
+      if (!section || !officialGrid || !personalGrid) return Promise.resolve();
       const me = ((firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.email) || '').trim().toLowerCase();
       const isOp = (me === OPERATOR_EMAIL.toLowerCase());
 
@@ -3295,10 +3664,15 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           const regFieldNames = artworkData && artworkData.registrationFields
             ? artworkData.registrationFields.map(f => f.name)
             : null;
+          // フィールド可視性判定 (buildFieldsGridFromPreset と同じロジック)
+          const isFieldVisible = (fieldName) => {
+            if (regFieldNames) return regFieldNames.includes(fieldName);
+            if (artworkData) return artworkData.headers.includes(fieldName);
+            return true;
+          };
           settings.items.forEach(item => {
             if (item.type === 'field') {
-              if (artworkData && !artworkData.headers.includes(item.name)) return;
-              if (regFieldNames && !regFieldNames.includes(item.name)) return;
+              if (!isFieldVisible(item.name)) return;
               usedFields.push(item.name);
               grid.appendChild(makeFieldEl(
                 item.name, item.size, item.bold, item.italic, item.align, true,
@@ -3314,8 +3688,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
               const groupEl = makeGroupEl(item.sep, item.align);
               const childContainer = groupEl.querySelector('.group-children');
               (item.children || []).forEach(c => {
-                if (artworkData && !artworkData.headers.includes(c.name)) return;
-                if (regFieldNames && !regFieldNames.includes(c.name)) return;
+                if (!isFieldVisible(c.name)) return;
                 usedFields.push(c.name);
                 childContainer.appendChild(makeFieldEl(
                   c.name, c.size, c.bold, c.italic, c.align, true,
