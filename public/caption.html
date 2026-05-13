@@ -1405,7 +1405,7 @@
           <span style="font-size:0.78em; color:#aaa;">⭐ マークは公式推奨 (項目とサイズが詰めてあり、そのまま使えます)</span>
         </div>
         <div class="template-grid">
-          <div class="template-card official" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
+          <div class="template-card official selected" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
             data-description="1 人の作家・ゆったり展示用。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。タイトル大きめ・余白多め。">
             <h4>🎨 個展 推奨</h4>
             <div class="template-preview">
@@ -1473,23 +1473,9 @@
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_intl')">📥 採用</button>
           </div>
 
-          <!-- ベース (PRESETS) — 同じ template-grid 内で続く -->
-          <div class="template-card selected" id="tpl_standard" onclick="selectTemplate('standard')"
-            data-description="標準的な構成。タイトル・作家・年・技法・価格。展覧会全般向けの定番。">
-            <h4>📋 標準</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-right">
-                <div style="font-size:13px;font-weight:bold;">作品タイトル</div>
-                <div class="tpl-divider"></div>
-                <div style="font-size:10px;">作家名</div>
-                <div style="font-size:8.5px;color:#777;">制作年</div>
-                <div style="font-size:8.5px;color:#777;">技法</div>
-                <div style="font-size:9px;font-weight:bold;">¥ 10,000</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('standard')">📥 採用</button>
-          </div>
+          <!-- ベース (PRESETS) — 同じ template-grid 内で続く。
+               'standard' / 'bilingual' は公式 (official_solo / official_intl) と
+               機能重複のため 2026-05-13 に削除済。 -->
           <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')"
             data-description="タイトルと作家名のみ。最小構成。">
             <h4>✂️ シンプル</h4>
@@ -1517,21 +1503,6 @@
               </div>
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('gallery')">📥 採用</button>
-          </div>
-          <div class="template-card" id="tpl_bilingual" onclick="selectTemplate('bilingual')"
-            data-description="タイトル・作家名を日本語と英語で併記。海外向け展示や国際展で。">
-            <h4>🌐 日英併記</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-left">
-                <div style="font-size:14px;font-weight:bold;text-align:center;">作品タイトル</div>
-                <div style="font-size:9.5px;color:#777;text-align:center;">Title in English</div>
-                <div class="tpl-divider"></div>
-                <div class="tpl-spacer"></div>
-                <div style="font-size:10px;text-align:center;">作家名　Artist Name</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('bilingual')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_print" onclick="selectTemplate('print')"
             data-description="技法・エディション・サイズ・額装価格まで表示。版画・限定版作品向け。">
@@ -1824,7 +1795,7 @@
 
     let artworkData = null;
     let printHtml = '';
-    let currentTemplate = 'standard';
+    let currentTemplate = 'official_solo';
     let spacerCount = 0;
     let groupCount = 0;
 
@@ -1922,8 +1893,8 @@
         if (btn) {
           loadSavedTemplate(btn);
         } else {
-          console.warn('saved template not found in DOM, fallback to preset standard:', docId);
-          selectTemplate('standard', { commit: true });
+          console.warn('saved template not found in DOM, fallback to official_solo:', docId);
+          selectTemplate('official_solo', { commit: true });
         }
       }
       updateTemplateChoiceBanner();
@@ -2438,9 +2409,9 @@
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
-          // 起動時はまず 'standard' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
+          // 起動時はまず 'official_solo' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
           // 自動保存ロジックは無いので、selectTemplate を呼んでも Firestore は触らない。
-          selectTemplate('standard', { commit: true });
+          selectTemplate('official_solo', { commit: true });
           // 保存済みテンプレ一覧を Firestore から取得 → 完了後に規定テンプレを自動適用
           loadSavedTemplates().then(() => {
             if (data.captionTemplateId) {

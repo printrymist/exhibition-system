@@ -1,15 +1,4 @@
 {
-  "standard": {
-    "qrPosition": "bottom-right", "qrOffset": 0, "textAlign": "left",
-    "items": [
-      { "type": "field", "name": "title", "size": 14, "bold": true, "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "divider" },
-      { "type": "field", "name": "artist", "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "field", "name": "year", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "field", "name": "technique", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "field", "name": "price", "size": 11, "bold": true, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true, "prefix": "", "suffix": "" }
-    ]
-  },
   "minimal": {
     "qrPosition": "bottom-right", "qrOffset": 0, "textAlign": "left",
     "items": [
@@ -27,19 +16,6 @@
       { "type": "field", "name": "year", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
       { "type": "field", "name": "technique", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
       { "type": "field", "name": "price", "size": 11, "bold": true, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true, "prefix": "", "suffix": "" }
-    ]
-  },
-  "bilingual": {
-    "qrPosition": "bottom-left", "qrOffset": 0, "textAlign": "center",
-    "items": [
-      { "type": "field", "name": "title", "size": 16, "bold": true, "italic": false, "align": "center", "maxLines": 2, "minSize": 8, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "field", "name": "title_en", "size": 11, "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-      { "type": "divider" },
-      { "type": "spacer", "size": "4mm" },
-      { "type": "group", "sep": "　　", "align": "left", "children": [
-        { "type": "field", "name": "artist",    "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "artist_en", "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "", "comma": false, "prefix": "", "suffix": "" }
-      ] }
     ]
   },
   "print": {
