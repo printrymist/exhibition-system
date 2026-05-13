@@ -1406,7 +1406,7 @@
         </div>
         <div class="template-grid">
           <div class="template-card official" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
-            data-description="1 人の作家・ゆったり展示用。A7 縦 (74×105mm) で A4 に 8 枚並ぶ。タイトル大きめ・余白多め。">
+            data-description="1 人の作家・ゆったり展示用。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。タイトル大きめ・余白多め。">
             <h4>🎨 個展 推奨</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
@@ -1423,7 +1423,7 @@
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_solo')">📥 採用</button>
           </div>
           <div class="template-card official" id="tpl_official_group" onclick="selectTemplate('official_group')"
-            data-description="多人数展・効率印刷用。A8 (52×74mm) で A4 に 16 枚並ぶ。コンパクト・情報密度高め。">
+            data-description="多人数展・効率印刷用。70×59mm で A4 縦に 15 枚 (3×5)。コンパクト・情報密度高め。">
             <h4>🎭 グループ展 推奨</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
@@ -1439,7 +1439,7 @@
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_group')">📥 採用</button>
           </div>
           <div class="template-card official" id="tpl_official_photo" onclick="selectTemplate('official_photo')"
-            data-description="写真展・撮影情報重視。A7 横 (105×74mm)。撮影地・撮影年・カメラの項目が必要 (項目設定に追加)。">
+            data-description="写真展・撮影情報重視。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。撮影地・撮影年・カメラの項目が必要 (項目設定に追加)。">
             <h4>📷 写真展 推奨</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
@@ -1456,7 +1456,7 @@
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_photo')">📥 採用</button>
           </div>
           <div class="template-card official" id="tpl_official_intl" onclick="selectTemplate('official_intl')"
-            data-description="日英併記、海外作家・観客向け。A7 縦 (74×105mm) で中央寄せ。">
+            data-description="日英併記、海外作家・観客向け。A7 (105×74mm) で A4 縦に 8 枚 (2×4)、中央寄せ。">
             <h4>🌐 国際展 推奨</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-left">
@@ -2280,9 +2280,33 @@
         document.getElementById('qrPosition').value = p.qrPosition;
         document.getElementById('qrOffset').value = p.qrOffset || 0;
         document.getElementById('textAlign').value = p.textAlign;
+        // テンプレに pageSettings ブロックがあれば用紙サイズ・列数・余白などもまとめて反映する。
+        // テンプレ無指定のフィールドは現状値を維持 (backwards compat)。
+        applyPageSettings(p.pageSettings);
         onQrPositionChange();
         schedulePreviewUpdate();
       }
+    }
+
+    // テンプレ JSON の pageSettings ブロックを Page タブの DOM 入力に反映する。
+    // 「💾 自分のテンプレ」復元 (loadSavedTemplate) と同じ形のキーを受け付ける。
+    function applyPageSettings(ps) {
+      if (!ps || typeof ps !== 'object') return;
+      const set = (id, val) => {
+        if (val === undefined || val === null) return;
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+      };
+      set('paperSize',        ps.paperSize);
+      set('orientation',      ps.orientation);
+      set('cols',             ps.cols);
+      set('rows',             ps.rows);
+      set('qrSize',           ps.qrSize);
+      set('qrMarginH',        ps.qrMarginH);
+      set('qrMarginV',        ps.qrMarginV);
+      set('textMarginLeft',   ps.textMarginLeft);
+      set('textMarginRight',  ps.textMarginRight);
+      set('fontFamily',       ps.fontFamily);
     }
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。

@@ -3,10 +3,17 @@
     "official_solo": {
       "label": "🎨 個展 推奨",
       "tagline": "1 人の作家・ゆったり展示用",
-      "size": "A7 縦 (74×105mm)",
+      "size": "A7 (105×74mm) — A4 に 8 枚",
       "qrPosition": "bottom-right",
       "qrOffset": 0,
       "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 6, "textMarginRight": 6,
+        "fontFamily": "sans-serif"
+      },
       "items": [
         { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "divider" },
@@ -21,10 +28,17 @@
     "official_group": {
       "label": "🎭 グループ展 推奨",
       "tagline": "多人数展・効率印刷用",
-      "size": "A8 (52×74mm) コンパクト",
+      "size": "A7 弱 (70×59mm) — A4 に 15 枚",
       "qrPosition": "bottom-right",
       "qrOffset": 0,
       "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 3, "rows": 5,
+        "qrSize": 16, "qrMarginH": 2, "qrMarginV": 2,
+        "textMarginLeft": 3, "textMarginRight": 3,
+        "fontFamily": "sans-serif"
+      },
       "items": [
         { "type": "field", "name": "title",     "size": 9, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "field", "name": "artist",    "size": 8, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
@@ -38,10 +52,17 @@
     "official_photo": {
       "label": "📷 写真展 推奨",
       "tagline": "撮影地・カメラなど写真特有の情報",
-      "size": "A7 横 (105×74mm)",
+      "size": "A7 (105×74mm) — A4 に 8 枚",
       "qrPosition": "bottom-right",
       "qrOffset": 0,
       "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 5, "textMarginRight": 5,
+        "fontFamily": "sans-serif"
+      },
       "items": [
         { "type": "field", "name": "title",             "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "divider" },
@@ -56,10 +77,17 @@
     "official_intl": {
       "label": "🌐 国際展 推奨",
       "tagline": "日英併記、海外作家・観客向け",
-      "size": "A7 縦 (74×105mm) 中央寄せ",
+      "size": "A7 (105×74mm) 中央寄せ — A4 に 8 枚",
       "qrPosition": "bottom-left",
       "qrOffset": 0,
       "textAlign": "center",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 6, "textMarginRight": 6,
+        "fontFamily": "sans-serif"
+      },
       "items": [
         { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "field", "name": "title_en",  "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
