@@ -309,29 +309,34 @@
       .template-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
+    /* 非採用カードはしっかり濃い青地で「未採用の候補」と分かるようにし、
+       採用中だけが緑で強く浮き上がる二色構成にする。 */
     .template-card {
-      border: 2px solid #eee;
+      border: 2px solid #8db4e8;
       border-radius: 10px;
       padding: 10px 12px;
       cursor: pointer;
       transition: all 0.15s;
-      background: white;
+      background: #c7dcf6;
+    }
+    .template-card h4 {
+      color: #1a4f9c;
     }
 
     .template-card:hover {
       border-color: #1a73e8;
-      background: #f0f7ff;
+      background: #aecbf2;
     }
 
     .template-card.selected {
-      border-color: #1a73e8;
-      background: #f0f7ff;
+      border-color: #1a4f9c;
+      background: #aecbf2;
     }
 
-    /* 🏛️ 公式テンプレ: ゴールド系のアクセント枠で差別化 */
+    /* 🏛️ 公式テンプレ: ⭐ 推奨 chip + ゴールド枠で「推奨」を示す。
+       背景は非採用青地のまま残し、枠と chip で官製テンプレかを区別する。 */
     .template-card.official {
-      border-color: #f0c14b;
-      background: linear-gradient(180deg, #fffdf5 0%, #ffffff 30%);
+      border-color: #d4a83a;
       position: relative;
     }
     .template-card.official::after {
@@ -341,21 +346,14 @@
       right: 6px;
       font-size: 10px;
       font-weight: bold;
-      color: #b8860b;
-      background: rgba(255,255,255,0.7);
+      color: #7a5500;
+      background: rgba(255,236,180,0.95);
       padding: 1px 4px;
       border-radius: 3px;
     }
-    .template-card.official:hover {
-      border-color: #d49b1f;
-      background: linear-gradient(180deg, #fff8e1 0%, #fffdf5 30%);
-    }
+    .template-card.official:hover,
     .template-card.official.selected {
-      border-color: #d49b1f;
-      background: linear-gradient(180deg, #fff3c4 0%, #fff8e1 30%);
-    }
-    .template-card.official h4 {
-      color: #7a5500;
+      border-color: #b8860b;
     }
     /* 採用ボタン (全テンプレ共通) */
     .template-card .btn-adopt {
@@ -379,23 +377,30 @@
       background: #aaa;
       cursor: not-allowed;
     }
-    /* 採用中バッジ */
+    /* 採用中バッジ。
+       非採用カードを #fafafa / #fdf9ed まで落としているので、こちらは飽和度高めの緑で
+       一目で「これが採用中」と分かるくらい強くする。h4 も濃い緑にして視認性を上げる。 */
     .template-card.adopted {
       border-color: #0b8043 !important;
-      background: linear-gradient(180deg, #e6f4ea 0%, #ffffff 40%) !important;
+      background: linear-gradient(180deg, #b8e0c4 0%, #d9efe0 70%, #ecf7f0 100%) !important;
+      box-shadow: 0 2px 10px rgba(11, 128, 67, 0.18);
       position: relative;
+    }
+    .template-card.adopted h4 {
+      color: #0b8043 !important;
     }
     .template-card.adopted::before {
       content: "✅ 採用中";
       position: absolute;
-      top: -8px;
+      top: -10px;
       left: 8px;
       background: #0b8043;
       color: white;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: bold;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
       z-index: 1;
     }
     .template-card.adopted .btn-adopt {
@@ -407,8 +412,8 @@
 
     .template-card h4 {
       font-size: 0.88em;
-      color: #1a73e8;
       margin: 0;
+      /* color は上の .template-card h4 / .adopted h4 で状態別に指定 */
     }
 
     /* 各カード内に元々あった .template-preview は隠す (HTML はそのまま、JS でクローン) */
