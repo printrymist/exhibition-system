@@ -309,35 +309,55 @@
       .template-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* 非採用カードはしっかり濃い青地で「未採用の候補」と分かるようにし、
-       採用中だけが緑で強く浮き上がる二色構成にする。 */
+    /* 非採用カードはグレー目で控えめにし、左上に「非採用」バッジで状態を明示。
+       採用中の緑バッジと対になっているのでラベルで一目で分かる。 */
     .template-card {
-      border: 2px solid #8db4e8;
+      border: 2px solid #d8d8d8;
       border-radius: 10px;
       padding: 10px 12px;
       cursor: pointer;
       transition: all 0.15s;
-      background: #c7dcf6;
+      background: #f5f5f5;
+      position: relative;
     }
     .template-card h4 {
-      color: #1a4f9c;
+      color: #6a6a6a;
+    }
+    /* 「非採用」バッジ — 採用中バッジと同じ位置・形で対比 */
+    .template-card::before {
+      content: "非採用";
+      position: absolute;
+      top: -10px;
+      left: 8px;
+      background: #9e9e9e;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 3px 10px;
+      border-radius: 10px;
+      z-index: 1;
     }
 
     .template-card:hover {
       border-color: #1a73e8;
-      background: #aecbf2;
+      background: #ececec;
+    }
+    .template-card:hover h4 {
+      color: #1a73e8;
     }
 
     .template-card.selected {
-      border-color: #1a4f9c;
-      background: #aecbf2;
+      border-color: #1a73e8;
+      background: #ececec;
+    }
+    .template-card.selected h4 {
+      color: #1a73e8;
     }
 
-    /* 🏛️ 公式テンプレ: ⭐ 推奨 chip + ゴールド枠で「推奨」を示す。
-       背景は非採用青地のまま残し、枠と chip で官製テンプレかを区別する。 */
+    /* 🏛️ 公式テンプレ: ⭐ 推奨 chip + ゴールド枠で「推奨」のみ示す。
+       背景はグレーのまま、枠と chip で官製テンプレかを区別する。 */
     .template-card.official {
       border-color: #d4a83a;
-      position: relative;
     }
     .template-card.official::after {
       content: "⭐ 推奨";
@@ -377,9 +397,8 @@
       background: #aaa;
       cursor: not-allowed;
     }
-    /* 採用中バッジ。
-       非採用カードを #fafafa / #fdf9ed まで落としているので、こちらは飽和度高めの緑で
-       一目で「これが採用中」と分かるくらい強くする。h4 も濃い緑にして視認性を上げる。 */
+    /* 採用中: 緑グラデで浮き上がらせる。バッジは「非採用」(::before) を「✅ 採用中」に
+       置き換える形 (specificity で勝つ)。h4 も濃い緑にして視認性を上げる。 */
     .template-card.adopted {
       border-color: #0b8043 !important;
       background: linear-gradient(180deg, #b8e0c4 0%, #d9efe0 70%, #ecf7f0 100%) !important;
