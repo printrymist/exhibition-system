@@ -296,6 +296,34 @@
       border-bottom-color: #1a73e8;
     }
 
+    /* おすすめフロー パネル (折りたたみ可) */
+    .usage-hint {
+      background: #eef5ff;
+      border: 1px solid #b8d4f5;
+      border-radius: 6px;
+      padding: 4px 12px;
+      margin-bottom: 12px;
+      font-size: 0.85em;
+      color: #1a4f9c;
+    }
+    .usage-hint summary {
+      cursor: pointer;
+      font-weight: bold;
+      padding: 6px 0;
+      user-select: none;
+    }
+    .usage-hint ol {
+      margin: 6px 0 10px 0;
+      padding-left: 22px;
+      line-height: 1.7;
+    }
+    .usage-hint li {
+      margin-bottom: 3px;
+    }
+    .usage-hint strong {
+      color: #0d4a8c;
+    }
+
     /* C-2 Phase 1.5: テンプレ一覧は compact grid (固定位置)。inline プレビューは
        下の専用領域に集約 (選択するたびにグリッドが動かない、画面が安定) */
     .template-grid {
@@ -1399,6 +1427,16 @@
         <!-- 規定テンプレ管理 banner は撤去。
              公式テンプレは 📥 採用 ボタン + ✅ 採用中 バッジ で状態管理する。
              カード選択ハイライトで「いまプレビュー中」も視覚的に分かるため redundant だった。 -->
+        <!-- おすすめフロー (折りたたみ可、localStorage で状態記憶) -->
+        <details id="usageHint" class="usage-hint">
+          <summary>💡 おすすめの使い方</summary>
+          <ol>
+            <li>まず <strong>⭐ 公式テンプレ</strong>を <strong>📥 採用</strong> — 項目設定・フォーム設定・Page タブが一気に揃う</li>
+            <li>「項目設定」「フォーム設定」タブで内容を確認・微調整 (必要なら)</li>
+            <li>「Page」タブで余白・QR サイズなど細部を調整 (必要なら)</li>
+            <li>満足したら <strong>💾 自分のテンプレに保存</strong> で凍結 — 別テンプレを試す前のセーフネット</li>
+          </ol>
+        </details>
         <!-- テンプレ一覧 (公式 + ベース統合)。⭐ 推奨 マーク付きは「すぐ使える」公式テンプレ。 -->
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <span style="font-size:0.95em; font-weight:bold; color:#444;">📋 テンプレ一覧</span>
@@ -1934,6 +1972,19 @@
       });
 
     document.addEventListener('DOMContentLoaded', () => {
+      // おすすめフロー パネルの開閉状態を localStorage で記憶 (デフォルト = 開く)。
+      const hint = document.getElementById('usageHint');
+      if (hint) {
+        if (localStorage.getItem('caption_usage_hint_collapsed') === 'true') {
+          hint.removeAttribute('open');
+        } else {
+          hint.setAttribute('open', '');
+        }
+        hint.addEventListener('toggle', () => {
+          localStorage.setItem('caption_usage_hint_collapsed', hint.open ? 'false' : 'true');
+        });
+      }
+
       // C-2: 設定エリア内の input / change / toggle クリックで自動プレビューを debounce 発火。
       //   テンプレ名入力 (saveTemplateName) は印刷物に影響しないので除外。
       const sa = document.getElementById('settingsArea');
