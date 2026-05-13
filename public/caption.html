@@ -368,22 +368,19 @@
       color: #1a73e8;
     }
 
-    /* 🏛️ 公式テンプレ: ⭐ 推奨 chip + ゴールド枠で「推奨」のみ示す。
-       背景はグレーのまま、枠と chip で官製テンプレかを区別する。 */
+    /* 🏛️ 公式テンプレ: ⭐ マーク + ゴールド枠で「推奨」のみ示す。
+       背景はグレーのまま、枠と chip で官製テンプレかを区別する。
+       「推奨」テキストは長くてカード見出しを隠していたので削除。 */
     .template-card.official {
       border-color: #d4a83a;
     }
     .template-card.official::after {
-      content: "⭐ 推奨";
+      content: "⭐";
       position: absolute;
       top: 4px;
       right: 6px;
-      font-size: 10px;
-      font-weight: bold;
-      color: #7a5500;
-      background: rgba(255,236,180,0.95);
-      padding: 1px 4px;
-      border-radius: 3px;
+      font-size: 11px;
+      line-height: 1;
     }
     .template-card.official:hover,
     .template-card.official.selected {
