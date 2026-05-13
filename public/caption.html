@@ -309,8 +309,8 @@
       .template-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* 非採用カードはグレー目で控えめにし、左上に「非採用」バッジで状態を明示。
-       採用中の緑バッジと対になっているのでラベルで一目で分かる。 */
+    /* 非採用カードはグレー目で控えめに、採用中だけ緑で浮き上がる。
+       バッジ (長丸) は撤去 — 緑グラデと採用ボタンの色だけで状態を示す。 */
     .template-card {
       border: 2px solid #d8d8d8;
       border-radius: 10px;
@@ -322,20 +322,6 @@
     }
     .template-card h4 {
       color: #6a6a6a;
-    }
-    /* 「非採用」バッジ — 採用中バッジと同じ位置・形で対比 */
-    .template-card::before {
-      content: "非採用";
-      position: absolute;
-      top: -10px;
-      left: 8px;
-      background: #9e9e9e;
-      color: white;
-      font-size: 11px;
-      font-weight: bold;
-      padding: 3px 10px;
-      border-radius: 10px;
-      z-index: 1;
     }
 
     .template-card:hover {
@@ -375,15 +361,16 @@
     .template-card.official.selected {
       border-color: #b8860b;
     }
-    /* 採用ボタン (全テンプレ共通) */
+    /* 採用ボタン (非採用カード): 薄い青の四角。
+       採用済カードは .template-card.adopted .btn-adopt で緑に上書きされる。 */
     .template-card .btn-adopt {
       display: block;
       width: 100%;
       margin-top: 8px;
       padding: 5px 10px;
-      background: #1a73e8;
-      color: white;
-      border: none;
+      background: #d0e3f8;
+      color: #1a4f9c;
+      border: 1px solid #a8c8f0;
       border-radius: 6px;
       font-size: 0.8em;
       font-weight: bold;
@@ -391,14 +378,16 @@
       transition: background 0.15s;
     }
     .template-card .btn-adopt:hover {
-      background: #1557b0;
+      background: #b5d1f0;
     }
     .template-card .btn-adopt:disabled {
-      background: #aaa;
+      background: #eee;
+      color: #aaa;
+      border-color: #ddd;
       cursor: not-allowed;
     }
-    /* 採用中: 緑グラデで浮き上がらせる。バッジは「非採用」(::before) を「✅ 採用中」に
-       置き換える形 (specificity で勝つ)。h4 も濃い緑にして視認性を上げる。 */
+    /* 採用中: 緑グラデで浮き上がらせる。h4 と採用ボタンも緑にして視認性を上げる。
+       バッジ (長丸) は撤去済 — 緑色だけで「採用中」を表現する。 */
     .template-card.adopted {
       border-color: #0b8043 !important;
       background: linear-gradient(180deg, #b8e0c4 0%, #d9efe0 70%, #ecf7f0 100%) !important;
@@ -408,22 +397,9 @@
     .template-card.adopted h4 {
       color: #0b8043 !important;
     }
-    .template-card.adopted::before {
-      content: "✅ 採用中";
-      position: absolute;
-      top: -10px;
-      left: 8px;
-      background: #0b8043;
-      color: white;
-      font-size: 11px;
-      font-weight: bold;
-      padding: 3px 10px;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-      z-index: 1;
-    }
     .template-card.adopted .btn-adopt {
       background: #0b8043;
+      color: white;
     }
     .template-card.adopted .btn-adopt:hover {
       background: #086930;
