@@ -39,7 +39,7 @@ const FIELD_DEFS = [
   { name: 'birthplace',  label: '出身地',           desc: '作家の出身地（例：東京都、Paris）',                   textarea: false, isArtist: true },
 
   // 価格・販売情報
-  { name: 'price',       label: '価格',             desc: '税込価格（数字のみ）',                                textarea: false, isDefault: true },
+  { name: 'price',       label: '価格',             desc: '税込価格。数字なら自動でカンマ整形、「非売品」「要相談」等の文言もそのまま保存', textarea: false, isDefault: true },
   { name: 'price_framed',label: '額装価格',         desc: '額装込みの価格。数字なら自動でカンマ整形、「別途注文」等の文言もそのまま保存', textarea: false },
   { name: 'certificate', label: '証明書',           desc: '真贋証明書・保証書の有無や種類',                      textarea: false },
 

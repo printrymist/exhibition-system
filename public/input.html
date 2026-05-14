@@ -1235,8 +1235,8 @@
     // 数字 + カンマ自動挿入: price
     // 数字なら整形・非数字ならそのまま: price_framed
     const NUMERIC_INT_FIELDS = ['year', 'birth_year', 'death_year'];
-    const NUMERIC_PRICE_FIELDS = ['price'];
-    const FLEXIBLE_PRICE_FIELDS = ['price_framed'];
+    const NUMERIC_PRICE_FIELDS = [];
+    const FLEXIBLE_PRICE_FIELDS = ['price', 'price_framed'];
     function applyNumericBehavior(input, name) {
       if (NUMERIC_INT_FIELDS.indexOf(name) !== -1) {
         input.inputMode = 'numeric';

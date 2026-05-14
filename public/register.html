@@ -1893,11 +1893,12 @@ ${fieldsText}
     }
 
     // 数字のみ許可: year / birth_year / death_year
-    // 数字 + カンマ自動挿入: price
-    // 数字なら整形・非数字ならそのまま: price_framed
+    // 数字なら整形・非数字ならそのまま: price / price_framed
+    //   (非売品・Price on Request・要相談 等の文言を素直に保存できるように、
+    //    price も FLEXIBLE 扱い。「数字と思われる場合は数字として扱う」)
     const NUMERIC_INT_FIELDS = ['year', 'birth_year', 'death_year'];
-    const NUMERIC_PRICE_FIELDS = ['price'];
-    const FLEXIBLE_PRICE_FIELDS = ['price_framed'];
+    const NUMERIC_PRICE_FIELDS = [];
+    const FLEXIBLE_PRICE_FIELDS = ['price', 'price_framed'];
     function applyNumericBehavior(input, name) {
       if (NUMERIC_INT_FIELDS.indexOf(name) !== -1) {
         input.inputMode = 'numeric';
@@ -2316,6 +2317,58 @@ ${fieldsText}
         msgEl.style.color = '#888';
         msgEl.textContent = `登録済の ${artworks.length} 件はすべて${targetState ? 'ロック済み' : 'ロック解除済み'}です。`;
         return;
+      }
+
+      // 一括ロック (確定相当) の前に、必須項目に空欄がある作品が無いかチェック。
+      // あれば「必須を外して続行しますか?」と尋ね、OK なら該当フィールドの required を
+      // false にして再保存してからロックに進む。解除側はチェック不要。
+      if (targetState) {
+        const offenders = []; // [{ name, label, count }]
+        (activeFields || []).forEach(f => {
+          if (!f || !f.required) return;
+          const def = FIELD_MAP[f.name];
+          if (def && def.type === 'image') return; // 画像は別途 register 編集側でチェック
+          if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return; // 作家系列は対象外
+          let count = 0;
+          artworks.forEach(a => {
+            const v = a[f.name];
+            if (v === undefined || v === null || String(v).trim() === '') count++;
+          });
+          if (count > 0) {
+            const label = (def && def.label) ? def.label : f.name;
+            offenders.push({ name: f.name, label: label, count: count });
+          }
+        });
+        if (offenders.length > 0) {
+          const lines = offenders.map(o => `  - ${o.label}: ${o.count} 件`).join('\n');
+          const ok = confirm(
+            '⚠️ 必須項目に空欄の作品があります:\n\n' + lines +
+            '\n\nこれらの必須設定を外して続行しますか?\n' +
+            '(必須を外せば、空欄の作品もそのままロックされます)\n\n' +
+            'OK = 必須を外して続行  /  キャンセル = 戻る'
+          );
+          if (!ok) {
+            msgEl.textContent = '';
+            return;
+          }
+          // required:false に書き換え + 保存 + UI 再構築
+          const offenderNames = new Set(offenders.map(o => o.name));
+          activeFields = activeFields.map(f =>
+            offenderNames.has(f.name) ? Object.assign({}, f, { required: false }) : f
+          );
+          msgEl.style.color = '#888';
+          msgEl.innerHTML = '<span class="spinner-sm"></span> 必須設定を更新中…';
+          try {
+            await window.fsSaveRegistrationFields(currentEx, JSON.stringify(activeFields));
+            sessionStorage.setItem('fields_' + currentEx, JSON.stringify(activeFields));
+            buildFieldsGrid(activeFields);
+            buildInputForm();
+          } catch (e) {
+            msgEl.style.color = '#d93025';
+            msgEl.textContent = '必須設定の更新に失敗しました: ' + (e.message || e);
+            return;
+          }
+        }
       }
 
       const confirmMsg = targetState
