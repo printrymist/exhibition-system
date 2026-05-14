@@ -21,6 +21,19 @@
     .auth-row button { min-width: auto; padding: 10px 16px; }
     .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
     .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+    .import-section { margin-top: 28px; padding: 16px; background: #fef9f0; border: 1px solid #f0d99e; border-radius: 10px; }
+    .import-section h2 { margin: 0 0 6px 0; font-size: 1.05em; color: #8a6500; }
+    .import-section .lead { font-size: 0.85em; color: #666; margin-bottom: 12px; }
+    .import-section .file-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .import-section input[type=file] { padding: 6px; background: white; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+    .import-section button { min-width: auto; padding: 8px 14px; font-size: 14px; }
+    .import-section button.secondary { background: white; color: #1a73e8; }
+    .import-section button.secondary:hover:not(:disabled) { background: #f0f7ff; }
+    .import-preview { margin-top: 12px; padding: 12px; background: white; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 0.88em; min-height: 1.2em; }
+    .import-preview .ok { color: #2e7d32; }
+    .import-preview .err { color: #d93025; }
+    .import-preview ul { margin: 6px 0 0 0; padding-left: 20px; }
+    .import-preview li { margin: 2px 0; }
   </style>
 </head>
 <body>
@@ -64,6 +77,20 @@
       <div class="desc">作品別 like 数 / コメント数 / 最新コメントの集計。</div>
     </div>
 
+    <div class="import-section">
+      <h2>📤 Import (XLSX → 作品データへ反映)</h2>
+      <div class="lead">
+        ダウンロードした「🎨 Artworks XLSX」を Excel で編集 → ここでアップロードすると Firestore に反映されます。<br>
+        既存行 (artwork_id あり) は更新、artwork_id 空の行は新規追加。問題があればアップロード前に拒否されます (一行も書き込みません)。
+      </div>
+      <div class="file-row">
+        <input type="file" id="importFile" accept=".xlsx" onchange="onImportFileChange()">
+        <button onclick="parseImportFile()" id="btnDryRun">🔍 内容を確認</button>
+        <button onclick="executeImport()" id="btnExecute" class="secondary" style="display:none;">✅ この内容で実行</button>
+      </div>
+      <div class="import-preview" id="importPreview" style="display:none;"></div>
+    </div>
+
     <pre id="log"></pre>
   </div>
 
@@ -72,6 +99,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="../field-defs.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
@@ -359,6 +387,352 @@
       log("Summary: " + rows.length + " 作品");
       downloadCSV(ex + "_summary.csv", rowsToCSV(headers, rows));
     }
+
+    // ===== Import (XLSX → Firestore) =====
+    // 1 回のアップロードで新規追加できる行数の上限。既存 UI (register.html addArtworkCount,
+    // setup.html workCount) と揃える。
+    var IMPORT_NEW_ROWS_MAX = 100;
+    // 解析済みプランを execute まで保持
+    var importPlan = null;
+
+    function setPreview(html) {
+      var el = document.getElementById('importPreview');
+      el.style.display = 'block';
+      el.innerHTML = html;
+    }
+    function hidePreview() {
+      document.getElementById('importPreview').style.display = 'none';
+      document.getElementById('btnExecute').style.display = 'none';
+      importPlan = null;
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+    function onImportFileChange() { hidePreview(); }
+
+    // xlsx を読んで { headers: [...], rows: [{rowIndex, artwork_id, ...}] } を返す
+    async function _readXlsx(file) {
+      var buf = await file.arrayBuffer();
+      var wb = XLSX.read(buf, { type: 'array' });
+      var sheetName = wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+      // raw=false で日付化を抑制、defval='' で空セルを '' に
+      var aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+      if (!aoa || aoa.length === 0) throw new Error('シートが空です');
+      var headers = aoa[0].map(function(h){ return String(h || '').trim(); });
+      var rows = [];
+      for (var i = 1; i < aoa.length; i++) {
+        var arr = aoa[i] || [];
+        // 全セル空の行はスキップ
+        var anyNonEmpty = arr.some(function(v){ return String(v || '').trim() !== ''; });
+        if (!anyNonEmpty) continue;
+        var row = { rowIndex: i + 1 };  // Excel の行番号 (1-based, ヘッダー込み)
+        headers.forEach(function(h, idx){
+          row[h] = String(arr[idx] == null ? '' : arr[idx]).trim();
+        });
+        rows.push(row);
+      }
+      return { headers: headers, rows: rows };
+    }
+
+    // exMap[ex] の caption_fields をパースして FIELD 名一覧を返す。
+    function _captionFieldNames(ex) {
+      var exDoc = exMap[ex] || {};
+      var arr = [];
+      if (exDoc.caption_fields) {
+        try { arr = JSON.parse(exDoc.caption_fields); }
+        catch (e) { console.warn('caption_fields parse failed:', e); }
+      }
+      var names = (arr || []).map(function(f){ return f && f.name; }).filter(Boolean);
+      if (names.length === 0) names = ['title','artist','year','technique','size','price'];
+      return names;
+    }
+
+    // Firestore の現状の artworks を { artwork_id -> doc } で返す。status を問わず全件。
+    async function _fetchCurrentArtworks(ex) {
+      var snap = await db.collection('artworks').where('exCode', '==', ex).get();
+      var byId = {};
+      snap.forEach(function(d){
+        var x = d.data();
+        if (!x.artwork_id) return;
+        byId[x.artwork_id] = x;
+      });
+      return byId;
+    }
+
+    // 検証本体。errors の配列 (人間向けメッセージ) と、エラーが無ければ plan オブジェクトを返す。
+    function _validate(ex, parsed, currentById) {
+      var errors = [];
+      var headers = parsed.headers;
+      var rows = parsed.rows;
+      var fieldNames = _captionFieldNames(ex);
+      var knownFields = new Set(['artwork_id'].concat(fieldNames));
+
+      // 1. ヘッダー検証
+      if (headers.indexOf('artwork_id') === -1) {
+        errors.push('ヘッダーに artwork_id 列がありません。ダウンロードした xlsx をそのまま編集してください。');
+        return { errors: errors };
+      }
+      var unknownCols = headers.filter(function(h){ return h && !knownFields.has(h); });
+      if (unknownCols.length > 0) {
+        errors.push('未知の列があります: ' + unknownCols.join(', ') + ' (caption_fields に登録されていない列名)');
+      }
+
+      // 2. 行ごとの基本検証
+      var seenIds = {};
+      var updateRows = [];
+      var newRows = [];
+      rows.forEach(function(r){
+        var aid = (r.artwork_id || '').trim();
+        if (aid) {
+          if (seenIds[aid]) {
+            errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' が重複しています (行 ' + seenIds[aid] + ' と重複)');
+            return;
+          }
+          seenIds[aid] = r.rowIndex;
+          var existing = currentById[aid];
+          if (!existing) {
+            errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' は Firestore に存在しません (typo?)');
+            return;
+          }
+          if (existing.is_locked) {
+            errors.push('行 ' + r.rowIndex + ': ' + aid + ' はロック中。register.html でロック解除してから再試行してください');
+            return;
+          }
+          updateRows.push({ row: r, existing: existing });
+        } else {
+          newRows.push({ row: r });
+        }
+        // title 必須 (caption_fields に title が含まれている場合のみ)
+        if (fieldNames.indexOf('title') !== -1) {
+          if (!(r.title || '').trim()) {
+            errors.push('行 ' + r.rowIndex + ': title が空欄' + (aid ? ' (artwork_id: ' + aid + ')' : ' (新規行)'));
+          }
+        }
+      });
+
+      // 3. 上限チェック
+      if (newRows.length > IMPORT_NEW_ROWS_MAX) {
+        errors.push('一度のアップロードで新規追加できるのは ' + IMPORT_NEW_ROWS_MAX + ' 件までです (xlsx に新規行 ' + newRows.length + ' 件)');
+      }
+
+      // 4. 作家情報の整合性 (B モード)
+      //    同じ artist 名の行間で、各作家系列の非空値が 1 種類しかない (他は空) ことを要求。
+      //    2 種類以上の非空値があれば拒否。全行空なら列に触らない (resolved に含めない)。
+      var artistCols = ALL_ARTIST_FIELDS.filter(function(f){
+        return f !== 'artist' && headers.indexOf(f) !== -1;
+      });
+      var artistGroups = {};  // artist 名 -> { col -> value } (resolved)
+      var artistRowsByName = {};
+      rows.forEach(function(r){
+        var name = (r.artist || '').trim();
+        if (!name) return;
+        if (!artistRowsByName[name]) artistRowsByName[name] = [];
+        artistRowsByName[name].push(r);
+      });
+      Object.keys(artistRowsByName).forEach(function(name){
+        var rs = artistRowsByName[name];
+        var resolved = {};
+        artistCols.forEach(function(col){
+          var vals = rs.map(function(r){ return (r[col] || '').trim(); }).filter(function(v){ return v !== ''; });
+          var distinct = Array.from(new Set(vals));
+          if (distinct.length === 0) {
+            // 全行空: 触らない
+          } else if (distinct.length === 1) {
+            resolved[col] = distinct[0];
+          } else {
+            errors.push('作家「' + name + '」: ' + col + ' の値が一致していません (' + distinct.join(' / ') + ')');
+          }
+        });
+        artistGroups[name] = resolved;
+      });
+
+      if (errors.length > 0) return { errors: errors };
+
+      return {
+        errors: [],
+        updateRows: updateRows,
+        newRows: newRows,
+        artistGroups: artistGroups,
+        fieldNames: fieldNames,
+        currentById: currentById,
+      };
+    }
+
+    async function parseImportFile() {
+      hidePreview();
+      var file = document.getElementById('importFile').files[0];
+      if (!file) { setPreview('<span class="err">ファイルが選択されていません</span>'); return; }
+      var ex = document.getElementById('exSelect').value;
+      if (!ex) { setPreview('<span class="err">展覧会を選択してください</span>'); return; }
+
+      var btn = document.getElementById('btnDryRun');
+      btn.disabled = true;
+      setPreview('<span style="color:#888;">解析中…</span>');
+      try {
+        var parsed = await _readXlsx(file);
+        var currentById = await _fetchCurrentArtworks(ex);
+        var result = _validate(ex, parsed, currentById);
+        if (result.errors.length > 0) {
+          setPreview(
+            '<span class="err">❌ アップロードできません。以下を修正してください:</span>' +
+            '<ul>' + result.errors.map(function(e){ return '<li>' + escapeHtml(e) + '</li>'; }).join('') + '</ul>'
+          );
+          return;
+        }
+        importPlan = { ex: ex, parsed: parsed, plan: result };
+        var u = result.updateRows.length;
+        var n = result.newRows.length;
+        setPreview(
+          '<span class="ok">✅ アップロード内容を確認してください:</span>' +
+          '<ul>' +
+            '<li>更新: <b>' + u + '</b> 件</li>' +
+            '<li>新規: <b>' + n + '</b> 件' + (n > 0 ? ' (このアップロード上限 ' + IMPORT_NEW_ROWS_MAX + ' 件まで)' : '') + '</li>' +
+            '<li>触らない (xlsx に無い既存作品): ' + (Object.keys(currentById).length - u) + ' 件</li>' +
+          '</ul>' +
+          '<div style="margin-top:6px;">問題なければ右の <b>✅ この内容で実行</b> を押してください。</div>'
+        );
+        document.getElementById('btnExecute').style.display = 'inline-block';
+      } catch (e) {
+        setPreview('<span class="err">ERROR: ' + escapeHtml(e.message || e) + '</span>');
+        console.error(e);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // GAS の addArtworks エンドポイント (register.html と同じ URL)
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
+
+    async function _gasAddArtworks(ex, count) {
+      var body = new URLSearchParams({ action: 'addArtworks', ex: ex, addCount: String(count) });
+      var res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+      });
+      if (!res.ok) throw new Error('GAS HTTP ' + res.status);
+      var json = await res.json();
+      if (!json.success) throw new Error('GAS addArtworks 失敗: ' + (json.error || 'unknown'));
+      return json.artworks || [];
+    }
+
+    // 1 行ぶんの submitArtwork ペイロードを組み立てる。
+    // - row の全列 (caption_fields 由来の値) を fields に
+    // - image_url だけは「空セル = 既存維持」のため、空のときは送らない
+    // - 同じ作家の resolved 作家系列も上書き (xlsx 内で値が補完されたケース)
+    // - status は新規のみ '1' を強制 (既存行は触らない)
+    function _buildSubmitFields(row, artistGroups, fieldNames, isNew, seed) {
+      var fields = {};
+      fieldNames.forEach(function(f){
+        var v = row[f];
+        if (v === undefined || v === null) return;
+        v = String(v);
+        // image_url は xlsx に画像本体が載らないので空セル = 既存画像維持。
+        if (f === 'image_url' && v.trim() === '') return;
+        fields[f] = v;
+      });
+      var name = (row.artist || '').trim();
+      if (name && artistGroups[name]) {
+        Object.keys(artistGroups[name]).forEach(function(col){
+          fields[col] = artistGroups[name][col];
+        });
+      }
+      if (isNew && seed) {
+        fields.qr_url = seed.qr_url || '';
+        fields.status = '1';
+      }
+      return fields;
+    }
+
+    async function _submitOne(ex, artworkId, fields, fn) {
+      var res = await fn({ exCode: ex, artworkId: artworkId, fields: fields });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('CF が失敗しました');
+      }
+    }
+
+    async function executeImport() {
+      if (!importPlan) { setPreview('<span class="err">先に「内容を確認」を押してください</span>'); return; }
+      var ex = importPlan.ex;
+      var plan = importPlan.plan;
+      var btnExec = document.getElementById('btnExecute');
+      var btnDry = document.getElementById('btnDryRun');
+      btnExec.disabled = true; btnDry.disabled = true;
+      var preview = document.getElementById('importPreview');
+      var fn = firebase.functions().httpsCallable('submitArtwork');
+
+      var totalSteps = plan.updateRows.length + plan.newRows.length;
+      var done = 0;
+      var failed = [];
+
+      function setProgress() {
+        preview.innerHTML = '<span style="color:#888;">書き込み中… (' + done + '/' + totalSteps + ')</span>';
+      }
+      setProgress();
+
+      try {
+        // 1. 新規行: GAS で slot 確保
+        var seeds = [];
+        if (plan.newRows.length > 0) {
+          preview.innerHTML = '<span style="color:#888;">slot 確保中 (' + plan.newRows.length + ' 件)…</span>';
+          seeds = await _gasAddArtworks(ex, plan.newRows.length);
+          if (seeds.length < plan.newRows.length) {
+            throw new Error('GAS から返ってきた slot 数が不足 (要求 ' + plan.newRows.length + ', 取得 ' + seeds.length + ')');
+          }
+        }
+
+        // 2. 更新行を書き込み
+        for (var i = 0; i < plan.updateRows.length; i++) {
+          var u = plan.updateRows[i];
+          var fields = _buildSubmitFields(u.row, plan.artistGroups, plan.fieldNames, false, null);
+          try {
+            await _submitOne(ex, u.row.artwork_id, fields, fn);
+          } catch (e) {
+            failed.push({ aid: u.row.artwork_id, msg: e.message || String(e) });
+          }
+          done++; setProgress();
+        }
+
+        // 3. 新規行を書き込み (seed の artwork_id を割り当て)
+        for (var j = 0; j < plan.newRows.length; j++) {
+          var n = plan.newRows[j];
+          var seed = seeds[j];
+          var newFields = _buildSubmitFields(n.row, plan.artistGroups, plan.fieldNames, true, seed);
+          try {
+            await _submitOne(ex, seed.artwork_id, newFields, fn);
+          } catch (e) {
+            failed.push({ aid: seed.artwork_id + ' (新規)', msg: e.message || String(e) });
+          }
+          done++; setProgress();
+        }
+
+        // 4. 結果
+        var html = '<span class="ok">✅ アップロード完了</span>' +
+          '<ul>' +
+            '<li>更新: ' + plan.updateRows.length + ' 件</li>' +
+            '<li>新規: ' + plan.newRows.length + ' 件</li>' +
+          '</ul>';
+        if (failed.length > 0) {
+          html += '<span class="err">⚠️ 一部失敗 (' + failed.length + ' 件):</span><ul>' +
+            failed.map(function(f){ return '<li>' + escapeHtml(f.aid) + ': ' + escapeHtml(f.msg) + '</li>'; }).join('') +
+            '</ul>';
+        }
+        preview.innerHTML = html;
+        // 実行後はプランをクリアして二重実行を防ぐ
+        importPlan = null;
+        btnExec.style.display = 'none';
+      } catch (e) {
+        console.error('executeImport failed:', e);
+        preview.innerHTML = '<span class="err">ERROR: ' + escapeHtml(e.message || e) + '</span>';
+      } finally {
+        btnDry.disabled = false;
+        btnExec.disabled = false;
+      }
+    }
+
   </script>
   <script src="../js/operator-auth.js"></script>
   <script>
