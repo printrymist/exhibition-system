@@ -477,12 +477,31 @@
       return byId;
     }
 
+    // 主催者が「項目設定」で required ON にしたフィールド名の Set。
+    // 「作品登録/設定」画面と同じ意味の「必須」を共有する。
+    function _requiredFieldNames(ex) {
+      var exDoc = exMap[ex] || {};
+      var required = new Set();
+      if (exDoc.registration_fields) {
+        try {
+          var arr = JSON.parse(exDoc.registration_fields);
+          (arr || []).forEach(function(f){
+            if (f && f.name && f.required) required.add(f.name);
+          });
+        } catch (e) { console.warn('registration_fields parse failed:', e); }
+      }
+      // title は field-defs の isCaptionRequired により暗黙必須扱い
+      required.add('title');
+      return required;
+    }
+
     // 検証本体。errors の配列 (人間向けメッセージ) と、エラーが無ければ plan オブジェクトを返す。
     function _validate(ex, parsed, currentById) {
       var errors = [];
       var headers = parsed.headers;
       var rows = parsed.rows;
       var fieldNames = _captionFieldNames(ex);
+      var requiredFields = _requiredFieldNames(ex);
       var knownFields = new Set(['artwork_id'].concat(fieldNames));
 
       // 1. ヘッダー検証
@@ -532,6 +551,18 @@
             skipRows.push({ row: r, existing: existing });
           }
         } else {
+          // 書き込み対象の行: title 以外の必須項目もチェック (項目設定で required ON のフィールド)。
+          // 列が xlsx に無い場合はチェック対象から外す (列ごと無いのに必須エラーは出さない)。
+          requiredFields.forEach(function(reqName){
+            if (reqName === 'title') return;  // 上で扱った
+            if (headers.indexOf(reqName) === -1) return;  // 列自体が xlsx に無い
+            var v = (r[reqName] || '').toString().trim();
+            if (v === '') {
+              var label = (typeof FIELD_MAP !== 'undefined' && FIELD_MAP[reqName] && FIELD_MAP[reqName].label)
+                ? FIELD_MAP[reqName].label : reqName;
+              errors.push('行 ' + r.rowIndex + ': ' + aid + ' で必須項目「' + label + '」が空欄です');
+            }
+          });
           updateRows.push({ row: r, existing: existing });
         }
       });
