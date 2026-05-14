@@ -80,8 +80,8 @@
     <div class="import-section">
       <h2>📤 Import (XLSX → 作品データへ反映)</h2>
       <div class="lead">
-        ダウンロードした「🎨 Artworks XLSX」を Excel で編集 → ここでアップロードすると Firestore に反映されます。<br>
-        既存行 (artwork_id あり) は更新、artwork_id 空の行は新規追加。問題があればアップロード前に拒否されます (一行も書き込みません)。
+        ダウンロードした「🎨 Artworks XLSX」を Excel で編集 → ここでアップロードすると反映されます。<br>
+        各行の作品情報・作家情報を書き換えてください。空きスロット行に書き込めば新規登録になります。<strong>左端の作品 ID 列は触らないでください。</strong>問題があればアップロード前に拒否されます (一行も書き込みません)。
       </div>
       <div class="file-row">
         <input type="file" id="importFile" accept=".xlsx" onchange="onImportFileChange()">
@@ -487,12 +487,12 @@
 
       // 1. ヘッダー検証
       if (headers.indexOf('artwork_id') === -1) {
-        errors.push('ヘッダーに artwork_id 列がありません。ダウンロードした xlsx をそのまま編集してください。');
+        errors.push('1 行目に「artwork_id」(作品 ID) の列が見つかりません。ダウンロードしたファイルをそのまま編集してください。');
         return { errors: errors };
       }
       var unknownCols = headers.filter(function(h){ return h && !knownFields.has(h); });
       if (unknownCols.length > 0) {
-        errors.push('未知の列があります: ' + unknownCols.join(', ') + ' (caption_fields に登録されていない列名)');
+        errors.push('知らない列が含まれています: ' + unknownCols.join(', ') + ' (この展覧会の項目設定に無い列名)');
       }
 
       // 2. 行ごとの基本検証
@@ -504,21 +504,21 @@
       rows.forEach(function(r){
         var aid = (r.artwork_id || '').trim();
         if (!aid) {
-          errors.push('行 ' + r.rowIndex + ': artwork_id が空。xlsx の artwork_id 列は編集せず、作品枠を追加するには register.html を使ってください');
+          errors.push('行 ' + r.rowIndex + ': 作品 ID (左端の列) が空になっています。この列は編集しないでください。作品枠を増やしたい場合は「作品登録/設定」画面の「作品枠を追加」を使ってください');
           return;
         }
         if (seenIds[aid]) {
-          errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' が重複しています (行 ' + seenIds[aid] + ' と重複)');
+          errors.push('行 ' + r.rowIndex + ': 作品 ID 「' + aid + '」が重複しています (行 ' + seenIds[aid] + ' と同じ)');
           return;
         }
         seenIds[aid] = r.rowIndex;
         var existing = currentById[aid];
         if (!existing) {
-          errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' は Firestore に存在しません (typo?)');
+          errors.push('行 ' + r.rowIndex + ': 作品 ID 「' + aid + '」はこの展覧会の作品リストに存在しません (打ち間違いの可能性)');
           return;
         }
         if (existing.is_locked) {
-          errors.push('行 ' + r.rowIndex + ': ' + aid + ' はロック中。register.html でロック解除してから再試行してください');
+          errors.push('行 ' + r.rowIndex + ': ' + aid + ' はロック中のため変更できません。「作品登録/設定」画面でロックを解除してから再度アップロードしてください');
           return;
         }
         var titleEmpty = !(r.title || '').trim();
@@ -526,7 +526,7 @@
         if (titleEmpty) {
           if (existingStatus === '1') {
             // 登録済の作品で title を空にする = データ損失。拒否。
-            errors.push('行 ' + r.rowIndex + ': ' + aid + ' は登録済ですが title が空になっています (誤って消した?)。元の値に戻すか、削除したい場合は register.html で操作してください');
+            errors.push('行 ' + r.rowIndex + ': ' + aid + ' は登録済の作品ですが、タイトルが空になっています (誤って消した?)。元のタイトルを入れ直すか、作品自体を削除したい場合は「作品登録/設定」画面から操作してください');
           } else {
             // 未登録 slot + 空のまま = 何もしない
             skipRows.push({ row: r, existing: existing });
@@ -561,7 +561,7 @@
           } else if (distinct.length === 1) {
             resolved[col] = distinct[0];
           } else {
-            errors.push('作家「' + name + '」: ' + col + ' の値が一致していません (' + distinct.join(' / ') + ')');
+            errors.push('作家「' + name + '」: 列「' + col + '」の値が一致していません (' + distinct.join(' / ') + ')');
           }
         });
         artistGroups[name] = resolved;
