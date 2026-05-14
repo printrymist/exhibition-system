@@ -223,6 +223,12 @@
     // ===== 1. Artworks XLSX =====
     // 型を保持できる xlsx 形式で出力。すべてのデータセルを Text 型として明示し、
     // edition の "5/10" などが Excel で日付化されるのを防ぐ。
+    //
+    // 出力範囲:
+    //   - status='1' (登録済) と status='0' (未登録の空きスロット) の両方を含める。
+    //     主催者は空き行に直接書き込んで再アップロードするフロー。
+    //   - 列は caption_fields + 作家系列フィールド (ALL_ARTIST_FIELDS) で重複は dedup。
+    //     作家情報は caption_fields に普段含まれないが、xlsx 編集の対象にしたいので追加。
     async function dlArtworks(ex) {
       log("Artworks 取得中...");
       var exDoc = exMap[ex] || {};
@@ -235,13 +241,18 @@
       if (fieldNames.length === 0) {
         fieldNames = ["title","artist","year","technique","size","price"];
       }
+      // 作家系列を追加 (重複 dedup)。ALL_ARTIST_FIELDS は field-defs.js から。
+      var seenFields = {};
+      fieldNames.forEach(function(f){ seenFields[f] = true; });
+      (typeof ALL_ARTIST_FIELDS !== 'undefined' ? ALL_ARTIST_FIELDS : []).forEach(function(f){
+        if (!seenFields[f]) { fieldNames.push(f); seenFields[f] = true; }
+      });
       var headers = ["artwork_id"].concat(fieldNames);
 
       var snap = await db.collection("artworks").where("exCode", "==", ex).get();
       var rows = [];
       snap.docs.forEach(function(d){
         var x = d.data();
-        if (((x.status || "") + "").trim() !== "1") return;
         if (!x.artwork_id) return;
         var row = { artwork_id: x.artwork_id };
         fieldNames.forEach(function(h){ row[h] = x[h] !== undefined ? x[h] : ""; });
@@ -389,9 +400,6 @@
     }
 
     // ===== Import (XLSX → Firestore) =====
-    // 1 回のアップロードで新規追加できる行数の上限。既存 UI (register.html addArtworkCount,
-    // setup.html workCount) と揃える。
-    var IMPORT_NEW_ROWS_MAX = 100;
     // 解析済みプランを execute まで保持
     var importPlan = null;
 
@@ -438,6 +446,7 @@
     }
 
     // exMap[ex] の caption_fields をパースして FIELD 名一覧を返す。
+    // ダウンロード xlsx の列構成と揃えるため、ALL_ARTIST_FIELDS (作家系列) も含める。
     function _captionFieldNames(ex) {
       var exDoc = exMap[ex] || {};
       var arr = [];
@@ -447,6 +456,12 @@
       }
       var names = (arr || []).map(function(f){ return f && f.name; }).filter(Boolean);
       if (names.length === 0) names = ['title','artist','year','technique','size','price'];
+      // 作家系列を追加 (dlArtworks の挙動と揃える)
+      var seen = {};
+      names.forEach(function(f){ seen[f] = true; });
+      (typeof ALL_ARTIST_FIELDS !== 'undefined' ? ALL_ARTIST_FIELDS : []).forEach(function(f){
+        if (!seen[f]) { names.push(f); seen[f] = true; }
+      });
       return names;
     }
 
@@ -481,42 +496,45 @@
       }
 
       // 2. 行ごとの基本検証
+      //    artwork_id は必須 (xlsx の artwork_id 列はいじらない設計)。
+      //    新規追加は register.html の「作品枠を追加」で先に slot を作ってから再ダウンロード。
       var seenIds = {};
-      var updateRows = [];
-      var newRows = [];
+      var updateRows = [];  // status='1' or status='0' + title 入力済 (実際に書き込む行)
+      var skipRows = [];    // status='0' + xlsx も空 (まだ埋まっていない slot、no-op)
       rows.forEach(function(r){
         var aid = (r.artwork_id || '').trim();
-        if (aid) {
-          if (seenIds[aid]) {
-            errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' が重複しています (行 ' + seenIds[aid] + ' と重複)');
-            return;
-          }
-          seenIds[aid] = r.rowIndex;
-          var existing = currentById[aid];
-          if (!existing) {
-            errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' は Firestore に存在しません (typo?)');
-            return;
-          }
-          if (existing.is_locked) {
-            errors.push('行 ' + r.rowIndex + ': ' + aid + ' はロック中。register.html でロック解除してから再試行してください');
-            return;
-          }
-          updateRows.push({ row: r, existing: existing });
-        } else {
-          newRows.push({ row: r });
+        if (!aid) {
+          errors.push('行 ' + r.rowIndex + ': artwork_id が空。xlsx の artwork_id 列は編集せず、作品枠を追加するには register.html を使ってください');
+          return;
         }
-        // title 必須 (caption_fields に title が含まれている場合のみ)
-        if (fieldNames.indexOf('title') !== -1) {
-          if (!(r.title || '').trim()) {
-            errors.push('行 ' + r.rowIndex + ': title が空欄' + (aid ? ' (artwork_id: ' + aid + ')' : ' (新規行)'));
+        if (seenIds[aid]) {
+          errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' が重複しています (行 ' + seenIds[aid] + ' と重複)');
+          return;
+        }
+        seenIds[aid] = r.rowIndex;
+        var existing = currentById[aid];
+        if (!existing) {
+          errors.push('行 ' + r.rowIndex + ': artwork_id ' + aid + ' は Firestore に存在しません (typo?)');
+          return;
+        }
+        if (existing.is_locked) {
+          errors.push('行 ' + r.rowIndex + ': ' + aid + ' はロック中。register.html でロック解除してから再試行してください');
+          return;
+        }
+        var titleEmpty = !(r.title || '').trim();
+        var existingStatus = ((existing.status || '') + '').trim();
+        if (titleEmpty) {
+          if (existingStatus === '1') {
+            // 登録済の作品で title を空にする = データ損失。拒否。
+            errors.push('行 ' + r.rowIndex + ': ' + aid + ' は登録済ですが title が空になっています (誤って消した?)。元の値に戻すか、削除したい場合は register.html で操作してください');
+          } else {
+            // 未登録 slot + 空のまま = 何もしない
+            skipRows.push({ row: r, existing: existing });
           }
+        } else {
+          updateRows.push({ row: r, existing: existing });
         }
       });
-
-      // 3. 上限チェック
-      if (newRows.length > IMPORT_NEW_ROWS_MAX) {
-        errors.push('一度のアップロードで新規追加できるのは ' + IMPORT_NEW_ROWS_MAX + ' 件までです (xlsx に新規行 ' + newRows.length + ' 件)');
-      }
 
       // 4. 作家情報の整合性 (B モード)
       //    同じ artist 名の行間で、各作家系列の非空値が 1 種類しかない (他は空) ことを要求。
@@ -554,7 +572,7 @@
       return {
         errors: [],
         updateRows: updateRows,
-        newRows: newRows,
+        skipRows: skipRows,
         artistGroups: artistGroups,
         fieldNames: fieldNames,
         currentById: currentById,
@@ -584,13 +602,21 @@
         }
         importPlan = { ex: ex, parsed: parsed, plan: result };
         var u = result.updateRows.length;
-        var n = result.newRows.length;
+        var s = result.skipRows.length;
+        // xlsx に出てこない artwork_id は触らない (delete もしない)
+        var untouched = Object.keys(currentById).length - u - s;
+        // 新規登録 (status='0' → '1' に格上げ) と編集 (status='1' のまま) の内訳
+        var newlyRegistered = result.updateRows.filter(function(u){
+          return (((u.existing.status || '') + '').trim() !== '1');
+        }).length;
+        var edited = u - newlyRegistered;
         setPreview(
           '<span class="ok">✅ アップロード内容を確認してください:</span>' +
           '<ul>' +
-            '<li>更新: <b>' + u + '</b> 件</li>' +
-            '<li>新規: <b>' + n + '</b> 件' + (n > 0 ? ' (このアップロード上限 ' + IMPORT_NEW_ROWS_MAX + ' 件まで)' : '') + '</li>' +
-            '<li>触らない (xlsx に無い既存作品): ' + (Object.keys(currentById).length - u) + ' 件</li>' +
+            '<li>編集 (登録済を更新): <b>' + edited + '</b> 件</li>' +
+            '<li>新規登録 (空きスロットに入力): <b>' + newlyRegistered + '</b> 件</li>' +
+            '<li>触らない (xlsx で空きスロットのまま): ' + s + ' 件</li>' +
+            (untouched > 0 ? '<li>触らない (xlsx に行が無い既存作品): ' + untouched + ' 件</li>' : '') +
           '</ul>' +
           '<div style="margin-top:6px;">問題なければ右の <b>✅ この内容で実行</b> を押してください。</div>'
         );
@@ -603,28 +629,12 @@
       }
     }
 
-    // GAS の addArtworks エンドポイント (register.html と同じ URL)
-    var GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
-
-    async function _gasAddArtworks(ex, count) {
-      var body = new URLSearchParams({ action: 'addArtworks', ex: ex, addCount: String(count) });
-      var res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body,
-      });
-      if (!res.ok) throw new Error('GAS HTTP ' + res.status);
-      var json = await res.json();
-      if (!json.success) throw new Error('GAS addArtworks 失敗: ' + (json.error || 'unknown'));
-      return json.artworks || [];
-    }
-
     // 1 行ぶんの submitArtwork ペイロードを組み立てる。
-    // - row の全列 (caption_fields 由来の値) を fields に
+    // - row の全列 (caption_fields + 作家系列) を fields に
     // - image_url だけは「空セル = 既存維持」のため、空のときは送らない
     // - 同じ作家の resolved 作家系列も上書き (xlsx 内で値が補完されたケース)
-    // - status は新規のみ '1' を強制 (既存行は触らない)
-    function _buildSubmitFields(row, artistGroups, fieldNames, isNew, seed) {
+    // - 既存 status='0' の slot に title が入った場合は status='1' に格上げ
+    function _buildSubmitFields(row, existing, artistGroups, fieldNames) {
       var fields = {};
       fieldNames.forEach(function(f){
         var v = row[f];
@@ -640,8 +650,9 @@
           fields[col] = artistGroups[name][col];
         });
       }
-      if (isNew && seed) {
-        fields.qr_url = seed.qr_url || '';
+      // 空きスロット (status='0') を埋めるケース: status を '1' に格上げ
+      var existingStatus = ((existing && existing.status || '') + '').trim();
+      if (existingStatus !== '1') {
         fields.status = '1';
       }
       return fields;
@@ -664,7 +675,7 @@
       var preview = document.getElementById('importPreview');
       var fn = firebase.functions().httpsCallable('submitArtwork');
 
-      var totalSteps = plan.updateRows.length + plan.newRows.length;
+      var totalSteps = plan.updateRows.length;
       var done = 0;
       var failed = [];
 
@@ -674,20 +685,11 @@
       setProgress();
 
       try {
-        // 1. 新規行: GAS で slot 確保
-        var seeds = [];
-        if (plan.newRows.length > 0) {
-          preview.innerHTML = '<span style="color:#888;">slot 確保中 (' + plan.newRows.length + ' 件)…</span>';
-          seeds = await _gasAddArtworks(ex, plan.newRows.length);
-          if (seeds.length < plan.newRows.length) {
-            throw new Error('GAS から返ってきた slot 数が不足 (要求 ' + plan.newRows.length + ', 取得 ' + seeds.length + ')');
-          }
-        }
-
-        // 2. 更新行を書き込み
+        // 各更新行に submitArtwork を順に発行。
+        // 空きスロット (status='0') への新規入力もここで status='1' に格上げされる。
         for (var i = 0; i < plan.updateRows.length; i++) {
           var u = plan.updateRows[i];
-          var fields = _buildSubmitFields(u.row, plan.artistGroups, plan.fieldNames, false, null);
+          var fields = _buildSubmitFields(u.row, u.existing, plan.artistGroups, plan.fieldNames);
           try {
             await _submitOne(ex, u.row.artwork_id, fields, fn);
           } catch (e) {
@@ -696,24 +698,11 @@
           done++; setProgress();
         }
 
-        // 3. 新規行を書き込み (seed の artwork_id を割り当て)
-        for (var j = 0; j < plan.newRows.length; j++) {
-          var n = plan.newRows[j];
-          var seed = seeds[j];
-          var newFields = _buildSubmitFields(n.row, plan.artistGroups, plan.fieldNames, true, seed);
-          try {
-            await _submitOne(ex, seed.artwork_id, newFields, fn);
-          } catch (e) {
-            failed.push({ aid: seed.artwork_id + ' (新規)', msg: e.message || String(e) });
-          }
-          done++; setProgress();
-        }
-
-        // 4. 結果
+        // 結果
         var html = '<span class="ok">✅ アップロード完了</span>' +
           '<ul>' +
-            '<li>更新: ' + plan.updateRows.length + ' 件</li>' +
-            '<li>新規: ' + plan.newRows.length + ' 件</li>' +
+            '<li>書き込み: ' + plan.updateRows.length + ' 件</li>' +
+            '<li>空きスロットのまま: ' + plan.skipRows.length + ' 件</li>' +
           '</ul>';
         if (failed.length > 0) {
           html += '<span class="err">⚠️ 一部失敗 (' + failed.length + ' 件):</span><ul>' +
