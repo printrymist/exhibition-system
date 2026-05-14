@@ -673,7 +673,9 @@
       var btnDry = document.getElementById('btnDryRun');
       btnExec.disabled = true; btnDry.disabled = true;
       var preview = document.getElementById('importPreview');
-      var fn = firebase.functions().httpsCallable('submitArtwork');
+      // submitArtwork は asia-northeast1 にデプロイ済。region 指定なしで呼ぶと
+      // us-central1 を叩きに行って CORS エラーになるので明示する (register.html と揃える)。
+      var fn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
 
       var totalSteps = plan.updateRows.length;
       var done = 0;
