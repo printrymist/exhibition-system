@@ -2243,11 +2243,12 @@ ${fieldsText}
       // 主催者は (1) データを埋める か (2)「項目設定」タブで必須を手動 OFF にする
       // のどちらかを意識的に選ぶ必要がある。解除側 (newState === false) は対象外。
       if (newState) {
+        // 画像 (type:'image') も必須対象。art.image_url が空ならアラート。
+        // 作家系列フィールドは作品単位の検査対象外 (artist 名だけは検査)。
         const offenders = [];
         (activeFields || []).forEach(f => {
           if (!f || !f.required) return;
           const def = FIELD_MAP[f.name];
-          if (def && def.type === 'image') return;
           if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return;
           const v = art[f.name];
           if (v === undefined || v === null || String(v).trim() === '') {
@@ -2366,7 +2367,7 @@ ${fieldsText}
         (activeFields || []).forEach(f => {
           if (!f || !f.required) return;
           const def = FIELD_MAP[f.name];
-          if (def && def.type === 'image') return; // 画像は別途 register 編集側でチェック
+          // 画像 (type:'image') も必須対象 — art.image_url が空ならカウントされる。
           if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return; // 作家系列は対象外
           const ids = [];
           artworks.forEach(a => {
@@ -2475,16 +2476,12 @@ ${fieldsText}
         if (el) artistData[f] = el.value.trim();
       });
 
+      // 必須項目チェック (画像も含む) は「💾 更新する」では行わない。
+      // 「普通の更新は緩く、確定 (🔒 ロック) で厳格」の方針に揃える。
+      // 例えば画像未登録のまま技法だけ修正 → 保存できる、画像をあとで追加して
+      // 最後にロックで全必須を担保する、という運用を可能にする。
+      // ただし下段で pending な画像アップロードを処理するために imageField の参照は残す。
       const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
-      if (imageField && imageField.required) {
-        const preview = document.getElementById(prefix + imageField.name + '_preview');
-        const existing = (document.getElementById(prefix + imageField.name + '_existing') || {}).value || '';
-        const pending = preview && preview.dataset ? preview.dataset.pending : '';
-        if (!pending && !existing) {
-          showEditMsg(artworkId, '⚠️ 作品画像は必須です。', '#d93025');
-          return;
-        }
-      }
 
       const btnUpdate = document.querySelector('#panel_' + artworkId + ' .btn-update');
       if (btnUpdate) btnUpdate.disabled = true;
