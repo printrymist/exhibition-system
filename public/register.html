@@ -2365,24 +2365,34 @@ ${fieldsText}
       // あれば「必須を外して続行しますか?」と尋ね、OK なら該当フィールドの required を
       // false にして再保存してからロックに進む。解除側はチェック不要。
       if (targetState) {
-        const offenders = []; // [{ name, label, count }]
+        // 多すぎる作品 ID で confirm() が肥大化しないよう、各フィールド最大 5 件まで列挙。
+        const ID_PREVIEW_LIMIT = 5;
+        const offenders = []; // [{ name, label, count, ids }]
         (activeFields || []).forEach(f => {
           if (!f || !f.required) return;
           const def = FIELD_MAP[f.name];
           if (def && def.type === 'image') return; // 画像は別途 register 編集側でチェック
           if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return; // 作家系列は対象外
-          let count = 0;
+          const ids = [];
           artworks.forEach(a => {
             const v = a[f.name];
-            if (v === undefined || v === null || String(v).trim() === '') count++;
+            if (v === undefined || v === null || String(v).trim() === '') {
+              if (a.artwork_id) ids.push(a.artwork_id);
+            }
           });
-          if (count > 0) {
+          if (ids.length > 0) {
             const label = (def && def.label) ? def.label : f.name;
-            offenders.push({ name: f.name, label: label, count: count });
+            offenders.push({ name: f.name, label: label, count: ids.length, ids: ids });
           }
         });
         if (offenders.length > 0) {
-          const lines = offenders.map(o => `  - ${o.label}: ${o.count} 件`).join('\n');
+          const lines = offenders.map(o => {
+            const shown = o.ids.slice(0, ID_PREVIEW_LIMIT).join(', ');
+            const overflow = o.ids.length > ID_PREVIEW_LIMIT
+              ? ' 他 ' + (o.ids.length - ID_PREVIEW_LIMIT) + ' 件'
+              : '';
+            return `  - ${o.label}: ${o.count} 件 (${shown}${overflow})`;
+          }).join('\n');
           const ok = confirm(
             '⚠️ 必須項目に空欄の作品があります:\n\n' + lines +
             '\n\nこれらの必須設定を外して続行しますか?\n' +
