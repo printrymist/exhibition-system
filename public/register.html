@@ -2228,6 +2228,14 @@ ${fieldsText}
         alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
+      // 行を展開した時点で closure に閉じ込めた `art` は、「💾 更新する」後に古くなる
+      // ので、最新の artworkCache から取り直す。これをしないと、たとえばユーザーが
+      // 技法を空にして保存 → 🔒 ロック を押したとき、古い `art.technique` (非空) で
+      // チェックして必須空欄を見落とす。
+      if (Array.isArray(artworkCache)) {
+        const fresh = artworkCache.find(a => a && a.artwork_id === art.artwork_id);
+        if (fresh) art = fresh;
+      }
       const newState = !art.is_locked;
 
       // 個別ロック (確定相当) も必須項目チェックを通す。一括ロックと挙動を揃える。
