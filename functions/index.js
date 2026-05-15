@@ -1631,7 +1631,11 @@ exports.submitArtwork = onCall(
           afterFields[k] = newV;
         }
       }
-      if (changedFields.length > 0) {
+      // is_locked 単独の変更は audit に書かない (作品 doc の現在値で十分追跡可能、
+      // 一括ロックで N 件のエントリが膨らむのを防ぐ)。複数フィールドの一部に
+      // is_locked が含まれる場合は他のフィールドと合わせて記録する。
+      const isLockOnly = changedFields.length === 1 && changedFields[0] === "is_locked";
+      if (changedFields.length > 0 && !isLockOnly) {
         const auditEntry = {
           exCode,
           artworkId,
