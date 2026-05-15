@@ -1730,12 +1730,27 @@ exports.getAuditLog = onCall(async (request) => {
     );
   }
 
-  const snap = await admin.firestore()
-    .collection("audit")
-    .where("exCode", "==", exCode)
-    .orderBy("timestamp", "desc")
-    .limit(limit)
-    .get();
+  let snap;
+  try {
+    snap = await admin.firestore()
+      .collection("audit")
+      .where("exCode", "==", exCode)
+      .orderBy("timestamp", "desc")
+      .limit(limit)
+      .get();
+  } catch (err) {
+    // Firestore composite index がまだ構築中だと FAILED_PRECONDITION で落ちる。
+    // INTERNAL ではなく原因が分かるメッセージに翻訳する。
+    const msg = (err && err.message) || String(err);
+    if (/index.*currently building|requires an index/i.test(msg)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Firestore のインデックスが構築中です。数分待って再度お試しください。",
+      );
+    }
+    logger.error("getAuditLog firestore query failed", { exCode, error: msg });
+    throw new HttpsError("internal", "audit ログの取得に失敗しました: " + msg);
+  }
 
   const entries = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
   return { success: true, entries };
