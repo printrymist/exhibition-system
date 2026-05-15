@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Exhibition Audit Log</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 960px; margin: 0 auto; color: #1a2a4a; }
+    h1 { font-size: 1.3em; }
+    .row { margin: 14px 0; }
+    select, button { padding: 10px 14px; font-size: 15px; border-radius: 6px; border: 1px solid #ddd; }
+    button { background: #1a73e8; color: #fff; border-color: #1a73e8; cursor: pointer; }
+    button:hover:not(:disabled) { background: #1557b0; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-row button { min-width: auto; padding: 10px 16px; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .toolbar .count { color: #666; font-size: 0.88em; }
+    .empty { padding: 24px; text-align: center; color: #999; background: #f5f5f5; border-radius: 8px; }
+
+    .entry { border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 6px; background: white; overflow: hidden; }
+    .entry summary { padding: 10px 14px; cursor: pointer; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 0.9em; list-style: none; }
+    .entry summary::-webkit-details-marker { display: none; }
+    .entry summary::before { content: "▶"; color: #aaa; font-size: 0.8em; margin-right: 4px; }
+    .entry[open] summary::before { content: "▼"; }
+    .entry summary:hover { background: #f7faff; }
+    .entry .time { color: #666; font-variant-numeric: tabular-nums; min-width: 130px; }
+    .entry .actor { color: #1a4f9c; font-weight: bold; }
+    .entry .target { color: #333; }
+    .entry .fields { color: #666; font-size: 0.85em; flex: 1; min-width: 200px; }
+    .entry .badge { font-size: 0.72em; padding: 1px 6px; border-radius: 3px; background: #eef5ff; color: #1a4f9c; }
+    .entry .badge.new { background: #e6f4ea; color: #0b8043; }
+    .entry .badge.tok { background: #fef9f0; color: #8a6500; }
+    .entry .badge.import { background: #fff3e0; color: #d97706; }
+
+    .diff { padding: 0 14px 12px 30px; font-size: 0.85em; }
+    .diff table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+    .diff th, .diff td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+    .diff th { font-weight: bold; color: #666; width: 130px; white-space: nowrap; }
+    .diff .before { color: #b00020; text-decoration: line-through; word-break: break-all; }
+    .diff .after { color: #0b8043; word-break: break-all; }
+    .diff .arrow { color: #aaa; padding: 0 6px; }
+    .diff .empty-val { color: #aaa; font-style: italic; }
+
+    pre#log { background: #f4f4f9; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <a id="backToReports" href="../reports.html"
+    style="display:inline-block; margin-bottom:8px; padding:6px 14px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:13px; text-decoration:none;">
+    ← 出力・レポートへ戻る
+  </a>
+  <h1>🕐 変更履歴 (Audit Log)</h1>
+  <p style="font-size:0.85em; color:#666; margin-top:0;">
+    作品データへの変更履歴 (誰が・いつ・どの作品の・どのフィールドを・何から何に変えたか) を直近 100 件まで時系列降順で表示します。
+  </p>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">主催者ログイン</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">展覧会を申し込んだ際のメールアドレスを入力してください。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+
+    <div class="row">
+      <label>Exhibition:
+        <select id="exSelect" onchange="onExChange()"></select>
+      </label>
+    </div>
+
+    <div class="toolbar">
+      <button id="btnLoad" onclick="loadAuditLog()">🔄 履歴を読み込む</button>
+      <span class="count" id="entryCount"></span>
+    </div>
+
+    <div id="entries"></div>
+    <pre id="log"></pre>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="../field-defs.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var logEl = document.getElementById("log");
+    var exMap = {};
+
+    function log(s) { logEl.textContent += "\n" + s; }
+    function clearLog() { logEl.textContent = ""; }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+
+    async function loadExhibitionsForUser(userEmail) {
+      var sel = document.getElementById("exSelect");
+      sel.innerHTML = '';
+      exMap = {};
+      clearLog();
+      document.getElementById('entries').innerHTML = '';
+      document.getElementById('entryCount').textContent = '';
+      if (!userEmail) {
+        log("ログインしていません。");
+        return;
+      }
+      try {
+        var normalized = userEmail.trim().toLowerCase();
+        var snap = await db.collection("exhibitions")
+          .where("email", "==", normalized)
+          .get();
+        snap.docs.forEach(function(d){
+          var data = d.data();
+          exMap[d.id] = data;
+          var label = (data.ex_name || "(名称未設定)") + " (" + d.id + ")";
+          var opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+        if (snap.docs.length === 0) {
+          log("あなたが主催者として登録された展覧会はありません。");
+        } else {
+          var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+          if (urlEx && exMap[urlEx]) {
+            sel.value = urlEx;
+          }
+        }
+      } catch (e) {
+        log("ERROR: " + e.message);
+      }
+    }
+
+    function onExChange() {
+      clearLog();
+      document.getElementById('entries').innerHTML = '';
+      document.getElementById('entryCount').textContent = '';
+    }
+
+    (function updateBackLink() {
+      var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+      var backLink = document.getElementById('backToReports');
+      if (backLink && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx)) {
+        backLink.href = '../reports.html?ex=' + urlEx;
+      }
+    })();
+
+    // ===== Audit log fetch + render =====
+    async function loadAuditLog() {
+      var ex = document.getElementById('exSelect').value;
+      if (!ex) { log('展覧会を選択してください。'); return; }
+      var btn = document.getElementById('btnLoad');
+      btn.disabled = true;
+      clearLog();
+      document.getElementById('entries').innerHTML = '<div class="empty">読み込み中…</div>';
+      document.getElementById('entryCount').textContent = '';
+      try {
+        var fn = firebase.app().functions('asia-northeast1').httpsCallable('getAuditLog');
+        var res = await fn({ exCode: ex, limit: 100 });
+        if (!res || !res.data || !res.data.success) {
+          throw new Error('CF が失敗しました');
+        }
+        var entries = res.data.entries || [];
+        renderEntries(entries);
+        document.getElementById('entryCount').textContent = entries.length + ' 件';
+      } catch (e) {
+        console.error(e);
+        document.getElementById('entries').innerHTML =
+          '<div class="empty" style="color:#d93025;">エラー: ' + escapeHtml(e.message || e) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function _fmtTime(iso) {
+      if (!iso) return '';
+      try {
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '-');
+      } catch (_e) { return iso; }
+    }
+
+    function _fieldLabel(name) {
+      if (typeof FIELD_MAP !== 'undefined' && FIELD_MAP[name] && FIELD_MAP[name].label) {
+        return FIELD_MAP[name].label;
+      }
+      return name;
+    }
+
+    function _actorLabel(e) {
+      // 操作者の表示優先度:
+      //   operator (rymist1) > organizer (主催者 email) > artist_token (作家名) > token kind > anon
+      if (e.callerEmail) {
+        return escapeHtml(e.callerEmail) +
+          (e.authMode === 'operator' ? ' <span class="badge">運営</span>' : ' <span class="badge">主催者</span>');
+      }
+      if (e.authMode === 'artist_token' && e.callerArtist) {
+        return '作家: ' + escapeHtml(e.callerArtist) + ' <span class="badge">作家</span>';
+      }
+      if (e.tokenKind) {
+        return '<span class="badge tok">' + escapeHtml(e.tokenKind) + ' token</span>';
+      }
+      return '<span class="badge tok">匿名</span>';
+    }
+
+    function _renderValueCell(v) {
+      if (v === null || v === undefined || v === '') {
+        return '<span class="empty-val">(空)</span>';
+      }
+      var s = String(v);
+      if (s.length > 200) s = s.slice(0, 200) + '…';
+      return escapeHtml(s);
+    }
+
+    function renderEntries(entries) {
+      var container = document.getElementById('entries');
+      if (!entries.length) {
+        container.innerHTML = '<div class="empty">変更履歴はまだありません。</div>';
+        return;
+      }
+      var html = entries.map(function(e){
+        var time = _fmtTime(e.timestamp);
+        var actor = _actorLabel(e);
+        var changed = Array.isArray(e.changedFields) ? e.changedFields : [];
+        var fieldLabels = changed.map(_fieldLabel).join(', ') || '(変更なし)';
+        var newBadge = e.isNew ? ' <span class="badge new">新規</span>' : '';
+        var importBadge = e.bulkImportId ? ' <span class="badge import">📤 一括反映</span>' : '';
+
+        var diffRows = changed.map(function(name){
+          var before = (e.before && Object.prototype.hasOwnProperty.call(e.before, name)) ? e.before[name] : '';
+          var after  = (e.after  && Object.prototype.hasOwnProperty.call(e.after,  name)) ? e.after[name]  : '';
+          return '<tr>' +
+            '<th>' + escapeHtml(_fieldLabel(name)) + '</th>' +
+            '<td><span class="before">' + _renderValueCell(before) + '</span></td>' +
+            '<td class="arrow">→</td>' +
+            '<td><span class="after">' + _renderValueCell(after) + '</span></td>' +
+          '</tr>';
+        }).join('');
+
+        return '<details class="entry">' +
+          '<summary>' +
+            '<span class="time">' + escapeHtml(time) + '</span>' +
+            '<span class="actor">' + actor + '</span>' +
+            '<span class="target">' + escapeHtml(e.artworkId || '') + newBadge + importBadge + '</span>' +
+            '<span class="fields">' + escapeHtml(fieldLabels) + '</span>' +
+          '</summary>' +
+          '<div class="diff">' +
+            (diffRows ? '<table>' + diffRows + '</table>' : '<div class="empty-val">変更フィールドの詳細はありません。</div>') +
+          '</div>' +
+        '</details>';
+      }).join('');
+      container.innerHTML = html;
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+
+      window.operatorAuth.onAuthChange(function (user) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && user.email) {
+          if (statusEl) {
+            statusEl.innerHTML = '🔓 ' + user.email + ' でログイン中 ' +
+              '<a href="#" onclick="window.operatorAuth.signOut();return false;" style="color:#1a73e8;margin-left:8px;text-decoration:underline;">ログアウト</a>';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+          loadExhibitionsForUser(user.email);
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          if (statusEl) statusEl.style.display = 'none';
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+</body>
+</html>
