@@ -2229,6 +2229,48 @@ ${fieldsText}
         return;
       }
       const newState = !art.is_locked;
+
+      // 個別ロック (確定相当) もこのチェックを通す。一括ロック (bulkSetArtworkLock) と
+      // 同じく「必須項目に空欄があれば必須を外しますか?」のダイアログを出す。
+      // 解除側 (newState === false) は対象外。
+      if (newState) {
+        const offenders = [];
+        (activeFields || []).forEach(f => {
+          if (!f || !f.required) return;
+          const def = FIELD_MAP[f.name];
+          if (def && def.type === 'image') return;
+          if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return;
+          const v = art[f.name];
+          if (v === undefined || v === null || String(v).trim() === '') {
+            const label = (def && def.label) ? def.label : f.name;
+            offenders.push({ name: f.name, label: label });
+          }
+        });
+        if (offenders.length > 0) {
+          const lines = offenders.map(o => `  - ${o.label}`).join('\n');
+          const ok = confirm(
+            '⚠️ この作品で必須項目が空欄になっています:\n\n' + lines +
+            '\n\nこれらの必須設定を外して続行しますか?\n' +
+            '(必須を外せば、この作品も空欄のままロックできます)\n\n' +
+            'OK = 必須を外して続行  /  キャンセル = 戻る'
+          );
+          if (!ok) return;
+          const offenderNames = new Set(offenders.map(o => o.name));
+          activeFields = activeFields.map(f =>
+            offenderNames.has(f.name) ? Object.assign({}, f, { required: false }) : f
+          );
+          try {
+            await window.fsSaveRegistrationFields(currentEx, JSON.stringify(activeFields));
+            sessionStorage.setItem('fields_' + currentEx, JSON.stringify(activeFields));
+            buildFieldsGrid(activeFields);
+            buildInputForm();
+          } catch (e) {
+            alert('必須設定の更新に失敗しました: ' + (e.message || e));
+            return;
+          }
+        }
+      }
+
       const lockBtn = document.getElementById('btnToggleLock_' + art.artwork_id);
       if (lockBtn) lockBtn.disabled = true;
       try {
