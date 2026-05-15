@@ -2230,9 +2230,10 @@ ${fieldsText}
       }
       const newState = !art.is_locked;
 
-      // 個別ロック (確定相当) もこのチェックを通す。一括ロック (bulkSetArtworkLock) と
-      // 同じく「必須項目に空欄があれば必須を外しますか?」のダイアログを出す。
-      // 解除側 (newState === false) は対象外。
+      // 個別ロック (確定相当) も必須項目チェックを通す。一括ロックと挙動を揃える。
+      // 厳格ブロック: 空欄があればロックを進めない (OK 1 発で必須を外す導線は廃止)。
+      // 主催者は (1) データを埋める か (2)「項目設定」タブで必須を手動 OFF にする
+      // のどちらかを意識的に選ぶ必要がある。解除側 (newState === false) は対象外。
       if (newState) {
         const offenders = [];
         (activeFields || []).forEach(f => {
@@ -2243,31 +2244,17 @@ ${fieldsText}
           const v = art[f.name];
           if (v === undefined || v === null || String(v).trim() === '') {
             const label = (def && def.label) ? def.label : f.name;
-            offenders.push({ name: f.name, label: label });
+            offenders.push(label);
           }
         });
         if (offenders.length > 0) {
-          const lines = offenders.map(o => `  - ${o.label}`).join('\n');
-          const ok = confirm(
-            '⚠️ この作品で必須項目が空欄になっています:\n\n' + lines +
-            '\n\nこれらの必須設定を外して続行しますか?\n' +
-            '(必須を外せば、この作品も空欄のままロックできます)\n\n' +
-            'OK = 必須を外して続行  /  キャンセル = 戻る'
+          alert(
+            '⚠️ この作品で必須項目が空欄になっているためロックできません:\n\n' +
+            offenders.map(l => '  - ' + l).join('\n') +
+            '\n\n空欄を埋めてから再度ロックしてください。\n' +
+            'どうしても必須から外したい場合は「項目設定」タブで該当項目を手動で「任意」に変えてください。'
           );
-          if (!ok) return;
-          const offenderNames = new Set(offenders.map(o => o.name));
-          activeFields = activeFields.map(f =>
-            offenderNames.has(f.name) ? Object.assign({}, f, { required: false }) : f
-          );
-          try {
-            await window.fsSaveRegistrationFields(currentEx, JSON.stringify(activeFields));
-            sessionStorage.setItem('fields_' + currentEx, JSON.stringify(activeFields));
-            buildFieldsGrid(activeFields);
-            buildInputForm();
-          } catch (e) {
-            alert('必須設定の更新に失敗しました: ' + (e.message || e));
-            return;
-          }
+          return;
         }
       }
 
@@ -2362,11 +2349,11 @@ ${fieldsText}
       }
 
       // 一括ロック (確定相当) の前に、必須項目に空欄がある作品が無いかチェック。
-      // あれば「必須を外して続行しますか?」と尋ね、OK なら該当フィールドの required を
-      // false にして再保存してからロックに進む。解除側はチェック不要。
+      // 厳格ブロック: 空欄が 1 件でもあればロックを中止する (OK 1 発で必須を外す導線は廃止)。
+      // 主催者は (1) データを埋める か (2)「項目設定」タブで必須を手動 OFF にする
+      // のどちらかを意識的に選ぶ必要がある。解除側はチェック不要。
       if (targetState) {
-        // 多すぎる作品 ID で confirm() が肥大化しないよう、各フィールド最大 5 件まで列挙。
-        const ID_PREVIEW_LIMIT = 5;
+        const ID_PREVIEW_LIMIT = 5;  // confirm() 肥大化を避ける為、各フィールド最大 5 件まで列挙
         const offenders = []; // [{ name, label, count, ids }]
         (activeFields || []).forEach(f => {
           if (!f || !f.required) return;
@@ -2393,33 +2380,13 @@ ${fieldsText}
               : '';
             return `  - ${o.label}: ${o.count} 件 (${shown}${overflow})`;
           }).join('\n');
-          const ok = confirm(
-            '⚠️ 必須項目に空欄の作品があります:\n\n' + lines +
-            '\n\nこれらの必須設定を外して続行しますか?\n' +
-            '(必須を外せば、空欄の作品もそのままロックされます)\n\n' +
-            'OK = 必須を外して続行  /  キャンセル = 戻る'
+          alert(
+            '⚠️ 必須項目に空欄の作品があるため一括ロックできません:\n\n' + lines +
+            '\n\n空欄を埋めてから再度ロックしてください。\n' +
+            'どうしても必須から外したい場合は「項目設定」タブで該当項目を手動で「任意」に変えてください。'
           );
-          if (!ok) {
-            msgEl.textContent = '';
-            return;
-          }
-          // required:false に書き換え + 保存 + UI 再構築
-          const offenderNames = new Set(offenders.map(o => o.name));
-          activeFields = activeFields.map(f =>
-            offenderNames.has(f.name) ? Object.assign({}, f, { required: false }) : f
-          );
-          msgEl.style.color = '#888';
-          msgEl.innerHTML = '<span class="spinner-sm"></span> 必須設定を更新中…';
-          try {
-            await window.fsSaveRegistrationFields(currentEx, JSON.stringify(activeFields));
-            sessionStorage.setItem('fields_' + currentEx, JSON.stringify(activeFields));
-            buildFieldsGrid(activeFields);
-            buildInputForm();
-          } catch (e) {
-            msgEl.style.color = '#d93025';
-            msgEl.textContent = '必須設定の更新に失敗しました: ' + (e.message || e);
-            return;
-          }
+          msgEl.textContent = '';
+          return;
         }
       }
 
