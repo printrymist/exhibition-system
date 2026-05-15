@@ -799,6 +799,36 @@
     // 「✓ 提出する」ボタンの handler。is_locked=true を Firestore に書いて作家側を read-only に固定する。
     // 解除は主催者が register.html から行う必要がある (CF 側で artist 経路の unlock は禁止)。
     async function submitArtworkLock(art) {
+      // closure に閉じ込めた `art` は、「💾 更新する」後に古くなることがあるので
+      // existingWorks から取り直す (register.html toggleArtworkLock と同じ対策)。
+      if (Array.isArray(existingWorks)) {
+        const fresh = existingWorks.find(a => a && a.artwork_id === art.artwork_id);
+        if (fresh) art = fresh;
+      }
+
+      // 提出 = ロック = 確定。空欄の必須項目があれば提出をブロック。
+      // 作家は項目設定を変えられないので「主催者にご連絡」案内付き。
+      const offenders = [];
+      (activeFields || []).forEach(f => {
+        if (!f || !f.required) return;
+        const def = FIELD_MAP[f.name];
+        if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return;
+        const v = art[f.name];
+        if (v === undefined || v === null || String(v).trim() === '') {
+          const lbl = (def && def.label) ? def.label : f.name;
+          offenders.push(lbl);
+        }
+      });
+      if (offenders.length > 0) {
+        alert(
+          '⚠️ この作品で必須項目が空欄になっているため提出できません:\n\n' +
+          offenders.map(l => '  - ' + l).join('\n') +
+          '\n\n空欄を埋めてから再度提出してください。\n' +
+          'どうしても入力できない項目がある場合は主催者にご連絡ください。'
+        );
+        return;
+      }
+
       const label = art.title || art.title_en || art.artwork_id;
       if (!confirm(`作品「${label}」を提出します。\n\n提出後は編集ができなくなります。\n再編集が必要な場合は主催者にご連絡ください。\n\n続行しますか?`)) return;
       if (!navigator.onLine) {
@@ -936,22 +966,18 @@
         if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?\n\n(同じセッション中はこのメッセージは再表示されません)')) return;
         _sandboxWarningAcknowledged = true;
       }
-      let hasError = false; document.getElementById('newFormError').innerText = '';
+      // 必須項目チェックは「💾 登録する」では行わない (部分登録を許可)。
+      // 「制作中だが登録枠だけ確保したい」「画像は後で撮る」等のユースケースのため、
+      // 「保存は緩く、提出 (✓ 提出する) で厳格」の方針に揃える。
+      // 主催者画面 register.html も同じ立て付け。
+      document.getElementById('newFormError').innerText = '';
+      // artist 名だけは fsSaveArtwork が必須に頼っているので最低限チェック
       const artistEl = document.getElementById('new_artist'); artistEl.classList.remove('error');
-      if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
-      activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
-        const def = FIELD_MAP[f.name]; if (!def) return;
-        if (def.type === 'image') {
-          if (!f.required) return;
-          const pending = (document.getElementById('new_' + f.name + '_preview') || {}).dataset || {};
-          const existing = (document.getElementById('new_' + f.name + '_existing') || {}).value || '';
-          if (!pending.pending && !existing) hasError = true;
-          return;
-        }
-        const el = document.getElementById('new_' + f.name); if (!el) return; el.classList.remove('error');
-        if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; }
-      });
-      if (hasError) { document.getElementById('newFormError').innerText = '⚠️ 必須項目を入力してください（画像必須の場合は写真も）。'; return; }
+      if (!artistEl.value.trim()) {
+        artistEl.classList.add('error');
+        document.getElementById('newFormError').innerText = '⚠️ 作家名は必須です。';
+        return;
+      }
 
       const data = {};
       ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById('new_' + name); if (el) data[name] = el.value.trim(); });
@@ -1128,17 +1154,10 @@
       });
       const artistData = {}; ALL_ARTIST_FIELDS.forEach(name => { const el = document.getElementById(prefix + name); if (el) artistData[name] = el.value.trim(); });
 
+      // 必須項目チェック (画像含む) は「💾 更新する」では行わない。
+      // 「保存は緩く、提出 (✓ 提出する) で厳格」の方針に揃える (register.html も同じ)。
+      // ただし下段で pending な画像アップロードを処理するために imageField の参照は残す。
       const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
-      if (imageField && imageField.required) {
-        const preview = document.getElementById(prefix + imageField.name + '_preview');
-        const existing = (document.getElementById(prefix + imageField.name + '_existing') || {}).value || '';
-        const pending = preview && preview.dataset ? preview.dataset.pending : '';
-        if (!pending && !existing) {
-          const msgEl = document.getElementById('editMsg_' + artworkId);
-          if (msgEl) { msgEl.textContent = '⚠️ 作品画像は必須です。'; msgEl.style.color = '#d93025'; }
-          return;
-        }
-      }
 
       const btnSave = card.querySelector('.btn-save'); if (btnSave) btnSave.disabled = true;
       const msgEl = document.getElementById('editMsg_' + artworkId);
