@@ -600,10 +600,46 @@
 
       if (errors.length > 0) return { errors: errors };
 
+      // 5. 変更なし行の除外
+      //    updateRows のうち、書き込もうとしている全フィールドが既存値と一致する行を抜く。
+      //    Excel で何も変えずに再アップロードしたケース等で submitArtwork を呼ばずに済む
+      //    → audit ログにも書かれない、CF コールも省ける。
+      //    artist 系列の resolved 値も比較対象に含める (xlsx 内で補完された値が既存と
+      //    同じなら no-change と判定する)。
+      var realUpdateRows = [];
+      var noChangeRows = [];
+      updateRows.forEach(function(u){
+        var r = u.row;
+        var existing = u.existing;
+        var existingStatus = ((existing.status || '') + '').trim();
+        var name = (r.artist || '').trim();
+        var resolvedArtist = (name && artistGroups[name]) ? artistGroups[name] : {};
+        var changed = false;
+        // a) caption_fields + 作家系列の値
+        for (var k = 0; k < fieldNames.length; k++) {
+          var f = fieldNames[k];
+          var newV = r[f];
+          if (resolvedArtist && resolvedArtist[f] !== undefined) newV = resolvedArtist[f];
+          if (newV === undefined || newV === null) continue;
+          newV = String(newV);
+          if (f === 'image_url' && newV.trim() === '') continue; // 空 image_url は送らない (既存維持)
+          var oldV = existing[f];
+          var oldStr = (oldV === undefined || oldV === null) ? '' : String(oldV);
+          if (newV !== oldStr) { changed = true; break; }
+        }
+        // b) status の自動格上げ (status='0' → '1') も「変更あり」と扱う
+        if (!changed && existingStatus !== '1') {
+          changed = true;
+        }
+        if (changed) realUpdateRows.push(u);
+        else noChangeRows.push(u);
+      });
+
       return {
         errors: [],
-        updateRows: updateRows,
+        updateRows: realUpdateRows,
         skipRows: skipRows,
+        noChangeRows: noChangeRows,
         artistGroups: artistGroups,
         fieldNames: fieldNames,
         currentById: currentById,
@@ -634,20 +670,35 @@
         importPlan = { ex: ex, parsed: parsed, plan: result };
         var u = result.updateRows.length;
         var s = result.skipRows.length;
+        var nc = (result.noChangeRows || []).length;
         // xlsx に出てこない artwork_id は触らない (delete もしない)
-        var untouched = Object.keys(currentById).length - u - s;
+        var untouched = Object.keys(currentById).length - u - s - nc;
         // 新規登録 (status='0' → '1' に格上げ) と編集 (status='1' のまま) の内訳
         var newlyRegistered = result.updateRows.filter(function(u){
           return (((u.existing.status || '') + '').trim() !== '1');
         }).length;
         var edited = u - newlyRegistered;
+        if (u === 0) {
+          setPreview(
+            '<span class="ok">✅ 反映する変更はありません</span>' +
+            '<ul>' +
+              '<li>変更なし (xlsx の値が既存と同じ): ' + nc + ' 件</li>' +
+              '<li>空きスロットのまま: ' + s + ' 件</li>' +
+              (untouched > 0 ? '<li>触らない (xlsx に行が無い): ' + untouched + ' 件</li>' : '') +
+            '</ul>' +
+            '<div style="margin-top:6px;color:#888;">編集された行が無いため、実行する必要はありません。</div>'
+          );
+          document.getElementById('btnExecute').style.display = 'none';
+          return;
+        }
         setPreview(
           '<span class="ok">✅ アップロード内容を確認してください:</span>' +
           '<ul>' +
             '<li>編集 (登録済を更新): <b>' + edited + '</b> 件</li>' +
             '<li>新規登録 (空きスロットに入力): <b>' + newlyRegistered + '</b> 件</li>' +
-            '<li>触らない (xlsx で空きスロットのまま): ' + s + ' 件</li>' +
-            (untouched > 0 ? '<li>触らない (xlsx に行が無い既存作品): ' + untouched + ' 件</li>' : '') +
+            '<li>変更なし (xlsx の値が既存と同じ): ' + nc + ' 件 (書き込みスキップ)</li>' +
+            '<li>空きスロットのまま: ' + s + ' 件</li>' +
+            (untouched > 0 ? '<li>触らない (xlsx に行が無い): ' + untouched + ' 件</li>' : '') +
           '</ul>' +
           '<div style="margin-top:6px;">問題なければ右の <b>✅ この内容で実行</b> を押してください。</div>'
         );
