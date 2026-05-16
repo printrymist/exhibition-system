@@ -3715,14 +3715,18 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       // (collection get は全 doc が rule を通らないと失敗するため)
       let queryP;
       if (isOp) {
+        // 運営者でログイン中の場合、自分が保存したテンプレは「💾 自分のテンプレ」
+        // セクションで管理したいので personal バケットに入れる。他の主催者が保存した
+        // テンプレ doc は officials 行きだが UI 上は非表示 (officialTemplatesGrid は
+        // display:none で残置されている旧スタブ)。
         queryP = col.get().then(snap => {
           const officials = [];
           const personal = [];
           snap.forEach(doc => {
             const it = docToItem(doc);
             if (!it.name) return;
-            if (it.createdBy === OPERATOR_EMAIL.toLowerCase()) officials.push(it);
-            else personal.push(it);
+            if (it.createdBy === me) personal.push(it);
+            else officials.push(it);
           });
           return { officials, personal };
         });
