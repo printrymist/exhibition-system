@@ -6,7 +6,7 @@
 //   v1.X.Y   — バグ修正 / 軽微な改善 (Y が増える)
 //   v2.0.0+  — 破壊的変更
 // 詳細な変更履歴はリポジトリ root の CHANGELOG.md を参照。
-window.APP_VERSION = 'v0.9.1';
+window.APP_VERSION = 'v0.9.2';
 window.APP_RELEASED_AT = '2026-05-16';
 window.APP_NAME = '展覧会システム';
 
@@ -16,9 +16,9 @@ window.APP_NAME = '展覧会システム';
 window.renderVersionFooter = function (containerId) {
   var el = document.getElementById(containerId || 'versionFooter');
   if (!el) return;
-  el.style.cssText = 'text-align:center;font-size:0.72em;color:#aaa;margin-top:32px;padding:10px 8px;border-top:1px solid #f0f0f0;';
+  el.style.cssText = 'text-align:center;font-size:0.82em;color:#555;margin-top:32px;padding:12px 8px;border-top:1px solid #e0e0e0;';
   el.innerHTML =
-    window.APP_NAME + ' <span style="font-variant-numeric:tabular-nums;">' +
-    window.APP_VERSION + '</span> <span style="color:#ccc;">(' +
+    window.APP_NAME + ' <strong style="font-variant-numeric:tabular-nums;color:#1a4f9c;">' +
+    window.APP_VERSION + '</strong> <span style="color:#888;">(' +
     window.APP_RELEASED_AT + ')</span>';
 };
