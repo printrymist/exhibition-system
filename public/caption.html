@@ -3677,6 +3677,23 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       card.appendChild(dateDiv);
       card.appendChild(loadBtn);
 
+      // 運営者向け: 公式テンプレ (official-presets.json) 更新用に整形済 JSON 断片を
+      // クリップボードへ。「これを official_solo に反映して」のように私に伝えてもらえれば
+      // 該当公式の label / tagline / size を温存して中身だけ差し替える、という運用。
+      const _u = firebase.auth && firebase.auth().currentUser;
+      const _isOperator = !!(_u && _u.email && _u.email.trim().toLowerCase() === OPERATOR_EMAIL.toLowerCase());
+      if (_isOperator) {
+        const copyBtn = document.createElement('button');
+        copyBtn.style.cssText = 'width:100%;margin-top:4px;padding:4px;background:#fff8e1;color:#7a5500;border:1px solid #d4a83a;border-radius:6px;font-size:11px;cursor:pointer;';
+        copyBtn.textContent = '📋 公式 JSON';
+        copyBtn.title = '公式テンプレ更新用の JSON 断片をクリップボードへコピー (運営者専用)';
+        copyBtn.onclick = function (e) {
+          e.stopPropagation();
+          copyOfficialJsonSnippet(tpl, copyBtn);
+        };
+        card.appendChild(copyBtn);
+      }
+
       if (deletable) {
         const delBtn = document.createElement('button');
         delBtn.style.cssText = 'position:absolute;top:6px;right:6px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:2px 5px;';
@@ -3685,6 +3702,62 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         card.appendChild(delBtn);
       }
       return card;
+    }
+
+    // 保存済テンプレを公式テンプレ更新用の JSON 断片に整形してクリップボードへ。
+    // 出力は qrPosition / qrOffset / textAlign / pageSettings / items だけ。
+    // 公式テンプレの label / tagline / size は固有のメタ情報なので含めず、私 (Claude) 側で
+    // 既存値を温存して中身だけ差し替える運用にする。
+    function copyOfficialJsonSnippet(tpl, btn) {
+      let settings;
+      try { settings = JSON.parse(tpl.settingsJson || '{}'); }
+      catch (e) { alert('保存テンプレの JSON parse 失敗: ' + e.message); return; }
+
+      const pageSettings = {
+        paperSize:       settings.paperSize || 'A4',
+        orientation:     settings.orientation || 'portrait',
+        cols:            settings.cols,
+        rows:            settings.rows,
+        qrSize:          settings.qrSize,
+        qrMarginH:       settings.qrMarginH,
+        qrMarginV:       settings.qrMarginV,
+        textMarginLeft:  settings.textMarginLeft,
+        textMarginRight: settings.textMarginRight,
+        fontFamily:      settings.fontFamily || 'sans-serif'
+      };
+      if (settings.fixedText) pageSettings.fixedText = settings.fixedText;
+
+      const snippet = {
+        qrPosition: settings.qrPosition || 'bottom-right',
+        qrOffset:   settings.qrOffset || 0,
+        textAlign:  settings.textAlign || 'left',
+        pageSettings: pageSettings,
+        items:      Array.isArray(settings.items) ? settings.items : []
+      };
+      const json = JSON.stringify(snippet, null, 2);
+
+      const finish = (ok) => {
+        const orig = btn.textContent;
+        btn.textContent = ok ? '✓ コピー' : '✗ 失敗';
+        btn.style.background = ok ? '#e6f4ea' : '#fdecea';
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.style.background = '#fff8e1';
+        }, 2000);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(() => finish(true)).catch(() => finish(false));
+      } else {
+        // 古いブラウザ用 fallback
+        const ta = document.createElement('textarea');
+        ta.value = json;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); finish(true); }
+        catch (_e) { finish(false); }
+        document.body.removeChild(ta);
+      }
     }
 
     let savedTemplateNames = new Set();
