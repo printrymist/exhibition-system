@@ -941,12 +941,13 @@
           <button class="btn-wide" id="btnSendGuide" onclick="sendArtistGuide()">📨 案内メールを送信</button>
           <div class="save-msg" id="sendGuideMsg"></div>
         </div>
-        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
-          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作品 QR URL の再生成</p>
-          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">既存の作品スプレッドシートの qr_url を新形式 (HMAC) に再生成します。実行後は QR コードを印刷し直してください。</p>
-          <button class="btn-wide" id="btnRegenQr" onclick="regenerateQrUrls()">🔄 QR URL を再生成</button>
-          <div class="save-msg" id="regenQrMsg"></div>
-        </div>
+        <!-- 「🔄 QR URL を再生成」ボタンは 2026-05-16 に撤去。
+             用途は (a) Phase 5-A 以前の legacy_key URL 移行、(b) secret rotation 時の一斉再生成
+             の 2 つだったが、(a) は対応済 + Phase 5-A 以前の展覧会には Firestore sync バグ
+             (won't-fix) があり、(b) は数年に一度の運営者作業で主催者画面に置く意味が薄い。
+             会期中に誤って押すと印刷済 QR が一斉に無効化される事故リスクの方が大きいため
+             主催者 UI から撤去。secret rotation が必要になった時は admin 配下に専用ツールを作る。
+             GAS 側の regenerateQrUrls action はそのまま残置 (将来の admin ツールから呼ぶ用)。 -->
         <!-- ロック Phase 3: 全作品の一括ロック / 解除 -->
         <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作品の一括ロック</p>
@@ -1697,30 +1698,11 @@
         });
     }
 
-    // ── 作家向け案内メール送信 ──
-    function regenerateQrUrls() {
-      if (!currentEx) return;
-      if (!confirm('作品 QR URL を全件再生成しますか?\n\n旧 URL (?key=...) は無効になり、印刷済みの QR コードは使えなくなります。新しい QR を印刷し直してください。')) return;
-      const btn = document.getElementById('btnRegenQr');
-      btn.disabled = true;
-      showMsg('regenQrMsg', '<span class="spinner-sm"></span> 再生成中...', '#888');
-      gasCall({ action: 'regenerateQrUrls', ex: currentEx })
-        .then(res => {
-          btn.disabled = false;
-          if (res.success) {
-            showMsg('regenQrMsg', `✅ ${res.updated} 件の QR URL を再生成しました。`, '#1a73e8');
-          } else if (res.updated > 0) {
-            showMsg('regenQrMsg', `⚠ 一部失敗: 成功 ${res.updated} / 失敗 ${res.failed}`, '#d93025');
-          } else {
-            showMsg('regenQrMsg', 'Error: ' + (res.error || res.errors && res.errors.join(', ')), '#d93025');
-          }
-        })
-        .catch(err => {
-          btn.disabled = false;
-          showMsg('regenQrMsg', 'Error: ' + err.message, '#d93025');
-        });
-    }
+    // regenerateQrUrls() ハンドラは 2026-05-16 に撤去。
+    // 上記 (ボタン HTML コメント参照) と同じ理由で主催者 UI から削除。
+    // 将来 secret rotation の必要が出たら admin ツールから GAS regenerateQrUrls を直接呼ぶ。
 
+    // ── 作家向け案内メール送信 ──
     async function sendArtistGuide() {
       if (!activeFields || activeFields.length === 0) {
         showMsg('sendGuideMsg', '⚠️ 項目を1つ以上設定して保存してください。', '#d93025');
