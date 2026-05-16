@@ -22,3 +22,19 @@ window.renderVersionFooter = function (containerId) {
     window.APP_VERSION + '</strong> <span style="color:#888;">(' +
     window.APP_RELEASED_AT + ')</span>';
 };
+
+// お問い合わせリンク (主催者の主要画面: caption / register / reports のみ呼ぶ)。
+// バージョンフッタの直上にボタン風で配置する想定。
+// 現在のページの ex= があれば inquiry.html?ex=… に引き継ぐ。
+window.renderInquiryLink = function (containerId) {
+  var el = document.getElementById(containerId || 'inquiryLink');
+  if (!el) return;
+  var ex = '';
+  try { ex = new URLSearchParams(window.location.search).get('ex') || ''; } catch (_e) {}
+  var href = '/inquiry.html' + (ex && /^[A-Za-z0-9_-]+$/.test(ex) ? '?ex=' + encodeURIComponent(ex) : '');
+  el.style.cssText = 'text-align:center;margin-top:24px;';
+  el.innerHTML =
+    '<a href="' + href + '" style="display:inline-block;padding:8px 18px;background:#e8f0fe;' +
+    'color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:0.9em;' +
+    'font-weight:bold;text-decoration:none;">✉ お問い合わせ</a>';
+};
