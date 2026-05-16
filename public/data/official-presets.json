@@ -15,13 +15,17 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "title",     "size": 18, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
         { "type": "divider" },
-        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",    "size": 16, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "year",      "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "technique", "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
         { "type": "spacer", "size": "4mm" },
-        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "field", "name": "price",     "size": 13, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
