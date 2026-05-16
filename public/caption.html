@@ -1408,6 +1408,18 @@
             <span>pt</span>
             <button class="ftoggle-btn" id="fixedTextBold" onclick="this.classList.toggle('active')">B</button>
             <button class="ftoggle-btn" id="fixedTextItalic" onclick="this.classList.toggle('active')"><i>I</i></button>
+            <label style="margin-left:8px; font-size:0.8em; color:#666;">背景</label>
+            <select id="fixedTextBg" style="font-size:0.85em;">
+              <option value="none" selected>なし</option>
+              <option value="light">薄グレー</option>
+              <option value="dark">濃グレー</option>
+              <option value="black">黒</option>
+            </select>
+            <label style="margin-left:4px; font-size:0.8em; color:#666;">文字</label>
+            <select id="fixedTextColor" style="font-size:0.85em;">
+              <option value="black" selected>黒</option>
+              <option value="white">白</option>
+            </select>
           </div>
           <div class="margin-row">
             <label>横余白</label>
@@ -3045,6 +3057,8 @@
         size: parseInt(document.getElementById('fixedTextSize').value),
         bold: document.getElementById('fixedTextBold').classList.contains('active'),
         italic: document.getElementById('fixedTextItalic').classList.contains('active'),
+        bgColor: document.getElementById('fixedTextBg').value,
+        fontColor: document.getElementById('fixedTextColor').value,
         marginH: parseInt(document.getElementById('fixedTextMarginH').value),
         marginV: parseInt(document.getElementById('fixedTextMarginV').value)
       };
@@ -3237,6 +3251,8 @@
     }
 
     // 固定文 (FixedText) の style 文字列
+    // bgColor: 'none' | 'light' (#eeeeee) | 'dark' (#666666) | 'black' (#000000)
+    // fontColor: 'black' | 'white'
     function buildFixedTextStyle(ft) {
       const mH = ft.marginH + 'mm';
       const mV = ft.marginV + 'mm';
@@ -3252,6 +3268,16 @@
       if (isLeft) style += `left:${mH};text-align:left;`;
       if (isRight) style += `right:${mH};text-align:right;`;
       if (isCenter) style += `left:${mH};right:${mH};text-align:center;`;
+      // 文字色 (デフォルト black)
+      const fc = ft.fontColor === 'white' ? '#ffffff' : '#000000';
+      style += `color:${fc};`;
+      // 背景色 + 印刷時の保持 (-webkit-print-color-adjust)。none ならスキップ。
+      const bgMap = { light: '#eeeeee', dark: '#666666', black: '#000000' };
+      const bg = bgMap[ft.bgColor];
+      if (bg) {
+        style += `background:${bg};padding:1mm 2mm;border-radius:1mm;`;
+        style += `-webkit-print-color-adjust:exact;print-color-adjust:exact;`;
+      }
       return style;
     }
 
@@ -3694,8 +3720,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           document.getElementById('fixedTextMarginV').value = settings.fixedText.marginV || 3;
           document.getElementById('fixedTextBold').classList.toggle('active', !!settings.fixedText.bold);
           document.getElementById('fixedTextItalic').classList.toggle('active', !!settings.fixedText.italic);
+          document.getElementById('fixedTextBg').value = settings.fixedText.bgColor || 'none';
+          document.getElementById('fixedTextColor').value = settings.fixedText.fontColor || 'black';
         } else {
           document.getElementById('fixedTextPos').value = 'none';
+          document.getElementById('fixedTextBg').value = 'none';
+          document.getElementById('fixedTextColor').value = 'black';
         }
         onQrPositionChange();
         if (settings.items) {
