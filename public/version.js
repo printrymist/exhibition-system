@@ -6,7 +6,7 @@
 //   v1.X.Y   — バグ修正 / 軽微な改善 (Y が増える)
 //   v2.0.0+  — 破壊的変更
 // 詳細な変更履歴はリポジトリ root の CHANGELOG.md を参照。
-window.APP_VERSION = 'v0.9.3';
+window.APP_VERSION = 'v0.9.2';
 window.APP_RELEASED_AT = '2026-05-16';
 window.APP_NAME = '展覧会システム';
 
@@ -16,15 +16,9 @@ window.APP_NAME = '展覧会システム';
 window.renderVersionFooter = function (containerId) {
   var el = document.getElementById(containerId || 'versionFooter');
   if (!el) return;
-  // 現在のページの ex= をお問い合わせフォームに引き継ぐ (主催者のコンテキスト維持)。
-  var ex = '';
-  try { ex = new URLSearchParams(window.location.search).get('ex') || ''; } catch (_e) {}
-  var inquiryHref = '/inquiry.html' + (ex && /^[A-Za-z0-9_-]+$/.test(ex) ? '?ex=' + encodeURIComponent(ex) : '');
   el.style.cssText = 'text-align:center;font-size:0.82em;color:#555;margin-top:32px;padding:12px 8px;border-top:1px solid #e0e0e0;';
   el.innerHTML =
     window.APP_NAME + ' <strong style="font-variant-numeric:tabular-nums;color:#1a4f9c;">' +
     window.APP_VERSION + '</strong> <span style="color:#888;">(' +
-    window.APP_RELEASED_AT + ')</span>' +
-    ' <span style="color:#ccc;margin:0 6px;">|</span>' +
-    '<a href="' + inquiryHref + '" style="color:#1a73e8;text-decoration:none;">✉ お問い合わせ</a>';
+    window.APP_RELEASED_AT + ')</span>';
 };
