@@ -1519,6 +1519,56 @@
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_intl')">📥 採用</button>
           </div>
+          <div class="template-card official" id="tpl_official_simple_center" onclick="selectTemplate('official_simple_center')"
+            data-description="日本のギャラリーで最も多いセンタリング構成。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。シンプルで読みやすい。">
+            <h4>🎏 シンプル・中央 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-center">
+                <div style="font-size:12px;font-weight:bold;text-align:center;">静かな水辺</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:10px;text-align:center;">中村美咲</div>
+                <div style="font-size:8.5px;color:#777;text-align:center;">2024</div>
+                <div style="font-size:8.5px;color:#777;text-align:center;">水彩・紙</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:10px;font-weight:bold;text-align:center;">¥ 32,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_simple_center')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_with_comment" onclick="selectTemplate('official_with_comment')"
+            data-description="作家コメント (artist_note 項目) を下段に添えるレイアウト。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。作家自身の言葉を見せたい時に。">
+            <h4>💬 作家コメント入り 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:11px;font-weight:bold;">母の庭</div>
+                <div style="font-size:9px;">小林美咲</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:8px;color:#777;">2024 / 油彩・キャンバス / ¥75,000</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:7.5px;color:#666;font-style:italic;line-height:1.3;">祖母の家で過ごした夏休みに見た庭を、記憶を頼りに描きました…</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_with_comment')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_with_header" onclick="selectTemplate('official_with_header')"
+            data-description="上端に展覧会名の帯 (背景グレー)。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。シリーズ展示や複数会場の見せ方に。">
+            <h4>📌 展覧会名ヘッダー 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="background:#eeeeee;text-align:center;font-size:9px;font-weight:bold;padding:2px 0;margin:-8px -10px 6px;border-radius:1px;">○○展覧会</div>
+                <div style="font-size:11px;font-weight:bold;">海辺の朝</div>
+                <div style="font-size:9px;">高橋健太</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:8.5px;color:#777;">2024</div>
+                <div style="font-size:8.5px;color:#777;">アクリル・キャンバス</div>
+                <div style="font-size:9px;font-weight:bold;">¥ 65,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_with_header')">📥 採用</button>
+          </div>
 
           <!-- ベース (PRESETS) — 同じ template-grid 内で続く。
                'standard' / 'bilingual' は公式 (official_solo / official_intl) と
@@ -2338,6 +2388,33 @@
       set('textMarginLeft',   ps.textMarginLeft);
       set('textMarginRight',  ps.textMarginRight);
       set('fontFamily',       ps.fontFamily);
+
+      // 固定文 (fixedText) ブロック対応。
+      // 「📌 展覧会名ヘッダー」テンプレのように、ヘッダー帯のスタイルとデフォルト値を
+      // テンプレ側に持たせて採用時に Page タブに反映する。
+      // value が空 + autoFillExName: true なら、現在の展覧会名 (artworkData.exName) を
+      // 自動投入する (主催者は採用後すぐ印刷プレビューで帯を見られる)。
+      if (ps.fixedText) {
+        const ft = ps.fixedText;
+        let value = ft.value || '';
+        if (!value && ft.autoFillExName && artworkData && artworkData.exName) {
+          value = artworkData.exName;
+        }
+        set('fixedTextValue', value);
+        set('fixedTextPos',   ft.pos || 'none');
+        if (ft.size !== undefined)    set('fixedTextSize', ft.size);
+        if (ft.marginH !== undefined) set('fixedTextMarginH', ft.marginH);
+        if (ft.marginV !== undefined) set('fixedTextMarginV', ft.marginV);
+        set('fixedTextBg',    ft.bgColor || 'none');
+        set('fixedTextColor', ft.fontColor || 'black');
+        document.getElementById('fixedTextBold').classList.toggle('active', !!ft.bold);
+        document.getElementById('fixedTextItalic').classList.toggle('active', !!ft.italic);
+      } else {
+        // テンプレに fixedText 指定が無い場合: ヘッダー帯を消去 (前テンプレからの引き継ぎ防止)
+        set('fixedTextPos',   'none');
+        set('fixedTextBg',    'none');
+        set('fixedTextColor', 'black');
+      }
     }
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。

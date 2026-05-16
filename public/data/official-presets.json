@@ -100,6 +100,93 @@
         { "type": "field", "name": "year",      "size": 7, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "field", "name": "price",     "size": 9, "bold": true,  "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
       ]
+    },
+
+    "official_simple_center": {
+      "label": "🎏 シンプル・中央 推奨",
+      "tagline": "日本のギャラリーで最も多いセンタリング構成",
+      "size": "A7 (105×74mm) — A4 縦に 8 枚",
+      "qrPosition": "bottom-center",
+      "qrOffset": 0,
+      "textAlign": "center",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 6, "textMarginRight": 6,
+        "fontFamily": "sans-serif"
+      },
+      "items": [
+        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
+    },
+
+    "official_with_comment": {
+      "label": "💬 作家コメント入り 推奨",
+      "tagline": "作品情報の下に作家コメントを添える",
+      "size": "A7 (105×74mm) — A4 縦に 8 枚",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 18, "qrMarginH": 2, "qrMarginV": 2,
+        "textMarginLeft": 5, "textMarginRight": 5,
+        "fontFamily": "sans-serif"
+      },
+      "items": [
+        { "type": "field", "name": "title",       "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "artist",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "year",        "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "technique",   "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "price",       "size": 8,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist_note", "size": 7,  "bold": false, "italic": true,  "align": "inherit", "maxLines": 4, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" }
+      ]
+    },
+
+    "official_with_header": {
+      "label": "📌 展覧会名ヘッダー 推奨",
+      "tagline": "上に展覧会名の帯。シリーズ展示にも便利",
+      "size": "A7 (105×74mm) — A4 縦に 8 枚",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 6, "textMarginRight": 6,
+        "fontFamily": "sans-serif",
+        "fixedText": {
+          "pos": "top-center",
+          "size": 9,
+          "bold": true,
+          "italic": false,
+          "marginH": 0,
+          "marginV": 0,
+          "bgColor": "light",
+          "fontColor": "black",
+          "autoFillExName": true
+        }
+      },
+      "items": [
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "title",     "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "divider" },
+        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+      ]
     }
   },
 
@@ -153,6 +240,37 @@
       "technique": "ミクストメディア",
       "size": "600×500mm",
       "price": "120000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_simple_center": {
+      "artwork_id": "demo_center",
+      "title": "静かな水辺",
+      "artist": "中村美咲",
+      "year": "2024",
+      "technique": "水彩・紙",
+      "size": "300×400mm",
+      "price": "32000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_with_comment": {
+      "artwork_id": "demo_comment",
+      "title": "母の庭",
+      "artist": "小林美咲",
+      "year": "2024",
+      "technique": "油彩・キャンバス",
+      "size": "455×380mm",
+      "price": "75000",
+      "artist_note": "祖母の家で過ごした夏休みに見た庭を、記憶を頼りに描きました。光と影の対比に時間の流れを感じてもらえれば嬉しいです。",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_with_header": {
+      "artwork_id": "demo_header",
+      "title": "海辺の朝",
+      "artist": "高橋健太",
+      "year": "2024",
+      "technique": "アクリル・キャンバス",
+      "size": "500×400mm",
+      "price": "65000",
       "qr_url": "https://rohei-printer-system.web.app/?demo=1"
     }
   }
