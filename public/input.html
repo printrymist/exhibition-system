@@ -593,6 +593,17 @@
         });
     }
 
+    // 作家入力など信用できない値を innerHTML に流すときは必ず通す (XSS 防御)。
+    // caption.html / register.html の escapeHtmlAttr と同等。
+    function escapeHtmlAttr(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
@@ -704,7 +715,7 @@
       const lockIcon = art.is_locked
         ? '<span class="artwork-lock" title="主催者ロック中" style="color:#888; margin-right:4px;">🔒</span>'
         : '';
-      header.innerHTML = `<span class="artwork-id-badge">${art.artwork_id}</span><span class="artwork-card-title">${art.title || art.title_en || '（タイトルなし）'}</span>${lockIcon}<span class="artwork-chevron">▼</span>`;
+      header.innerHTML = `<span class="artwork-id-badge">${escapeHtmlAttr(art.artwork_id)}</span><span class="artwork-card-title">${escapeHtmlAttr(art.title || art.title_en || '（タイトルなし）')}</span>${lockIcon}<span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleCard(card, art));
       card.appendChild(header);
       const panel = document.createElement('div'); panel.className = 'edit-panel'; panel.id = 'editPanel_' + art.artwork_id;

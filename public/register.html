@@ -1196,6 +1196,16 @@
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
+    // 作家入力など信用できない値を innerHTML に流すときは必ず通す (XSS 防御)。
+    // caption.html の escapeHtmlAttr と同等。
+    function escapeHtmlAttr(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     // FIELD_DEFS / FIELD_MAP / ARTIST_FIELDS / SNS_FIELDS / ALL_ARTIST_FIELDS /
     // DEFAULT_FIELDS / ARTIST_LABELS / SNS_PLACEHOLDERS は public/field-defs.js で定義済み
     // (caption.html / input.html と同じ定義を物理的に共有)。
@@ -1527,8 +1537,8 @@
         const info = document.createElement('div');
         info.style.cssText = 'flex:1; min-width:0;';
         const dateText = e.start_date || (e.createdAt ? e.createdAt.slice(0, 10) : '');
-        info.innerHTML = `<div style="font-size:0.9em; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.ex_name}</div>
-          <div style="font-size:0.75em; color:#888;">${dateText} / ${e.ex_code}</div>`;
+        info.innerHTML = `<div style="font-size:0.9em; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtmlAttr(e.ex_name)}</div>
+          <div style="font-size:0.75em; color:#888;">${escapeHtmlAttr(dateText)} / ${escapeHtmlAttr(e.ex_code)}</div>`;
         const btn = document.createElement('button');
         btn.textContent = '読み込む';
         btn.style.cssText = 'padding:4px 10px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:5px; font-size:0.8em; cursor:pointer; flex-shrink:0;';
@@ -2070,9 +2080,9 @@ ${fieldsText}
         ? '<span class="artwork-lock" title="作家側で編集不可" style="color:#888; margin-right:4px;">🔒</span>'
         : '';
       header.innerHTML = `
-        <span class="artwork-id">${art.artwork_id}</span>
-        <span class="artwork-title">${art.title || art.title_en || '（タイトルなし）'}</span>
-        <span class="artwork-artist">${art.artist || art.artist_en || ''}</span>
+        <span class="artwork-id">${escapeHtmlAttr(art.artwork_id)}</span>
+        <span class="artwork-title">${escapeHtmlAttr(art.title || art.title_en || '（タイトルなし）')}</span>
+        <span class="artwork-artist">${escapeHtmlAttr(art.artist || art.artist_en || '')}</span>
         ${lockIcon}
         <span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleEditPanel(row, art));

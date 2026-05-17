@@ -600,7 +600,35 @@
 
       if (errors.length > 0) return { errors: errors };
 
-      // 5. 変更なし行の除外
+      // 5. 作家名変更の警告 (B.1)
+      //    行 R で作家名を旧→新に変えたが、新作家の resolved に該当列の値が無い場合、
+      //    Firestore merge:true で旧データ (artist_en / birthplace 等) が残ったままになる。
+      //    block ではなく warning として preview に出し、ユーザーに修正を促す。
+      var warnings = [];
+      updateRows.forEach(function(u){
+        var r = u.row;
+        var existing = u.existing;
+        var newName = (r.artist || '').trim();
+        var oldName = String(existing.artist || '').trim();
+        if (!newName || !oldName || newName === oldName) return;
+        var resolved = artistGroups[newName] || {};
+        var staleCols = [];
+        artistCols.forEach(function(col){
+          var existingVal = existing[col];
+          var existingHas = existingVal !== undefined && existingVal !== null && String(existingVal).trim() !== '';
+          var resolvedHas = resolved[col] !== undefined && String(resolved[col]).trim() !== '';
+          if (existingHas && !resolvedHas) staleCols.push(col);
+        });
+        if (staleCols.length > 0) {
+          warnings.push(
+            '行 ' + r.rowIndex + ': ' + r.artwork_id + ' の作家名を「' + oldName + '」→「' + newName +
+            '」に変更しましたが、列 ' + staleCols.join(' / ') +
+            ' が空のため旧作家のデータが残ります。新作家の値を入れるか、行を元に戻してください。'
+          );
+        }
+      });
+
+      // 6. 変更なし行の除外
       //    updateRows のうち、書き込もうとしている全フィールドが既存値と一致する行を抜く。
       //    Excel で何も変えずに再アップロードしたケース等で submitArtwork を呼ばずに済む
       //    → audit ログにも書かれない、CF コールも省ける。
@@ -637,6 +665,7 @@
 
       return {
         errors: [],
+        warnings: warnings,
         updateRows: realUpdateRows,
         skipRows: skipRows,
         noChangeRows: noChangeRows,
@@ -691,6 +720,15 @@
           document.getElementById('btnExecute').style.display = 'none';
           return;
         }
+        var warningsHtml = '';
+        if (result.warnings && result.warnings.length > 0) {
+          warningsHtml =
+            '<div style="margin-top:8px;padding:8px 12px;background:#fff4e0;border-left:4px solid #f6a623;border-radius:4px;">' +
+            '<span style="color:#c08400;font-weight:bold;">⚠️ 警告 (実行は可能ですが、内容を確認してください):</span>' +
+            '<ul style="margin:6px 0 0;">' +
+            result.warnings.map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join('') +
+            '</ul></div>';
+        }
         setPreview(
           '<span class="ok">✅ アップロード内容を確認してください:</span>' +
           '<ul>' +
@@ -700,6 +738,7 @@
             '<li>空きスロットのまま: ' + s + ' 件</li>' +
             (untouched > 0 ? '<li>触らない (xlsx に行が無い): ' + untouched + ' 件</li>' : '') +
           '</ul>' +
+          warningsHtml +
           '<div style="margin-top:6px;">問題なければ右の <b>✅ この内容で実行</b> を押してください。</div>'
         );
         document.getElementById('btnExecute').style.display = 'inline-block';

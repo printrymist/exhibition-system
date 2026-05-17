@@ -621,10 +621,21 @@ exports.issueGalleryToken = onCall(
     const visibility = String(exData.gallery_visibility || "closed");
     const interactions = String(exData.gallery_interactions || "none");
 
+    // visibility は "closed" / "visitor_only" / "public" のいずれか。
+    // 未知値 (手動編集・typo・将来追加) は fail-closed で拒否する。
     if (visibility === "closed") {
       throw new HttpsError(
         "permission-denied",
         "この展覧会は現在公開されていません",
+      );
+    }
+    if (visibility !== "visitor_only" && visibility !== "public") {
+      logger.warn("issueGalleryToken: unknown visibility rejected", {
+        exCode, visibility,
+      });
+      throw new HttpsError(
+        "permission-denied",
+        "gallery_visibility が不明な値です",
       );
     }
 
