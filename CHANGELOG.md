@@ -11,6 +11,24 @@
 
 ---
 
+## v0.9.4 — 2026-05-18
+
+### セキュリティ (重要)
+
+- **作家入力データのストア型 XSS を修正**。`caption.html` のプレビュー / 印刷経路と、`register.html` / `input.html` の作品一覧で、作家が登録した `title` / `artist` 等が HTML エスケープなしで描画されていた。preview iframe (srcdoc) と印刷 popup (`window.open`) は主催者と同一 origin で動くため、作家が `<img onerror=...>` のような payload を仕込めば主催者の Firebase 認証情報が盗まれる stored XSS だった。`escapeHtmlAttr` ヘルパで防御。
+- **`issueGalleryToken` の `visibility` 判定を fail-closed に**。`gallery_visibility` が `"closed"` / `"visitor_only"` / `"public"` 以外の未知値だったとき fall-through で public 相当扱いになっていたのを、明示的に拒否するよう変更。
+
+### UX
+
+- **XLSX 一括編集で作家名変更時の警告**。行の `artist` 列を旧→新に書き換えたが、新作家の `artist_en` / `birthplace` 等が空のままアップロードすると、Firestore merge により旧データが残るバグを、dry-run 画面で警告として表示するように。
+
+### 内部整理
+
+- 未使用コードの除去 (`updateTemplateChoiceBanner` / `_savedTemplateName` / `setAsDefaultTemplate` / `adoptOfficialTemplate` / `fieldOptionsHtml` / `keyVal` / `openRowId`)。caption.html を約 90 行縮小。
+- `functions/scripts/lint-public.js` (自前の audit ツール) をリポジトリに常駐化。ESLint Linter API で `public/` 配下の inline `<script>` を一括検査。
+
+---
+
 ## v0.9.3 — 2026-05-17
 
 ### 新機能 (小規模)
