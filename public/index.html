@@ -478,7 +478,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const exVal  = urlParams.get('ex')  || '';
     const idVal  = urlParams.get('id')  || '';
-    const keyVal = urlParams.get('key') || '';
+    // key パラメータは Phase 6c で撤去 (実 security は Cloud Function 側の HMAC で検証)
     const expVal = urlParams.get('exp') || '';
     const sigVal = urlParams.get('sig') || '';
 

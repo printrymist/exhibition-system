@@ -77,3 +77,6 @@ skills-lock.json
 
 # Function-local secrets/config
 functions/.env
+
+# audit tool output
+functions/scripts/lint-public-report.txt

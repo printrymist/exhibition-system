@@ -1914,79 +1914,20 @@
     let groupCount = 0;
 
     // 起動時に data/caption-presets.json から PRESETS を読み込む。
-    // ── テンプレ選択の追跡 + 「規定に設定」明示ボタン ──
+    // ── テンプレ選択の追跡 ──
     // exhibitions/{ex}.caption_template_id に "preset:<key>" または "saved:<docId>" を保存する仕組み。
-    // 自動保存はしない (テンプレを試しに切り替えただけで永続化されると事故になるため)。
-    // ユーザーが「📌 規定に設定」を押した時だけ書き込む。
+    // 旧バナー UI (「規定に設定」ボタン) は撤去済 (`f906149`)、関連関数 (updateTemplateChoiceBanner /
+    // _savedTemplateName / setAsDefaultTemplate) も dead code として除去済 (`Phase B cleanup`)。
+    // 現在は adoptTemplate / loadSavedTemplate が直接 caption_template_id を Firestore に書く。
     //
     // 状態:
-    //   _lastSelectedTemplate = { id, name }  // 現在 UI で選択中のテンプレ
+    //   _lastSelectedTemplate = { id, name }  // 現在 UI で選択中のテンプレ (将来再利用候補)
     //   _savedTemplateId      = string         // Firestore に保存済みの規定 (起動時に読み込む)
     let _lastSelectedTemplate = null;
     let _savedTemplateId = '';
 
-    function updateTemplateChoiceBanner() {
-      const curEl = document.getElementById('bannerCurrentName');
-      const defEl = document.getElementById('bannerDefaultName');
-      const btn = document.getElementById('btnSetAsDefault');
-      const msg = document.getElementById('bannerDefaultMsg');
-      if (!curEl || !defEl || !btn) return;
-      curEl.innerText = _lastSelectedTemplate ? _lastSelectedTemplate.name : '—';
-      defEl.innerText = _savedTemplateId ? (_savedTemplateName() || '(不明)') : '(未設定)';
-      // 「規定」と「選択中」が一致する場合はボタン無効化
-      const matches = _lastSelectedTemplate && _lastSelectedTemplate.id === _savedTemplateId;
-      btn.disabled = !_lastSelectedTemplate || matches;
-      btn.style.opacity = btn.disabled ? '0.5' : '1';
-      btn.style.cursor = btn.disabled ? 'default' : 'pointer';
-      if (msg) msg.innerText = matches && _lastSelectedTemplate ? '✓ 選択中が規定です' : '';
-    }
-
-    // 保存済みの規定 ID から表示名を引く (preset は getTemplateLabel、saved は data-tpl-name)
-    function _savedTemplateName() {
-      if (!_savedTemplateId) return '';
-      if (_savedTemplateId.indexOf('preset:') === 0) {
-        return getTemplateLabel(_savedTemplateId.slice('preset:'.length));
-      }
-      if (_savedTemplateId.indexOf('saved:') === 0) {
-        const docId = _savedTemplateId.slice('saved:'.length);
-        const btn = document.querySelector('[data-tpl-id="' + _escSel(docId) + '"]');
-        if (btn && btn.dataset.tplName) return btn.dataset.tplName;
-      }
-      return '';
-    }
-
     function _escSel(s) {
       return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
-    }
-
-    function setAsDefaultTemplate() {
-      if (!_lastSelectedTemplate) { alert('テンプレが選択されていません。'); return; }
-      if (!artworkData || !artworkData.exCode) { alert('展覧会が読み込まれていません。'); return; }
-      if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してください。');
-        return;
-      }
-      const id = _lastSelectedTemplate.id;
-      const name = _lastSelectedTemplate.name;
-      const btn = document.getElementById('btnSetAsDefault');
-      const msg = document.getElementById('bannerDefaultMsg');
-      btn.disabled = true;
-      if (msg) { msg.style.color = '#888'; msg.innerText = '保存中…'; }
-      fsDb.collection('exhibitions').doc(artworkData.exCode).set({
-        caption_template_id: id,
-        updatedAt: new Date().toISOString()
-      }, { merge: true })
-        .then(() => {
-          _savedTemplateId = id;
-          if (msg) { msg.style.color = '#0b8043'; msg.innerText = `✓ 「${name}」を規定に設定しました`; }
-          updateTemplateChoiceBanner();
-          // 数秒後にメッセージ消す
-          setTimeout(() => { if (msg && msg.innerText.indexOf('規定に設定しました') >= 0) msg.innerText = ''; }, 3000);
-        })
-        .catch(err => {
-          if (msg) { msg.style.color = '#d93025'; msg.innerText = 'エラー: ' + (err.message || err); }
-          updateTemplateChoiceBanner();
-        });
     }
 
     // 起動時に読み込んだ caption_template_id を UI に反映 (Firestore には書き込まない)
@@ -2011,7 +1952,6 @@
           selectTemplate('official_solo', { commit: true });
         }
       }
-      updateTemplateChoiceBanner();
     }
 
     // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
@@ -2302,7 +2242,6 @@
 
         // 採用バッジを更新
         updateAdoptedBadges(name);
-        updateTemplateChoiceBanner();
 
         alert('✅ ' + label + ' を採用しました。\n'
           + (missing.length > 0
@@ -2323,9 +2262,6 @@
         if (card) card.classList.add('adopted');
       }
     }
-
-    // 後方互換 (旧名). adoptTemplate に統合済み。
-    function adoptOfficialTemplate(name) { return adoptTemplate(name); }
 
     function switchTab(tab) {
       document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
@@ -2371,7 +2307,6 @@
       if (!p) return;  // 起動直後 PRESETS 未ロードのケース
 
       _lastSelectedTemplate = { id: 'preset:' + name, name: getTemplateLabel(name) };
-      updateTemplateChoiceBanner();
 
       // commit モードでのみ Page Layout 反映 + メイン preview 再描画
       if (commit) {
@@ -2571,9 +2506,6 @@
           loadSavedTemplates().then(() => {
             if (data.captionTemplateId) {
               applyCaptionTemplateChoice(data.captionTemplateId);
-            } else {
-              // 規定が未設定なら banner の表示状態を更新 (規定: 未設定)
-              updateTemplateChoiceBanner();
             }
           });
           document.getElementById('mainTabs').style.display = 'block';
@@ -2765,15 +2697,6 @@
       else return;
       bar.before(el);
       normalizeInsertBars();
-    }
-
-    function fieldOptionsHtml(selected) {
-      const headers = (artworkData && artworkData.headers) ? artworkData.headers : [];
-      let html = `<option value="">—</option>`;
-      headers.forEach(h => {
-        html += `<option value="${h}" ${h === selected ? 'selected' : ''}>${h}</option>`;
-      });
-      return html;
     }
 
     // FORM_FIELD_DEFS の label を引いて UI 表示用のラベルに変換 (フォーム設定タブと統一)。
@@ -3865,13 +3788,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     function loadSavedTemplate(btn) {
       try {
-        // 選択中テンプレを記録 (Firestore 保存は明示的「📌 規定に設定」ボタンが押されたときだけ)
+        // 選択中テンプレを記録 (現状 read 箇所はなし。将来再利用候補のためアサインのみ残す)
         if (btn && btn.dataset && btn.dataset.tplId) {
           _lastSelectedTemplate = {
             id: 'saved:' + btn.dataset.tplId,
             name: btn.dataset.tplName || btn.dataset.tplId
           };
-          updateTemplateChoiceBanner();
         }
         const settings = JSON.parse(btn.dataset.settings);
         if (settings.paperSize) document.getElementById('paperSize').value = settings.paperSize;
