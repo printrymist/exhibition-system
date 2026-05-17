@@ -30,4 +30,7 @@ module.exports = {
     },
   ],
   globals: {},
+  // scripts/ は自前の public/ 用 audit ツールで、Cloud Functions のスタイル規約
+  // (double quote / arrow-parens 等) に追従させると差分が大きすぎるため除外。
+  ignorePatterns: ["scripts/"],
 };
