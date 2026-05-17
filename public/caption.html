@@ -461,6 +461,15 @@
       font-family: -apple-system, "Hiragino Kaku Gothic ProN", sans-serif;
     }
 
+    /* 選択中だけ mockup を等倍拡大して読みやすく。
+       transform: scale() なので内部の inline font-size まで含めて 1.5 倍。
+       scale は layout flow を縮めないので下に余白を補う。 */
+    .selected-tpl-preview .tpl-mockup {
+      transform: scale(1.5);
+      transform-origin: top left;
+      margin-bottom: 65px;
+    }
+
     .selected-tpl-preview .tpl-description {
       font-size: 11px;
       color: #1a73e8;
