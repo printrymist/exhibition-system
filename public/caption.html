@@ -1570,10 +1570,30 @@
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_with_header')">📥 採用</button>
           </div>
+          <div class="template-card official" id="tpl_official_print" onclick="selectTemplate('official_print')"
+            data-description="版画 / 写真集 / シルクスクリーン向け。技法・エディション・サイズ・額装価格まで表示。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。">
+            <h4>🎨 版画・限定版 推奨</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:12px;font-weight:bold;">Moonrise on the Pond</div>
+                <div style="font-size:10px;">藤田一郎</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:8.5px;color:#777;">銅版画 (エッチング)</div>
+                <div style="font-size:8.5px;color:#777;">12/30</div>
+                <div style="font-size:8.5px;color:#777;">410×318mm</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:9.5px;font-weight:bold;">¥ 65,000</div>
+                <div style="font-size:9.5px;font-weight:bold;">framed: ¥ 92,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_print')">📥 採用</button>
+          </div>
 
           <!-- ベース (PRESETS) — 同じ template-grid 内で続く。
                'standard' / 'bilingual' は公式 (official_solo / official_intl) と
-               機能重複のため 2026-05-13 に削除済。 -->
+               機能重複のため 2026-05-13 に削除済。
+               'print' は 2026-05-17 に official_print に昇格 (★ 公式 8 個目)。 -->
           <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')"
             data-description="タイトルと作家名のみ。最小構成。">
             <h4>✂️ シンプル</h4>
@@ -1601,23 +1621,6 @@
               </div>
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('gallery')">📥 採用</button>
-          </div>
-          <div class="template-card" id="tpl_print" onclick="selectTemplate('print')"
-            data-description="技法・エディション・サイズ・額装価格まで表示。版画・限定版作品向け。">
-            <h4>🎨 版画・限定版</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-right">
-                <div style="font-size:13px;font-weight:bold;">作品タイトル</div>
-                <div style="font-size:10px;">作家名</div>
-                <div class="tpl-divider"></div>
-                <div style="font-size:8.5px;color:#777;">技法</div>
-                <div style="font-size:8.5px;color:#777;">エディション・サイズ</div>
-                <div style="font-size:9px;font-weight:bold;">¥ 10,000</div>
-                <div style="font-size:8.5px;color:#777;">額装: ¥ 12,000</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('print')">📥 採用</button>
           </div>
           <div class="template-card" id="tpl_jp_standard" onclick="selectTemplate('jp_standard')"
             data-description="作品名がトップ。和風の標準的な構成。整列は Page layout の Text align で変更可。">
