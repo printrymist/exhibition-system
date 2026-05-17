@@ -44,12 +44,16 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",     "size": 9, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "artist",    "size": 8, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "title",     "size": 14, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",    "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
         { "type": "divider" },
-        { "type": "field", "name": "year",      "size": 7, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "technique", "size": 7, "bold": false, "italic": false, "align": "inherit", "maxLines": 2, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "price",     "size": 8, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "year",      "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "technique", "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 2, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "price",     "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -68,13 +72,16 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",             "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "divider" },
-        { "type": "field", "name": "shooting_location", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "shooting_year",     "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "camera",            "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "spacer", "size": "4mm" },
-        { "type": "field", "name": "price",             "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "field", "name": "title",             "size": 14, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "divider" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "shooting_location", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "shooting_year",     "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "camera",            "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "price",             "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -93,16 +100,24 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "title_en",  "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "title",     "size": 16, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "title_en",  "size": 10, "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
         { "type": "divider" },
         { "type": "spacer", "size": "4mm" },
         { "type": "group", "sep": " / ", "align": "center", "children": [
-          { "type": "field", "name": "artist",     "size": 9, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-          { "type": "field", "name": "artist_en",  "size": 9, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" }
+          { "type": "field", "name": "artist",     "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "artist_en",  "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
         ] },
-        { "type": "field", "name": "year",      "size": 7, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "price",     "size": 9, "bold": true,  "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "spacer", "size": "2mm" },
+        { "type": "group", "sep": "　", "align": "center", "children": [
+          { "type": "field", "name": "year",      "size": 12, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "technique", "size": 11, "bold": false, "italic": false, "align": "center", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        ] },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "price",     "size": 12, "bold": false, "italic": false, "align": "right",  "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -110,7 +125,7 @@
       "label": "🎏 シンプル・中央 推奨",
       "tagline": "日本のギャラリーで最も多いセンタリング構成",
       "size": "A7 (105×74mm) — A4 縦に 8 枚",
-      "qrPosition": "bottom-center",
+      "qrPosition": "bottom-left",
       "qrOffset": 0,
       "textAlign": "center",
       "pageSettings": {
@@ -121,13 +136,19 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",     "size": 11, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "title",     "size": 16, "bold": true,  "italic": false, "align": "center", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "4mm" },
         { "type": "divider" },
-        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
         { "type": "spacer", "size": "2mm" },
-        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "field", "name": "artist",    "size": 14, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "group", "sep": "　", "align": "center", "children": [
+          { "type": "field", "name": "year",      "size": 10, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "technique", "size": 10, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        ] },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "price",     "size": 10, "bold": false, "italic": false, "align": "right",  "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -146,14 +167,19 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",       "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "artist",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "divider" },
-        { "type": "field", "name": "year",        "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "technique",   "size": 7,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "price",       "size": 8,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "title",       "size": 16, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
         { "type": "spacer", "size": "2mm" },
-        { "type": "field", "name": "artist_note", "size": 7,  "bold": false, "italic": true,  "align": "inherit", "maxLines": 4, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "" }
+        { "type": "field", "name": "artist",      "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "divider" },
+        { "type": "group", "sep": "　", "align": "inherit", "children": [
+          { "type": "field", "name": "year",      "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "technique", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        ] },
+        { "type": "field", "name": "price",       "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist_note", "size": 7,  "bold": false, "italic": true,  "align": "inherit", "maxLines": 2, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -183,13 +209,19 @@
         }
       },
       "items": [
-        { "type": "spacer", "size": "4mm" },
-        { "type": "field", "name": "title",     "size": 10, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "artist",    "size": 9,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
+        { "type": "spacer", "size": "10mm" },
+        { "type": "field", "name": "title",     "size": 16, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",    "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
         { "type": "divider" },
-        { "type": "field", "name": "year",      "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "technique", "size": 8,  "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "" },
-        { "type": "field", "name": "price",     "size": 9,  "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "" }
+        { "type": "spacer", "size": "2mm" },
+        { "type": "group", "sep": "　", "align": "inherit", "children": [
+          { "type": "field", "name": "year",      "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "technique", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        ] },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "price",     "size": 9,  "bold": false, "italic": false, "align": "left",    "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     },
 
@@ -208,15 +240,21 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "title",        "size": 14, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "",        "suffix": "" },
-        { "type": "field", "name": "artist",       "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "" },
+        { "type": "spacer", "size": "4mm" },
+        { "type": "field", "name": "title",        "size": 14, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "",        "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",       "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
         { "type": "divider" },
-        { "type": "field", "name": "technique",    "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "" },
-        { "type": "field", "name": "edition",      "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "" },
-        { "type": "field", "name": "size",         "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "" },
-        { "type": "spacer", "size": "3mm" },
-        { "type": "field", "name": "price",        "size": 11, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "",        "suffix": "" },
-        { "type": "field", "name": "price_framed", "size": 11, "bold": true,  "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "framed: ", "suffix": "" }
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "technique",    "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "", "affixScale": 0.75 },
+        { "type": "group", "sep": "　", "align": "inherit", "children": [
+          { "type": "field", "name": "edition",    "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "", "affixScale": 0.75 },
+          { "type": "field", "name": "size",       "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "",        "suffix": "", "affixScale": 0.75 }
+        ] },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "price",        "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "",        "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "price_framed", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "framed: ", "suffix": "", "affixScale": 0.75 }
       ]
     }
   },
