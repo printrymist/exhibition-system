@@ -1372,6 +1372,14 @@
               <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
             </select>
           </div>
+          <div class="layout-item">
+            <label>テキスト色</label>
+            <select id="textColor">
+              <option value="#000000" selected>黒</option>
+              <option value="#444444">濃グレー</option>
+              <option value="#777777">中グレー</option>
+            </select>
+          </div>
         </div>
 
         <div class="sub-section">
@@ -2397,6 +2405,7 @@
       set('textMarginLeft',   ps.textMarginLeft);
       set('textMarginRight',  ps.textMarginRight);
       set('fontFamily',       ps.fontFamily);
+      set('textColor',        ps.textColor);
 
       // 固定文 (fixedText) ブロック対応。
       // 「📌 展覧会名ヘッダー」テンプレのように、ヘッダー帯のスタイルとデフォルト値を
@@ -3163,6 +3172,7 @@
         rows: parseInt(document.getElementById('rows').value),
         orientation: document.getElementById('orientation').value,
         textAlign: document.getElementById('textAlign').value,
+        textColor: document.getElementById('textColor').value,
         textMarginLeft: parseInt(document.getElementById('textMarginLeft').value),
         textMarginRight: parseInt(document.getElementById('textMarginRight').value),
         qrPosition: document.getElementById('qrPosition').value,
@@ -3495,10 +3505,11 @@
         : '';
       const cardId = (art.artwork_id || '').toString();
 
+      const textColor = s.textColor || '#000000';
       if (pos === 'wrap-left' || pos === 'wrap-right') {
         const floatDir = pos === 'wrap-left' ? 'left' : 'right';
         const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
-        const textDiv = `<div style="padding-left:${dims.tML};padding-right:${dims.tMR};">${content}</div>`;
+        const textDiv = `<div style="padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
         return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
   <div style="float:${floatDir};margin:${mTop} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
@@ -3525,7 +3536,7 @@
         case 'bottom-right':  qrStyle += `bottom:${dims.qrMV};right:${dims.qrMH};`; break;
         case 'bottom-center': qrStyle += `bottom:${dims.qrMV};left:50%;transform:translateX(-50%);`; break;
       }
-      const textDiv = `<div style="${textPadTop}padding-left:${dims.tML};padding-right:${dims.tMR};">${content}</div>`;
+      const textDiv = `<div style="${textPadTop}padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
       return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
   ${ftHtml}
   <div style="${qrStyle}">${qrImg}</div>
@@ -3875,6 +3886,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         if (settings.qrMarginV !== undefined) document.getElementById('qrMarginV').value = settings.qrMarginV;
         if (settings.textMarginLeft !== undefined) document.getElementById('textMarginLeft').value = settings.textMarginLeft;
         if (settings.textMarginRight !== undefined) document.getElementById('textMarginRight').value = settings.textMarginRight;
+        // 旧テンプレ (textColor 未保存) は黒にリセット、新テンプレは保存値を適用
+        document.getElementById('textColor').value = settings.textColor || '#000000';
         if (settings.fixedText) {
           document.getElementById('fixedTextValue').value = settings.fixedText.value || '';
           document.getElementById('fixedTextPos').value = settings.fixedText.pos || 'none';
