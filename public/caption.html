@@ -2866,11 +2866,12 @@
           title="現在のグループ要素数 / 最大3。残り1個になると自動でグループが解除されます。">[—]</span>
         <span class="group-sep-label">区切り</span>
         <input type="text" class="group-sep-input" id="gsep_${gid}" value="${sep.replace(/"/g, '&quot;')}" title="Separator">
-        <select id="galign_${gid}" title="行全体の揃え">
+        <select id="galign_${gid}" title="行全体の揃え (↔ は両端分散: タイトル左 / 作家右 のように配置)">
           <option value="inherit" ${align === 'inherit' ? 'selected' : ''}>—</option>
           <option value="left"    ${align === 'left' ? 'selected' : ''}>L</option>
           <option value="center"  ${align === 'center' ? 'selected' : ''}>C</option>
           <option value="right"   ${align === 'right' ? 'selected' : ''}>R</option>
+          <option value="between" ${align === 'between' ? 'selected' : ''}>↔</option>
         </select>
         <button class="ungroup-btn" onclick="ungroupRow(this)" title="グループを解除">解除</button>
         <button class="del-btn" style="margin-left:auto;" onclick="removeRow(this)">✕</button>
@@ -3353,6 +3354,8 @@
             + `text-align:${align};margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
             + `${val}</div>`;
         } else if (item.type === 'group') {
+          const groupAlign = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
+          const isBetween = groupAlign === 'between';
           const parts = (item.children || []).map(c => {
             const resolved = _resolveFieldValue(art, c.name);
             const raw = resolved.value;
@@ -3363,14 +3366,24 @@
             const w = c.bold ? 'bold' : 'normal';
             const fs = c.italic ? 'italic' : 'normal';
             const sampleStyle = resolved.isSample ? 'color:#aaa;' : '';
-            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};${sampleStyle}">${v}</span>`;
+            // 両端揃えのとき、子は flex item として shrink できるようにする。
+            // 子が長文ではみ出した場合は word-break で折り返す。
+            const extraStyle = isBetween ? 'min-width:0;overflow-wrap:break-word;word-break:break-word;' : '';
+            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};${sampleStyle}${extraStyle}">${v}</span>`;
           }).filter(Boolean);
           if (parts.length === 0) return;
-          const align = item.align && item.align !== 'inherit' ? item.align : s.textAlign;
-          const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          html += `<div style="text-align:${align};line-height:1.3;margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
-            + parts.join(sepHtml)
-            + `</div>`;
+          if (isBetween) {
+            // 両端分散: タイトル左 / 作家右 のように両端へ配置。子が 3 以上なら等間隔。
+            // sep は意味を成さないため適用しない (gap で最小間隔だけ確保)。
+            html += `<div style="display:flex;justify-content:space-between;gap:0.6em;line-height:1.3;margin-bottom:2px;">`
+              + parts.join('')
+              + `</div>`;
+          } else {
+            const sepHtml = (item.sep || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<div style="text-align:${groupAlign};line-height:1.3;margin-bottom:2px;overflow-wrap:break-word;word-break:break-word;">`
+              + parts.join(sepHtml)
+              + `</div>`;
+          }
         } else if (item.type === 'divider') {
           html += `<hr style="border:none;border-top:1px solid #ccc;margin:4px 0;">`;
         } else if (item.type === 'spacer') {
