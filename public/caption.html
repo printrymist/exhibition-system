@@ -3084,12 +3084,21 @@
     }
 
     function getSettings() {
-      const isCustom = document.getElementById('tabCustom').classList.contains('active');
-      const items = isCustom
+      // 詳細設定 grid に行があれば必ず DOM の現状 (= collectItems) を真とする。
+      // 旧実装は「詳細設定タブが active かどうか」で分岐していたが、ページ設定タブを
+      // 開いた瞬間に PRESETS の元データに戻り、詳細設定で加えた編集 (両端揃え /
+      // 並び替え / bold 等) がプレビューから消える pre-existing バグがあった。
+      // テンプレ採用後は buildFieldsGridFromPreset で grid が必ず populate されるので、
+      // 行が無いのは初期状態のみ — その時だけ PRESETS にフォールバック。
+      const grid = document.getElementById('fieldsGrid');
+      const hasGridItems = grid && topLevelRows(grid).length > 0;
+      const items = hasGridItems
         ? collectItems()
-        : PRESETS[currentTemplate].items.filter(item =>
-          item.type !== 'field' || (artworkData && artworkData.headers.includes(item.name))
-        );
+        : (PRESETS[currentTemplate]
+            ? PRESETS[currentTemplate].items.filter(item =>
+                item.type !== 'field' || (artworkData && artworkData.headers.includes(item.name))
+              )
+            : []);
       return {
         paperSize: document.getElementById('paperSize').value,
         cols: parseInt(document.getElementById('cols').value),
