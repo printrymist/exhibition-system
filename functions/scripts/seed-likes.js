@@ -1,10 +1,17 @@
 // seed-likes.js
-// analytics.html / dashboard.html の UI smoke test 用に、対象展覧会の
-// likes コレクションへ「現実的なパターンの synthetic data」を投入する。
-// すべての doc に seed:true フラグを付けるので、--cleanup で完全削除可能。
+// analytics.html / dashboard.html の UI smoke test 用に、synthetic data
+// を Firestore へ投入する。すべての doc に seed:true フラグを付けるので
+// --cleanup で完全削除可能 (本番データは触らない)。
 //
 // Usage:
+//   # 既存展覧会 (artworks がすでにある) に likes だけ追加
 //   node functions/scripts/seed-likes.js --ex=<exCode> [--visitors=60]
+//
+//   # 展覧会・作家・作品・likes をゼロから一式 bootstrap
+//   node functions/scripts/seed-likes.js --ex=<exCode> --bootstrap \
+//       [--artists=5] [--artworks=25] [--visitors=60]
+//
+//   # 全消去 (likes / artworks / exhibition、seed:true のものだけ)
 //   node functions/scripts/seed-likes.js --ex=<exCode> --cleanup
 //
 // 認証:
@@ -43,15 +50,24 @@ process.argv.slice(2).forEach(function (arg) {
 if (!args.ex) {
   console.error('Usage:');
   console.error('  node functions/scripts/seed-likes.js --ex=<exCode> [--visitors=60]');
+  console.error('  node functions/scripts/seed-likes.js --ex=<exCode> --bootstrap [--artists=5] [--artworks=25]');
   console.error('  node functions/scripts/seed-likes.js --ex=<exCode> --cleanup');
   console.error('');
   console.error('認証は ADC が必要 (`gcloud auth application-default login`)。');
   process.exit(1);
 }
 
+if (!/^[A-Za-z0-9_-]+$/.test(args.ex)) {
+  console.error('exCode は英数 / - / _ のみ使えます: ' + args.ex);
+  process.exit(1);
+}
+
 const EX_CODE = String(args.ex);
 const CLEANUP = !!args.cleanup;
+const BOOTSTRAP = !!args.bootstrap;
 const VISITOR_COUNT = args.visitors ? parseInt(args.visitors, 10) : 60;
+const ARTIST_COUNT = args.artists ? parseInt(args.artists, 10) : 5;
+const ARTWORK_COUNT = args.artworks ? parseInt(args.artworks, 10) : 25;
 
 // ─── Firebase Admin init ──────────────────────────────────
 admin.initializeApp({ projectId: 'rohei-printer-system' });
@@ -68,46 +84,84 @@ async function main() {
 
 async function cleanup() {
   console.log(`Cleaning up seed data for ${EX_CODE}...`);
-  const snap = await db.collection('likes')
+
+  // 1. likes (seed:true)
+  const likeSnap = await db.collection('likes')
     .where('exCode', '==', EX_CODE)
     .where('seed', '==', true)
     .get();
-  console.log(`Found ${snap.size} seed docs.`);
-  if (snap.empty) {
-    console.log('Nothing to clean.');
+  await _batchDelete('likes', likeSnap.docs);
+
+  // 2. artworks (seed:true)
+  const artSnap = await db.collection('artworks')
+    .where('exCode', '==', EX_CODE)
+    .where('seed', '==', true)
+    .get();
+  await _batchDelete('artworks', artSnap.docs);
+
+  // 3. exhibitions doc (seed:true のときだけ)
+  const exDoc = await db.collection('exhibitions').doc(EX_CODE).get();
+  if (exDoc.exists && exDoc.data().seed === true) {
+    await db.collection('exhibitions').doc(EX_CODE).delete();
+    console.log(`  exhibitions doc ${EX_CODE} deleted.`);
+  } else if (exDoc.exists) {
+    console.log(`  exhibitions doc ${EX_CODE} は seed=true ではないので保持`);
+  }
+  console.log('Cleanup done.');
+}
+
+async function _batchDelete(label, docs) {
+  if (!docs || docs.length === 0) {
+    console.log(`  ${label}: 0 件 (なし)`);
     return;
   }
-  const docs = snap.docs;
   let deleted = 0;
   for (let i = 0; i < docs.length; i += 500) {
     const batch = db.batch();
     docs.slice(i, i + 500).forEach(function (d) { batch.delete(d.ref); });
     await batch.commit();
     deleted += Math.min(500, docs.length - i);
-    process.stdout.write(`  ${deleted}/${docs.length}\r`);
+    process.stdout.write(`  ${label}: ${deleted}/${docs.length}\r`);
   }
-  console.log(`\nDeleted ${deleted} seed docs.`);
+  console.log(`  ${label}: ${deleted} 件削除`);
 }
 
 async function seed() {
-  // 1. Load artworks (status='1' のみ)
-  console.log(`Loading artworks for ${EX_CODE}...`);
-  const artSnap = await db.collection('artworks')
-    .where('exCode', '==', EX_CODE)
-    .get();
-  if (artSnap.empty) {
-    console.error(`No artworks found for ${EX_CODE}.`);
-    process.exit(2);
+  // 0. Bootstrap mode: 展覧会 + 作家 + 作品を一気に作る
+  let artworks;
+  let ex;
+  if (BOOTSTRAP) {
+    const result = await bootstrap();
+    artworks = result.artworks;
+    ex = result.exhibition;
+  } else {
+    // 既存の展覧会を読み込む
+    console.log(`Loading artworks for ${EX_CODE}...`);
+    const artSnap = await db.collection('artworks')
+      .where('exCode', '==', EX_CODE)
+      .get();
+    if (artSnap.empty) {
+      console.error(`No artworks found for ${EX_CODE}.`);
+      console.error(`(--bootstrap で一式 generate できます)`);
+      process.exit(2);
+    }
+    artworks = artSnap.docs.map(function (d) { return d.data(); }).filter(function (a) {
+      const s = String(a.status || '').trim();
+      return s === '1' && a.artwork_id;
+    });
+    if (artworks.length === 0) {
+      console.error(`No registered (status=1) artworks for ${EX_CODE}.`);
+      process.exit(2);
+    }
+    console.log(`Found ${artworks.length} registered artworks.`);
+
+    const exSnap = await db.collection('exhibitions').doc(EX_CODE).get();
+    if (!exSnap.exists) {
+      console.error(`Exhibition ${EX_CODE} not found.`);
+      process.exit(2);
+    }
+    ex = exSnap.data();
   }
-  const artworks = artSnap.docs.map(function (d) { return d.data(); }).filter(function (a) {
-    const s = String(a.status || '').trim();
-    return s === '1' && a.artwork_id;
-  });
-  if (artworks.length === 0) {
-    console.error(`No registered (status=1) artworks for ${EX_CODE}.`);
-    process.exit(2);
-  }
-  console.log(`Found ${artworks.length} registered artworks.`);
 
   // 2. Detect group / solo
   const artists = Array.from(new Set(
@@ -116,13 +170,7 @@ async function seed() {
   const isGroup = artists.length > 1;
   console.log(`Artists: ${artists.length} (${isGroup ? 'group' : 'solo'})`);
 
-  // 3. Load exhibition for timing window
-  const exSnap = await db.collection('exhibitions').doc(EX_CODE).get();
-  if (!exSnap.exists) {
-    console.error(`Exhibition ${EX_CODE} not found.`);
-    process.exit(2);
-  }
-  const ex = exSnap.data();
+  // 3. Timing window
   const startDate = ex.start_date && !isNaN(new Date(ex.start_date).getTime())
     ? new Date(ex.start_date)
     : new Date(Date.now() - 7 * 86400000);
@@ -132,17 +180,19 @@ async function seed() {
   console.log(`Timing window: ${startDate.toISOString().slice(0, 10)} 〜 ${endDate.toISOString().slice(0, 10)}`);
   console.log(`Exhibition: ${ex.ex_name || EX_CODE}${ex.is_sandbox ? ' (sandbox)' : ''}`);
 
-  // 4. Safety: prevent double-seeding
-  const existingSeed = await db.collection('likes')
-    .where('exCode', '==', EX_CODE)
-    .where('seed', '==', true)
-    .limit(1)
-    .get();
-  if (!existingSeed.empty) {
-    console.error('');
-    console.error('Seed docs already exist for this exhibition.');
-    console.error(`Run cleanup first:  node functions/scripts/seed-likes.js --ex=${EX_CODE} --cleanup`);
-    process.exit(3);
+  // 4. Safety: prevent double-seeding (bootstrap 直後はスキップ)
+  if (!BOOTSTRAP) {
+    const existingSeed = await db.collection('likes')
+      .where('exCode', '==', EX_CODE)
+      .where('seed', '==', true)
+      .limit(1)
+      .get();
+    if (!existingSeed.empty) {
+      console.error('');
+      console.error('Seed docs already exist for this exhibition.');
+      console.error(`Run cleanup first:  node functions/scripts/seed-likes.js --ex=${EX_CODE} --cleanup`);
+      process.exit(3);
+    }
   }
 
   // 5. Generate
@@ -179,6 +229,149 @@ async function seed() {
   console.log('');
   console.log(`Open:    https://rohei-printer-system.web.app/analytics.html?ex=${EX_CODE}`);
   console.log(`Cleanup: node functions/scripts/seed-likes.js --ex=${EX_CODE} --cleanup`);
+}
+
+// ─── Bootstrap (展覧会 + 作家 + 作品 を一式作る) ────────────
+
+const FAKE_ARTISTS = [
+  '山田 太郎', '鈴木 花子', '佐藤 健一', '田中 美穂', '高橋 翔',
+  '伊藤 さくら', '渡辺 拓海', '中村 結衣', '小林 大輔', '加藤 詩織',
+];
+
+const TECHNIQUES = [
+  '油彩・キャンバス', 'アクリル・パネル', '水彩・紙', 'インクジェット印刷',
+  '銅版画', 'シルクスクリーン', '陶器', '木彫', '混合技法', '写真',
+];
+
+const TITLE_THEMES = [
+  '記憶', '光', '彼方', '余白', '残響', '輪郭', '気配', '森', '海',
+  '時間の層', '夜想', '対話', '静寂', '断片', '揺らぎ',
+];
+
+function _pickArtists(n) {
+  // FAKE_ARTISTS から n 件を抜き出し (n が多ければ番号を付ける)
+  if (n <= FAKE_ARTISTS.length) {
+    return FAKE_ARTISTS.slice(0, n);
+  }
+  const out = FAKE_ARTISTS.slice();
+  for (let i = FAKE_ARTISTS.length; i < n; i++) {
+    out.push('作家 ' + (i + 1));
+  }
+  return out;
+}
+
+function _distributeArtworks(artworkCount, artists) {
+  // 各作家にやや不均等に振り分け (V-9 ロングテール度のテスト用)
+  const result = [];
+  let remaining = artworkCount;
+  for (let i = 0; i < artists.length; i++) {
+    if (i === artists.length - 1) {
+      result.push(remaining);
+    } else {
+      // 残りを (作家数 - i) で割って、±1 のばらつき
+      const avg = Math.floor(remaining / (artists.length - i));
+      const n = Math.max(1, avg + (Math.random() < 0.5 ? 0 : 1));
+      result.push(n);
+      remaining -= n;
+    }
+  }
+  return result; // [count for each artist]
+}
+
+async function bootstrap() {
+  console.log(`Bootstrap: 展覧会 + ${ARTIST_COUNT} 作家 + ${ARTWORK_COUNT} 作品 を生成中...`);
+  // 既存の exhibition が seed:true でなければ拒否 (本番上書き防止)
+  const existing = await db.collection('exhibitions').doc(EX_CODE).get();
+  if (existing.exists && existing.data().seed !== true) {
+    console.error('');
+    console.error(`Exhibition ${EX_CODE} は既に存在し、seed:true ではありません。`);
+    console.error('別の exCode を使うか、本番展覧会を上書きしない範囲で慎重に。');
+    process.exit(4);
+  }
+  if (existing.exists && existing.data().seed === true) {
+    console.error('');
+    console.error(`Exhibition ${EX_CODE} は既に seed 済 (前回の bootstrap が残ってる)。`);
+    console.error(`Run cleanup first:  node functions/scripts/seed-likes.js --ex=${EX_CODE} --cleanup`);
+    process.exit(3);
+  }
+
+  // 期間: 過去 5 日 〜 今日 + 2 日 (= 7 日間)
+  const now = Date.now();
+  const startDate = new Date(now - 5 * 86400000);
+  const endDate = new Date(now + 2 * 86400000);
+
+  // 1. exhibitions doc
+  await db.collection('exhibitions').doc(EX_CODE).set({
+    ex_code: EX_CODE,
+    ex_name: 'シードテスト用 (' + EX_CODE + ')',
+    email: 'rymist1@gmail.com',
+    start_date: startDate.toISOString().slice(0, 10),
+    end_date: endDate.toISOString().slice(0, 10),
+    is_sandbox: true,
+    seed: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  console.log('  exhibitions doc 作成');
+
+  // 2. 作家・作品分配
+  const artists = _pickArtists(ARTIST_COUNT);
+  const distribution = _distributeArtworks(ARTWORK_COUNT, artists);
+
+  // 3. artworks 生成
+  const artworks = [];
+  let idx = 0;
+  for (let ai = 0; ai < artists.length; ai++) {
+    const artistName = artists[ai];
+    const n = distribution[ai];
+    for (let k = 0; k < n; k++) {
+      idx++;
+      const aid = 'A' + String(idx).padStart(3, '0');
+      artworks.push({
+        artwork_id: aid,
+        artworkId: aid,
+        exCode: EX_CODE,
+        title: randomChoice(TITLE_THEMES) + ' #' + (k + 1),
+        artist: artistName,
+        year: '2026',
+        technique: randomChoice(TECHNIQUES),
+        size: (Math.round(20 + Math.random() * 60) * 10) + ' × ' +
+              (Math.round(15 + Math.random() * 50) * 10) + ' mm',
+        price: '',
+        note: '',
+        status: '1',
+        security_key: 'seed-' + Math.random().toString(36).slice(2, 10),
+        seed: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // 4. batch write artworks (doc ID = exCode + '_' + artwork_id)
+  let written = 0;
+  for (let i = 0; i < artworks.length; i += 500) {
+    const batch = db.batch();
+    artworks.slice(i, i + 500).forEach(function (a) {
+      const docId = EX_CODE + '_' + a.artwork_id;
+      batch.set(db.collection('artworks').doc(docId), a);
+    });
+    await batch.commit();
+    written += Math.min(500, artworks.length - i);
+    process.stdout.write(`  artworks: ${written}/${artworks.length}\r`);
+  }
+  console.log(`  artworks: ${written} 件作成 (${artists.length} 作家)`);
+
+  return {
+    artworks: artworks,
+    exhibition: {
+      ex_code: EX_CODE,
+      ex_name: 'シードテスト用 (' + EX_CODE + ')',
+      start_date: startDate.toISOString().slice(0, 10),
+      end_date: endDate.toISOString().slice(0, 10),
+      is_sandbox: true,
+    },
+  };
 }
 
 // ─── Visitor pattern generators ───────────────────────────
