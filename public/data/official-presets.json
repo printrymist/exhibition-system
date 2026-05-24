@@ -264,7 +264,7 @@
       "size": "36×44mm — A4 縦に 30 枚 (5×6)",
       "qrPosition": "top-center",
       "qrOffset": 0,
-      "textAlign": "center",
+      "textAlign": "left",
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 5, "rows": 6,
@@ -273,7 +273,19 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "artwork_id", "size": 6, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "", "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        { "type": "field", "name": "title",     "size": 18, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",    "size": 14, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "divider" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "year",      "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "technique", "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "size",      "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "3mm" },
+        { "type": "field", "name": "price",     "size": 13, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "3mm" },
+        { "type": "field", "name": "artist_note", "size": 10, "bold": false, "italic": true,  "align": "inherit", "maxLines": 6, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     }
   },
@@ -375,6 +387,13 @@
     },
     "official_qronly": {
       "artwork_id": "A-001",
+      "title": "余白の海",
+      "artist": "森田 真央",
+      "year": "2026",
+      "technique": "アクリル・キャンバス",
+      "size": "455×380mm",
+      "price": "120000",
+      "artist_note": "波と空が出会う場所に、人の記憶が落ちて沈んでいく。沈んだものは見えなくなり、海の余白だけが残る。",
       "qr_url": "https://rohei-printer-system.web.app/?demo=1"
     }
   }

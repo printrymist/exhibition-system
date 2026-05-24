@@ -1713,6 +1713,12 @@
         <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
           ↑↓ で並び替え · チェックで表示 · ＋ で挿入
         </p>
+        <!-- QR-only テンプレ採用中の補助 hint -->
+        <div id="qrOnlyHint" style="display:none; background:#fff8e1; border:1px solid #f0d875; border-radius:8px; padding:10px 14px; font-size:0.85em; color:#7a5500; margin-bottom:12px; line-height:1.55;">
+          📍 <strong>QR のみ (NY スタイル)</strong> 採用中。<br>
+          ここで編集する項目は <strong>スマホ画面</strong> に表示されます (来場者が QR シールをスキャンしたときの見た目)。<br>
+          紙には QR シールだけが印刷されます (項目は印刷されない)。
+        </div>
         <div class="fields-list" id="fieldsGrid"></div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
           <div style="display:flex;gap:8px;align-items:center;">
@@ -2304,6 +2310,10 @@
       document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
       const card = document.getElementById('tpl_' + name);
       if (card) card.classList.add('selected');
+
+      // QR-only テンプレ採用時の Custom タブ hint 表示切替
+      const qrHint = document.getElementById('qrOnlyHint');
+      if (qrHint) qrHint.style.display = (name === 'official_qronly') ? 'block' : 'none';
 
       // 構造プレビュー (小) は常に更新 — クリックでテンプレの中身を比較する用途
       const sourcePreview = card ? card.querySelector('.template-preview') : null;
@@ -3355,6 +3365,10 @@
 
     // 1作品分の本文 (s.items を field / group / divider / spacer 別に HTML 化)
     function buildContent(s, art) {
+      // QR-only テンプレでは、items[] は **スマホ側 caption mode** で表示するための定義。
+      // 紙には QR シールだけを印刷したいので、紙描画時は text 部分を完全に空にする。
+      // items[] の編集は Custom タブで通常通り可能 (= スマホ caption の見た目を編集)。
+      if (currentTemplate === 'official_qronly') return '';
       let html = '';
       s.items.forEach(item => {
         if (item.type === 'field') {
@@ -3418,9 +3432,14 @@
 
     // 1作品分の QR (canvas → img tag)。qrLogo は DOM から都度参照
     function buildQrImg(s, dims, art) {
-      const url = art.qr_url;
+      let url = art.qr_url;
       if (!url) return `<div style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};background:#eee;display:flex;align-items:center;`
         + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
+      // QR-only テンプレでは URL に &caption=1 を追加して、index.html を
+      // caption mode で起動させる。紙キャプ用 QR とは別の QR コードになる。
+      if (currentTemplate === 'official_qronly') {
+        url += (url.indexOf('?') !== -1 ? '&' : '?') + 'caption=1';
+      }
       const logo = document.getElementById('qrLogo').value;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');

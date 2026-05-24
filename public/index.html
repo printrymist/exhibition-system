@@ -336,6 +336,54 @@
       cursor: pointer;
       color: #555;
     }
+
+    /* ─── Caption Mode (QR-only シール経由でアクセスしたとき) ─── */
+    /* 紙キャプションの代わりに、スマホ画面で作品情報 + いいね + コメントを表示する。
+       caption.html の items[] と同じデザイン言語で render する (font-size pt 単位、
+       align / bold / italic / divider / spacer / group をそのまま採用)。 */
+    #ansCaptionView {
+      text-align: left;
+      padding: 0 16px;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+    #ansCaptionView .cap-divider {
+      border: none;
+      border-top: 1px solid #ddd;
+      margin: 8px 0;
+    }
+    #ansCaptionView .cap-item {
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    #ansCaptionView .cap-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4em;
+    }
+    /* caption mode の like/comment 強調 */
+    .caption-react-card {
+      background: linear-gradient(135deg, #fff5f7 0%, #ffe8ec 100%);
+      border: 2px solid #f8b4c0;
+      border-radius: 16px;
+      padding: 18px 18px 14px;
+      margin: 18px 0 8px;
+      box-shadow: 0 4px 12px rgba(233, 30, 99, 0.12);
+    }
+    .caption-react-heart {
+      text-align: center;
+      font-size: 36px;
+      color: #e91e63;
+      margin-bottom: 6px;
+      filter: drop-shadow(0 2px 4px rgba(233, 30, 99, 0.3));
+    }
+    .caption-react-label {
+      text-align: center;
+      font-size: 0.95em;
+      font-weight: bold;
+      color: #ad1457;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 
@@ -425,10 +473,13 @@
           </div>
           <div id="ansInputView">
             <img id="ansMainImg" class="work-img" src="">
-            <div class="work-info">
+            <!-- 通常 (非 caption mode): タイトル + 作家名のみ表示 -->
+            <div class="work-info" id="ansWorkInfo">
               <h2 id="ansDisplayTitle"></h2>
               <p id="ansDisplayArtist"></p>
             </div>
+            <!-- caption mode 専用: caption テンプレ items[] を render -->
+            <div id="ansCaptionView" style="display:none;"></div>
             <div id="ansFormContainer">
               <form id="ansLikeForm">
                 <input type="hidden" name="sessionId" id="ansSessionIdInput">
@@ -481,6 +532,9 @@
     // key パラメータは Phase 6c で撤去 (実 security は Cloud Function 側の HMAC で検証)
     const expVal = urlParams.get('exp') || '';
     const sigVal = urlParams.get('sig') || '';
+    // caption=1: caption mode で起動 (QR のみシール経由)。
+    // 作品情報 (caption テンプレの items[]) をスマホ画面で表示し、紙キャプションの代替に。
+    const captionMode = urlParams.get('caption') === '1';
 
     // Phase 6c: gas_QRlikes 経路を完全撤去。GAS_URL / gasCall は不要に。
     // すべての write は Cloud Function (submitArtwork) 経由、read は Firestore 直接。
@@ -1000,6 +1054,137 @@
       });
     }
 
+    // ─── Caption Mode 専用ロジック ───
+    // QR のみシールから来た visitor (?caption=1) 向けに、紙キャプの代わりに
+    // スマホ画面で作品情報を表示する。caption.html の items[] と同じ design を使う。
+
+    // テンプレ JSON を loaded once でキャッシュ (caption_template_id から items[] を引く)
+    let _cachedPresets = null;
+    async function _loadAllPresets() {
+      if (_cachedPresets) return _cachedPresets;
+      try {
+        const [officialRes, baseRes] = await Promise.all([
+          fetch('/data/official-presets.json'),
+          fetch('/data/caption-presets.json'),
+        ]);
+        const official = officialRes.ok ? await officialRes.json() : { templates: {} };
+        const base = baseRes.ok ? await baseRes.json() : {};
+        // official.templates は { official_solo: {...}, ... } 形式
+        // base は { minimal: {...}, gallery: {...}, ... } 形式
+        _cachedPresets = Object.assign({}, base, official.templates || {});
+        return _cachedPresets;
+      } catch (e) {
+        console.warn('preset load failed:', e);
+        _cachedPresets = {};
+        return _cachedPresets;
+      }
+    }
+
+    function _captionEscape(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function _captionFormatValue(val, currency, comma) {
+      if (!currency && !comma) return String(val);
+      const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+      if (isNaN(num)) return String(val);
+      const str = comma ? Math.round(num).toLocaleString('ja-JP') : Math.round(num).toString();
+      return currency ? currency + str : str;
+    }
+
+    function _captionAffix(text, scale) {
+      if (!text) return '';
+      const sc = (scale !== undefined && scale !== null && isFinite(scale) && scale > 0) ? scale : 0.75;
+      return `<span style="font-size:${sc}em;">${_captionEscape(text)}</span>`;
+    }
+
+    function _captionFieldHtml(item, art) {
+      const raw = art[item.name];
+      const val = raw == null ? '' : String(raw).trim();
+      if (!val) return '';
+      const formatted = _captionFormatValue(val, item.currency || '', item.comma || false);
+      const escaped = _captionEscape(formatted);
+      const text = _captionAffix(item.prefix, item.affixScale) + escaped + _captionAffix(item.suffix, item.affixScale);
+      const align = item.align && item.align !== 'inherit' ? item.align : 'left';
+      const weight = item.bold ? 'bold' : 'normal';
+      const fstyle = item.italic ? 'italic' : 'normal';
+      // pt をそのまま使用 (mobile でも適切なサイズになる)
+      return `<div class="cap-item" style="font-size:${item.size}pt;font-weight:${weight};font-style:${fstyle};text-align:${align};margin-bottom:2px;">${text}</div>`;
+    }
+
+    function renderCaptionItems(items, art) {
+      let html = '';
+      (items || []).forEach(item => {
+        if (item.type === 'field') {
+          html += _captionFieldHtml(item, art);
+        } else if (item.type === 'group') {
+          const parts = (item.children || []).map(c => {
+            const raw = art[c.name];
+            const val = raw == null ? '' : String(raw).trim();
+            if (!val) return null;
+            const formatted = _captionFormatValue(val, c.currency || '', c.comma || false);
+            const escaped = _captionEscape(formatted);
+            const v = _captionAffix(c.prefix, c.affixScale) + escaped + _captionAffix(c.suffix, c.affixScale);
+            const w = c.bold ? 'bold' : 'normal';
+            const fs = c.italic ? 'italic' : 'normal';
+            return `<span style="font-size:${c.size}pt;font-weight:${w};font-style:${fs};">${v}</span>`;
+          }).filter(Boolean);
+          if (parts.length === 0) return;
+          const align = item.align && item.align !== 'inherit' ? item.align : 'left';
+          if (align === 'between') {
+            html += `<div class="cap-group" style="justify-content:space-between;">${parts.join('')}</div>`;
+          } else {
+            const sepHtml = _captionEscape(item.sep || '');
+            html += `<div class="cap-item" style="text-align:${align};margin-bottom:2px;">${parts.join(sepHtml)}</div>`;
+          }
+        } else if (item.type === 'divider') {
+          html += `<hr class="cap-divider">`;
+        } else if (item.type === 'spacer') {
+          // size は '4mm' 等。スマホでは em 換算する (1mm ≒ 0.25em)
+          const sizeStr = String(item.size || '4mm');
+          const mmMatch = sizeStr.match(/^(\d+(?:\.\d+)?)mm$/);
+          const px = mmMatch ? Math.round(parseFloat(mmMatch[1]) * 3.78) : 12;
+          html += `<div style="height:${px}px;"></div>`;
+        }
+      });
+      return html;
+    }
+
+    async function applyCaptionMode(res) {
+      const tplKey = (res.captionTemplateId || '').toString();
+      // preset:xxx 形式のみ対応 (saved:xxx は Firestore Rules で visitor 読めない)
+      if (tplKey.indexOf('preset:') !== 0) {
+        return false;
+      }
+      const presetName = tplKey.slice('preset:'.length);
+      const presets = await _loadAllPresets();
+      const template = presets[presetName];
+      if (!template || !Array.isArray(template.items)) return false;
+      const html = renderCaptionItems(template.items, res.artwork || {});
+      const view = document.getElementById('ansCaptionView');
+      view.innerHTML = html;
+      view.style.display = 'block';
+      // 旧 work-info (title + artist) は caption に含まれるので隠す
+      const workInfo = document.getElementById('ansWorkInfo');
+      if (workInfo) workInfo.style.display = 'none';
+      // フォームを「目立つカード」化
+      const formContainer = document.getElementById('ansFormContainer');
+      if (formContainer && !formContainer.classList.contains('caption-react-card')) {
+        formContainer.classList.add('caption-react-card');
+        const heart = document.createElement('div');
+        heart.className = 'caption-react-heart';
+        heart.textContent = '❤';
+        const label = document.createElement('div');
+        label.className = 'caption-react-label';
+        label.textContent = 'いいね & 感想を送る';
+        formContainer.insertBefore(label, formContainer.firstChild);
+        formContainer.insertBefore(heart, formContainer.firstChild);
+      }
+      return true;
+    }
+
     function ansRenderData(res, ex, id) {
       if (!res || !res.success) {
         document.getElementById('ansLoading').innerHTML =
@@ -1030,6 +1215,12 @@
       var savedNickname = localStorage.getItem("nickname_" + ex);
       if (savedNickname) {
         document.getElementById('ansNicknameInput').value = savedNickname;
+      }
+      // caption mode (QR-only シール経由) のとき、items[] driven の caption 表示に切替
+      if (captionMode) {
+        applyCaptionMode(res).catch(err => {
+          console.warn('caption mode apply failed:', err);
+        });
       }
       document.getElementById('ansMainContent').style.display = 'block';
     }
@@ -1305,7 +1496,10 @@
             x: a.x || '',
             fb: a.facebook || '',
             web: a.web || ''
-          }
+          },
+          // caption mode 用: 作品の全フィールドと、運営者が選んだ caption テンプレ ID
+          artwork: a,
+          captionTemplateId: (e.caption_template_id || '').toString(),
         };
       } catch (err) {
         return { success: false, msg: '取得エラー: ' + err.message };
