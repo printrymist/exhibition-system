@@ -145,6 +145,175 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Session 境界による分割 (1-A 確定ルール: gap > 2h or 日付跨ぎ)
+  // ─────────────────────────────────────────────────────────────
+  // 戻り値: { [sessionId]: [ { start, end, count }, ... ] }
+  //   start/end = timestamp (ms)、count = そのセッション内のいいね数
+  // isLike=true のみカウント、無効 timestamp は無視。
+  const SESSION_GAP_MS = 2 * 60 * 60 * 1000; // 2 時間
+
+  function _dateKey(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+  }
+
+  function computeSessionsByVisitor(likes) {
+    const timesBySession = {};
+    likes.forEach(function (l) {
+      if (!l || !l.sessionId || !l.isLike) return;
+      const t = l.timestamp ? new Date(l.timestamp).getTime() : NaN;
+      if (!isFinite(t)) return;
+      if (!timesBySession[l.sessionId]) timesBySession[l.sessionId] = [];
+      timesBySession[l.sessionId].push(t);
+    });
+    const visitors = {};
+    Object.keys(timesBySession).forEach(function (sid) {
+      const times = timesBySession[sid].slice().sort(function (a, b) { return a - b; });
+      const sessions = [];
+      let current = null;
+      times.forEach(function (t) {
+        if (!current) {
+          current = { start: t, end: t, count: 1 };
+          return;
+        }
+        const gap = t - current.end;
+        const prevDate = _dateKey(current.end);
+        const curDate = _dateKey(t);
+        if (gap > SESSION_GAP_MS || prevDate !== curDate) {
+          sessions.push(current);
+          current = { start: t, end: t, count: 1 };
+        } else {
+          current.end = t;
+          current.count++;
+        }
+      });
+      if (current) sessions.push(current);
+      visitors[sid] = sessions;
+    });
+    return visitors;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // V-4 滞在時間中央値
+  // ─────────────────────────────────────────────────────────────
+  // 各 session の dwell (= end - start) の中央値。単位は分。
+  // いいね 1 件のみの session は dwell = 0 → 「< 1 分」扱いで含める
+  // (見えない visitor を作らない方針)。
+  function computeMedianSessionDwell(visitors) {
+    const dwells = [];
+    Object.keys(visitors).forEach(function (sid) {
+      visitors[sid].forEach(function (s) {
+        dwells.push((s.end - s.start) / 60000);
+      });
+    });
+    if (dwells.length === 0) return { median: 0, count: 0 };
+    dwells.sort(function (a, b) { return a - b; });
+    const mid = Math.floor(dwells.length / 2);
+    const median = dwells.length % 2 === 0
+      ? (dwells[mid - 1] + dwells[mid]) / 2
+      : dwells[mid];
+    return { median: median, count: dwells.length };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // V-5 滞在分布
+  // ─────────────────────────────────────────────────────────────
+  // session 単位の分布: <1min / 1-5min / 5-30min / 30min+
+  function computeDwellDistribution(visitors) {
+    const buckets = { lt1: 0, b1to5: 0, b5to30: 0, gte30: 0 };
+    let total = 0;
+    Object.keys(visitors).forEach(function (sid) {
+      visitors[sid].forEach(function (s) {
+        const m = (s.end - s.start) / 60000;
+        if (m < 1) buckets.lt1++;
+        else if (m < 5) buckets.b1to5++;
+        else if (m < 30) buckets.b5to30++;
+        else buckets.gte30++;
+        total++;
+      });
+    });
+    return { buckets: buckets, total: total };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // V-6 深い visitor (2 段階併記、likes はカバー率、時間は絶対値)
+  // ─────────────────────────────────────────────────────────────
+  // engaged: 累計カバー率 ≥10% かつ best session dwell ≥15min
+  // sunk:    累計カバー率 ≥30% かつ best session dwell ≥30min
+  //   - 同じ visitor が複数 session 持つ場合、best (= 最長の) session の dwell を採用
+  //   - 累計カバー率は visitor が押した全 likes / 出展数 (複数 session 合算)
+  function computeDeepVisitors(visitors, artworkCount) {
+    const ids = Object.keys(visitors);
+    const visitorCount = ids.length;
+    if (visitorCount === 0 || artworkCount === 0) {
+      return {
+        engagedCount: 0, sunkCount: 0,
+        engagedRate: 0, sunkRate: 0,
+        visitorCount: visitorCount, artworkCount: artworkCount,
+      };
+    }
+    let engaged = 0;
+    let sunk = 0;
+    ids.forEach(function (sid) {
+      const sessions = visitors[sid];
+      let totalLikes = 0;
+      let bestDwell = 0;
+      sessions.forEach(function (s) {
+        totalLikes += s.count;
+        const m = (s.end - s.start) / 60000;
+        if (m > bestDwell) bestDwell = m;
+      });
+      const coverage = totalLikes / artworkCount;
+      if (coverage >= 0.10 && bestDwell >= 15) engaged++;
+      if (coverage >= 0.30 && bestDwell >= 30) sunk++;
+    });
+    return {
+      engagedCount: engaged,
+      sunkCount: sunk,
+      engagedRate: engaged / visitorCount,
+      sunkRate: sunk / visitorCount,
+      visitorCount: visitorCount,
+      artworkCount: artworkCount,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W-3 コメント付き作品ランキング
+  // ─────────────────────────────────────────────────────────────
+  // 作品ごとのコメント数 (空でないもの) をカウント、降順ソート。
+  function computeCommentRanking(likes) {
+    const counts = {};
+    likes.forEach(function (l) {
+      if (!l || !l.workId) return;
+      if (l.comment && String(l.comment).trim()) {
+        counts[l.workId] = (counts[l.workId] || 0) + 1;
+      }
+    });
+    return Object.keys(counts).map(function (id) {
+      return { artworkId: id, commentCount: counts[id] };
+    }).sort(function (a, b) { return b.commentCount - a.commentCount; });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W-4 いいね 0 作品リスト
+  // ─────────────────────────────────────────────────────────────
+  // status='1' (出展中) かつ likes コレクションに isLike=true レコードが
+  // 1 件も無い作品を抽出。作家への正直なフィードバック。
+  function findZeroLikeArtworks(artworks, likes) {
+    const liked = {};
+    likes.forEach(function (l) {
+      if (!l || !l.workId || !l.isLike) return;
+      liked[l.workId] = true;
+    });
+    return (artworks || []).filter(function (a) {
+      if (!a) return false;
+      const s = String(a.status == null ? '' : a.status).trim();
+      if (s !== '1') return false;
+      return !liked[a.artwork_id];
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // export
   // ─────────────────────────────────────────────────────────────
   global.DashboardMetrics = {
@@ -154,5 +323,11 @@
     computeMedianCommentLength: computeMedianCommentLength,
     computeEngagementTiers: computeEngagementTiers,
     countRegisteredArtworks: countRegisteredArtworks,
+    computeSessionsByVisitor: computeSessionsByVisitor,
+    computeMedianSessionDwell: computeMedianSessionDwell,
+    computeDwellDistribution: computeDwellDistribution,
+    computeDeepVisitors: computeDeepVisitors,
+    computeCommentRanking: computeCommentRanking,
+    findZeroLikeArtworks: findZeroLikeArtworks,
   };
 })(typeof window !== 'undefined' ? window : this);

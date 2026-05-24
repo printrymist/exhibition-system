@@ -80,6 +80,48 @@
     .tier-name .desc { color: #888; font-size: 0.85em; margin-left: 6px; }
     .tier-value { font-variant-numeric: tabular-nums; color: #1a4f9c; font-weight: bold; }
 
+    /* V-5 滞在分布バー */
+    .dist-bars {
+      display: grid; grid-template-columns: 80px 1fr 70px;
+      gap: 8px; align-items: center; padding: 4px 0;
+      font-size: 0.92em;
+    }
+    .dist-bar-label { color: #444; }
+    .dist-bar-track {
+      background: #f0f3f9; border-radius: 4px; height: 18px; position: relative; overflow: hidden;
+    }
+    .dist-bar-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, #4d8df0, #1a4f9c);
+      border-radius: 4px; transition: width 0.4s;
+    }
+    .dist-bar-count {
+      text-align: right; font-variant-numeric: tabular-nums;
+      color: #1a4f9c; font-weight: bold;
+    }
+
+    /* W-3 / W-4 作品リスト */
+    .artwork-list { display: flex; flex-direction: column; gap: 4px; }
+    .artwork-item {
+      display: grid; grid-template-columns: 40px 1fr auto;
+      gap: 10px; padding: 6px 8px; border-radius: 6px;
+      background: #fafbfd; align-items: baseline;
+    }
+    .artwork-item:hover { background: #f0f5ff; }
+    .artwork-rank { color: #999; font-size: 0.85em; font-variant-numeric: tabular-nums; }
+    .artwork-rank.gold { color: #d4a83a; font-weight: bold; }
+    .artwork-rank.silver { color: #999; font-weight: bold; }
+    .artwork-rank.bronze { color: #b07a40; font-weight: bold; }
+    .artwork-title { color: #1a2a4a; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .artwork-artist { color: #888; font-size: 0.85em; margin-left: 4px; }
+    .artwork-count {
+      font-variant-numeric: tabular-nums; color: #1a4f9c; font-weight: bold;
+    }
+    .zero-list-note {
+      background: #fff4e0; border-left: 4px solid #f6a623; border-radius: 4px;
+      padding: 8px 12px; font-size: 0.85em; color: #7a5500; margin-top: 8px;
+    }
+
     .meta-row { font-size: 0.85em; color: #888; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     .empty { padding: 24px; text-align: center; color: #999; background: #fafafa; border-radius: 6px; }
     .save-msg { font-size: 0.85em; margin-left: 8px; }
@@ -193,6 +235,77 @@
         <div class="meta-row">
           <span id="metricMeta">―</span>
           <span id="lastUpdated">―</span>
+        </div>
+      </div>
+
+      <!-- 滞在の質 (V-4 / V-5 / V-6) -->
+      <div class="section">
+        <div class="section-title">⏳ 滞在の質</div>
+        <div class="section-desc">
+          visitor がどれだけ会場 / Web で時間を使ったか。同じ <strong>sessionId</strong> でも
+          <strong>gap &gt; 2 時間 / 日付跨ぎ</strong> で別 session 扱い (= 「戻ってきた visitor」を捉えるため)。
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            滞在時間中央値
+            <span class="small">(session 単位)</span>
+          </div>
+          <div class="metric-value" id="metricMedianDwell">―</div>
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:8px;">
+            滞在分布
+            <span class="small">(session 単位、合計 <span id="dwellTotal">―</span> session)</span>
+          </div>
+          <div id="dwellBars"></div>
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:6px;">
+            深い visitor (2 段階)
+            <span class="small">累計カバー × ベスト session 滞在時間</span>
+          </div>
+          <div class="tier-grid">
+            <div class="tier-item">
+              <div class="tier-name">
+                ≥10% カバー × ≥15 分
+                <span class="desc">(engaged = ちゃんと回った)</span>
+              </div>
+              <div class="tier-value" id="deepEngaged">―</div>
+            </div>
+            <div class="tier-item">
+              <div class="tier-name">
+                ≥30% カバー × ≥30 分
+                <span class="desc">(沈み込んだ = 会場に根を張った)</span>
+              </div>
+              <div class="tier-value" id="deepSunk">―</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 作品単位 (W-3 / W-4) -->
+      <div class="section">
+        <div class="section-title">🎨 作品単位</div>
+        <div class="section-desc">
+          いいねより質の高い反応 (コメント) を集めた作品ランキング、
+          および response が付いていない作品の一覧。
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:8px;">
+            💬 コメントが集中する作品 <span class="small">(上位 10 件)</span>
+          </div>
+          <div id="commentRanking" class="artwork-list"></div>
+        </div>
+
+        <div class="metric-row" style="display:block; border-bottom:none;">
+          <div class="metric-label" style="margin-bottom:8px;">
+            🌑 いいね 0 の作品 <span class="small">(出展中で response 無し)</span>
+          </div>
+          <div id="zeroLikeList" class="artwork-list"></div>
         </div>
       </div>
 
@@ -358,6 +471,86 @@
       }
     }
 
+    // ===== render ヘルパ =====
+
+    function renderDwellDistribution(dist) {
+      var container = document.getElementById('dwellBars');
+      document.getElementById('dwellTotal').innerText = dist.total;
+      var rows = [
+        { label: '< 1 分',     count: dist.buckets.lt1 },
+        { label: '1〜5 分',    count: dist.buckets.b1to5 },
+        { label: '5〜30 分',   count: dist.buckets.b5to30 },
+        { label: '30 分以上',  count: dist.buckets.gte30 },
+      ];
+      var max = Math.max(1, rows[0].count, rows[1].count, rows[2].count, rows[3].count);
+      container.innerHTML = rows.map(function (r) {
+        var pct = max === 0 ? 0 : (r.count / max) * 100;
+        return '<div class="dist-bars">' +
+          '<div class="dist-bar-label">' + escapeHtml(r.label) + '</div>' +
+          '<div class="dist-bar-track"><div class="dist-bar-fill" style="width:' + pct + '%;"></div></div>' +
+          '<div class="dist-bar-count">' + r.count + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function _artworkInfo(artworks, artworkId) {
+      var a = artworks.find(function (x) { return x && x.artwork_id === artworkId; });
+      if (!a) return { title: artworkId, artist: '' };
+      return {
+        title: (a.title || a.title_en || '(タイトルなし)').toString(),
+        artist: (a.artist || a.artist_en || '').toString(),
+      };
+    }
+
+    function renderArtworkList(elId, list, artworks, countKey, unit) {
+      var el = document.getElementById(elId);
+      if (!list || list.length === 0) {
+        el.innerHTML = '<div class="empty">該当なし</div>';
+        return;
+      }
+      el.innerHTML = list.map(function (item, i) {
+        var info = _artworkInfo(artworks, item.artworkId);
+        var rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return '<div class="artwork-item">' +
+          '<div class="artwork-rank ' + rankCls + '">' + (i + 1) + '.</div>' +
+          '<div class="artwork-title">' + escapeHtml(info.title) +
+            (info.artist ? '<span class="artwork-artist">— ' + escapeHtml(info.artist) + '</span>' : '') +
+          '</div>' +
+          '<div class="artwork-count">' + item[countKey] + ' ' + unit + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderZeroLikeList(zeroList, totalArtworkCount) {
+      var el = document.getElementById('zeroLikeList');
+      if (totalArtworkCount === 0) {
+        el.innerHTML = '<div class="empty">出展作品がありません</div>';
+        return;
+      }
+      if (zeroList.length === 0) {
+        el.innerHTML = '<div class="empty" style="background:#e8f5e9; color:#2e7d32;">'
+          + '✅ すべての出展作品にいいねが付いています ('
+          + totalArtworkCount + ' / ' + totalArtworkCount + ')</div>';
+        return;
+      }
+      var html = zeroList.map(function (a) {
+        return '<div class="artwork-item">' +
+          '<div class="artwork-rank">―</div>' +
+          '<div class="artwork-title">' + escapeHtml(a.title || '(タイトルなし)') +
+            (a.artist ? '<span class="artwork-artist">— ' + escapeHtml(a.artist) + '</span>' : '') +
+          '</div>' +
+          '<div class="artwork-count" style="color:#888;">' + escapeHtml(a.artwork_id) + '</div>' +
+          '</div>';
+      }).join('');
+      var coverPct = ((totalArtworkCount - zeroList.length) / totalArtworkCount) * 100;
+      el.innerHTML = html
+        + '<div class="zero-list-note">'
+        + 'いいねが付いた作品: ' + (totalArtworkCount - zeroList.length) + ' / ' + totalArtworkCount
+        + ' (' + coverPct.toFixed(1) + '%)。'
+        + 'いいね 0 の作品があるとき、見せ方・動線・解説の見直し材料に。'
+        + '</div>';
+    }
+
     // ===== 集計と表示 =====
     async function recompute() {
       if (!currentEx) return;
@@ -418,6 +611,39 @@
         document.getElementById('metricMeta').innerText =
           '対象: いいね ' + filtered.length + ' 件 / 全 ' + likes.length + ' 件 / 出展 ' + artworkCount + ' 作品';
         document.getElementById('lastUpdated').innerText = '最終更新: ' + fmtDateTime(new Date());
+
+        // V-4 / V-5 / V-6: session 計算 → 各指標を導出
+        var sessions = window.DashboardMetrics.computeSessionsByVisitor(filtered);
+
+        // V-4 滞在時間中央値
+        var dwellMed = window.DashboardMetrics.computeMedianSessionDwell(sessions);
+        document.getElementById('metricMedianDwell').innerHTML =
+          (dwellMed.count === 0 ? '―' : fmtNum(dwellMed.median) + ' 分')
+          + '<span class="metric-sub">(' + dwellMed.count + ' session)</span>';
+
+        // V-5 滞在分布
+        var dist = window.DashboardMetrics.computeDwellDistribution(sessions);
+        renderDwellDistribution(dist);
+
+        // V-6 深い visitor
+        var deep = window.DashboardMetrics.computeDeepVisitors(sessions, artworkCount);
+        if (artworkCount === 0) {
+          document.getElementById('deepEngaged').innerText = '出展数 0 のため計算不能';
+          document.getElementById('deepSunk').innerText = '出展数 0 のため計算不能';
+        } else {
+          document.getElementById('deepEngaged').innerText =
+            fmtPct(deep.engagedRate) + ' (' + deep.engagedCount + ' 人)';
+          document.getElementById('deepSunk').innerText =
+            fmtPct(deep.sunkRate) + ' (' + deep.sunkCount + ' 人)';
+        }
+
+        // W-3 コメント付き作品ランキング
+        var commentRank = window.DashboardMetrics.computeCommentRanking(filtered);
+        renderArtworkList('commentRanking', commentRank.slice(0, 10), artworks, 'commentCount', '件');
+
+        // W-4 いいね 0 作品リスト
+        var zeroList = window.DashboardMetrics.findZeroLikeArtworks(artworks, filtered);
+        renderZeroLikeList(zeroList, artworkCount);
 
       } catch (e) {
         console.error('recompute failed:', e);
