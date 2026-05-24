@@ -190,6 +190,12 @@
     </div>
 
     <div class="hub-card">
+      <h2>📊 詳細分析</h2>
+      <p>visitor の関与パターンを「人数ベース」「行動パターンベース」で詳細表示。コメント率 / 関与の段階 / 滞在時間中央値 / 深い visitor / リピート率 / ロングテール度、作家別リーチ (グループ展)、不審 session の除外操作 等。会期中・会期後の振り返り用。</p>
+      <a id="linkAnalytics" href="#" class="hub-button">→ 開く</a>
+    </div>
+
+    <div class="hub-card">
       <h2>📥 データダウンロード</h2>
       <p>作品データ XLSX (Excel で開いても型崩れしない形式) / コメント CSV / いいね CSV / 作品別集計 CSV をダウンロード。</p>
       <a id="linkExports" href="#" class="hub-button">→ 開く</a>
@@ -249,6 +255,7 @@
           document.getElementById('linkToCaption').href = 'caption.html?ex=' + ex;
           // ハブカードの遷移先に ex を埋め込む
           document.getElementById('linkDashboard').href = 'dashboard.html?ex=' + ex;
+          document.getElementById('linkAnalytics').href = 'analytics.html?ex=' + ex;
           document.getElementById('linkExports').href = 'admin/exports.html?ex=' + ex;
           document.getElementById('linkWebExhibition').href = 'web-exhibition.html?ex=' + ex;
           document.getElementById('linkAudit').href = 'admin/audit.html?ex=' + ex;
