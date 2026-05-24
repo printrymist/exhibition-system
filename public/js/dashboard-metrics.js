@@ -469,6 +469,136 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Y 異常検知 (不審な session を抽出)
+  // ─────────────────────────────────────────────────────────────
+  // 入力: likes (全件、フィルタ前) / artworks / options { openingAt, isGroupShow }
+  // 戻り値: [{ sessionId, severity, rules: [{rule, detail}], likeCount,
+  //          firstTimestamp, lastTimestamp, excluded }, ...]
+  //   severity: 'strong' | 'medium' | 'info'
+  //
+  // ルール (memory project_dashboard_metrics の Y-1〜Y-4):
+  //   Y-1: 全作品の 50%+ にいいね (出展数 ≥10 のときのみ)
+  //   Y-2: 5 分以内に 10 件以上のいいね
+  //   Y-3: 1 作家の作品のみにいいね × 3 件以上 (グループ展のみ)
+  //   Y-4: opening_at 前のいいね (informational のみ)
+  function detectSuspectSessions(likes, artworks, options) {
+    options = options || {};
+    const isGroup = !!options.isGroupShow;
+    const openingAtMs = options.openingAt ? new Date(options.openingAt).getTime() : null;
+
+    // likes を sessionId ごとに分類 (isLike=true のみ)
+    const bySession = {};
+    likes.forEach(function (l) {
+      if (!l || !l.sessionId || !l.isLike) return;
+      if (!bySession[l.sessionId]) bySession[l.sessionId] = [];
+      bySession[l.sessionId].push(l);
+    });
+
+    // artwork_id → artist マップ
+    const artworkToArtist = {};
+    (artworks || []).forEach(function (a) {
+      if (!a) return;
+      artworkToArtist[a.artwork_id] = String(a.artist || '').trim();
+    });
+    const artworkCount = countRegisteredArtworks(artworks);
+
+    const results = [];
+    Object.keys(bySession).forEach(function (sid) {
+      const myLikes = bySession[sid];
+      if (myLikes.length === 0) return;
+      const rules = [];
+
+      // Y-1: 全作品の 50%+ (出展数 ≥10 のみ)
+      if (artworkCount >= 10) {
+        const uniqueWorks = {};
+        myLikes.forEach(function (l) { if (l.workId) uniqueWorks[l.workId] = true; });
+        const cov = Object.keys(uniqueWorks).length / artworkCount;
+        if (cov >= 0.5) {
+          rules.push({
+            rule: 'Y-1',
+            detail: '全 ' + artworkCount + ' 作品中 ' + Object.keys(uniqueWorks).length +
+              ' 作品 (' + Math.round(cov * 100) + '%) にいいね',
+          });
+        }
+      }
+
+      // Y-2: 5 分以内に 10 件以上
+      if (myLikes.length >= 10) {
+        const times = myLikes.map(function (l) {
+          return l.timestamp ? new Date(l.timestamp).getTime() : NaN;
+        }).filter(function (t) { return isFinite(t); }).sort(function (a, b) { return a - b; });
+        for (let i = 0; i + 9 < times.length; i++) {
+          if (times[i + 9] - times[i] <= 5 * 60 * 1000) {
+            rules.push({ rule: 'Y-2', detail: '5 分以内に 10 件以上の連打' });
+            break;
+          }
+        }
+      }
+
+      // Y-3: 1 作家のみ × 3 件以上 (group のみ)
+      if (isGroup && myLikes.length >= 3) {
+        const artistSet = {};
+        myLikes.forEach(function (l) {
+          const artist = artworkToArtist[l.workId];
+          if (artist) artistSet[artist] = true;
+        });
+        const artistKeys = Object.keys(artistSet);
+        if (artistKeys.length === 1) {
+          rules.push({
+            rule: 'Y-3',
+            detail: '「' + artistKeys[0] + '」の作品のみに ' + myLikes.length + ' 件',
+          });
+        }
+      }
+
+      // Y-4: opening_at 前 (informational)
+      if (openingAtMs) {
+        let beforeCount = 0;
+        myLikes.forEach(function (l) {
+          const t = l.timestamp ? new Date(l.timestamp).getTime() : NaN;
+          if (isFinite(t) && t < openingAtMs) beforeCount++;
+        });
+        if (beforeCount > 0) {
+          rules.push({
+            rule: 'Y-4',
+            detail: '会期開始前のいいね ' + beforeCount + ' 件 (時刻フィルタで自動除外済)',
+          });
+        }
+      }
+
+      if (rules.length === 0) return;
+
+      // severity
+      const ruleNames = {};
+      rules.forEach(function (r) { ruleNames[r.rule] = true; });
+      let severity;
+      if (ruleNames['Y-1'] && ruleNames['Y-2']) severity = 'strong';
+      else if (rules.length === 1 && ruleNames['Y-4']) severity = 'info';
+      else if (ruleNames['Y-1'] || ruleNames['Y-2'] || ruleNames['Y-3']) severity = 'medium';
+      else severity = 'info';
+
+      // timestamps を sort
+      const sortedTimes = myLikes.map(function (l) { return l.timestamp || ''; })
+        .filter(Boolean).sort();
+
+      results.push({
+        sessionId: sid,
+        severity: severity,
+        rules: rules,
+        likeCount: myLikes.length,
+        firstTimestamp: sortedTimes[0] || '',
+        lastTimestamp: sortedTimes[sortedTimes.length - 1] || '',
+        excluded: !!(myLikes[0] && myLikes[0].excluded_from_stats),
+      });
+    });
+
+    // strong > medium > info の順
+    const order = { strong: 0, medium: 1, info: 2 };
+    results.sort(function (a, b) { return order[a.severity] - order[b.severity]; });
+    return results;
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // export
   // ─────────────────────────────────────────────────────────────
   global.DashboardMetrics = {
@@ -489,5 +619,6 @@
     computeLongTailIndex: computeLongTailIndex,
     detectExhibitionKind: detectExhibitionKind,
     computeArtistReach: computeArtistReach,
+    detectSuspectSessions: detectSuspectSessions,
   };
 })(typeof window !== 'undefined' ? window : this);

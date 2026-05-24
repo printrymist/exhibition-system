@@ -1874,3 +1874,91 @@ exports.categorizeArtwork = onCall(
     };
   },
 );
+
+// =========================================================
+// setLikesExcludedFromStats
+//   analytics.html の異常検知パネル / 事後クリーンアップ UI から呼ぶ。
+//   指定 sessionId 群の likes に excluded_from_stats フラグを立てる
+//   (or 解除する)。ダッシュボードの集計はこのフラグを見て除外する。
+//
+//   AI-Native 原則 (CLAUDE.md): UI で「ボタンを押したらクライアントが
+//   直接 Firestore.update」では認可を破られるので、必ず CF 経由で
+//   operator/organizer auth を検証してから admin SDK で batch update する。
+//
+//   入力: { exCode, sessionIds: string[], excluded: boolean }
+//   出力: { success: true, updated: number }
+//   制限: sessionIds は最大 50 件まで
+// =========================================================
+exports.setLikesExcludedFromStats = onCall(async (request) => {
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  if (!authEmail) {
+    throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+  }
+
+  const data = request.data || {};
+  const exCode = String(data.exCode || "").trim();
+  const sessionIds = data.sessionIds;
+  const excluded = !!data.excluded;
+
+  if (!exCode) {
+    throw new HttpsError("invalid-argument", "exCode が必要です");
+  }
+  if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+    throw new HttpsError("invalid-argument", "exCode が不正です");
+  }
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+    throw new HttpsError("invalid-argument", "sessionIds 配列が必要です");
+  }
+  if (sessionIds.length > 50) {
+    throw new HttpsError("invalid-argument", "sessionIds は 50 件以内にしてください");
+  }
+
+  // 認可: operator OR 該当 exhibition の organizer
+  const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+  if (!isOperator) {
+    const ok = await isOrganizerForEx(authEmail, exCode);
+    if (!ok) {
+      throw new HttpsError(
+        "permission-denied",
+        "この展覧会の主催者または運営者の Firebase Auth が必要です",
+      );
+    }
+  }
+
+  const db = admin.firestore();
+  let updated = 0;
+  for (const rawSid of sessionIds) {
+    if (typeof rawSid !== "string") continue;
+    const sid = rawSid.trim();
+    if (!sid || sid.length > 200) continue;
+    try {
+      const snap = await db.collection("likes")
+        .where("exCode", "==", exCode)
+        .where("sessionId", "==", sid)
+        .get();
+      if (snap.empty) continue;
+      const batch = db.batch();
+      snap.docs.forEach((doc) => {
+        batch.update(doc.ref, { excluded_from_stats: excluded });
+      });
+      await batch.commit();
+      updated += snap.docs.length;
+    } catch (e) {
+      logger.warn("setLikesExcludedFromStats: per-session failed", {
+        exCode, sid, error: e && e.message,
+      });
+    }
+  }
+
+  logger.info("setLikesExcludedFromStats success", {
+    exCode,
+    sessionCount: sessionIds.length,
+    excluded,
+    updated,
+    caller: authEmail,
+    role: isOperator ? "operator" : "organizer",
+  });
+  return { success: true, updated };
+});

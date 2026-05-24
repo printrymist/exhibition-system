@@ -122,6 +122,56 @@
       padding: 8px 12px; font-size: 0.85em; color: #7a5500; margin-top: 8px;
     }
 
+    /* Y 異常検知パネル */
+    .suspect-group { margin-bottom: 12px; }
+    .suspect-group-title {
+      font-weight: bold; margin-bottom: 6px; font-size: 0.92em;
+      padding: 4px 8px; border-radius: 4px;
+    }
+    .suspect-group-title.strong { background: #fde8e8; color: #b71c1c; }
+    .suspect-group-title.medium { background: #fff4e0; color: #c08400; }
+    .suspect-group-title.info { background: #e8f0ff; color: #5470a0; }
+    .suspect-row {
+      display: grid; grid-template-columns: 24px 1fr auto; gap: 8px;
+      padding: 6px 10px; align-items: flex-start;
+      background: #fafbfd; border-radius: 6px; margin-bottom: 4px;
+      font-size: 0.9em;
+    }
+    .suspect-row input[type=checkbox] { margin-top: 3px; cursor: pointer; }
+    .suspect-row-detail { min-width: 0; }
+    .suspect-sid {
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+      font-size: 0.85em; color: #1a4f9c;
+    }
+    .suspect-rules {
+      font-size: 0.82em; color: #444; margin-top: 3px; line-height: 1.5;
+    }
+    .suspect-rule-badge {
+      display: inline-block; padding: 1px 6px; border-radius: 3px; margin-right: 4px;
+      font-size: 0.82em; background: #eef5ff; color: #1a4f9c;
+    }
+    .suspect-time {
+      font-size: 0.78em; color: #888; font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .suspect-excluded-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      background: #fde8e8; color: #b71c1c; font-size: 0.8em; font-weight: bold;
+    }
+    .suspect-actions {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+      margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;
+    }
+    .suspect-manual {
+      margin-top: 10px; padding: 10px; background: #f7f8fb; border-radius: 6px;
+      font-size: 0.88em;
+    }
+    .suspect-manual input[type=text] {
+      flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 5px;
+      font-family: ui-monospace, monospace; font-size: 0.85em;
+    }
+    .suspect-msg { font-size: 0.85em; margin-left: 4px; }
+
     .meta-row { font-size: 0.85em; color: #888; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     .empty { padding: 24px; text-align: center; color: #999; background: #fafafa; border-radius: 6px; }
     .save-msg { font-size: 0.85em; margin-left: 8px; }
@@ -341,6 +391,37 @@
         </div>
       </div>
 
+      <!-- Y 異常検知パネル + 事後クリーンアップ -->
+      <div class="section">
+        <div class="section-title">⚠ 不審な session</div>
+        <div class="section-desc">
+          運営者・作家自身のテストいいねの可能性がある session を自動検出。
+          選択して <strong>除外する</strong> と、その session の全 likes が集計から除外されます (再度押せば解除)。
+          除外操作は Cloud Function 経由で記録されます。
+        </div>
+
+        <div id="suspectArea"></div>
+
+        <div class="suspect-actions">
+          <button class="primary" onclick="excludeSelected(true)" id="btnExcludeSelected">⛔ 選択した session を除外する</button>
+          <button onclick="excludeSelected(false)" id="btnUnexcludeSelected">↩ 選択した session の除外を解除</button>
+          <button onclick="toggleSelectAll()">全選択 / 解除</button>
+          <span id="suspectMsg" class="suspect-msg"></span>
+        </div>
+
+        <div class="suspect-manual">
+          <div style="margin-bottom:6px;">🔍 自動検出されない session を手動で除外:</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="manualSessionIdInput" placeholder="session ID をペースト (英数・- _)">
+            <button class="primary" onclick="excludeManual(true)">⛔ 除外</button>
+            <button onclick="excludeManual(false)">↩ 解除</button>
+          </div>
+          <div style="font-size:0.78em; color:#888; margin-top:4px;">
+            sessionId はブラウザの localStorage に保存されている識別子。自分のスマホの localStorage を覗けば確認できます。
+          </div>
+        </div>
+      </div>
+
       <!-- 作家別 (グループ展時のみ表示) -->
       <div class="section" id="artistSection" style="display:none;">
         <div class="section-title">🎭 作家別 (グループ展)</div>
@@ -359,6 +440,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="js/dashboard-metrics.js"></script>
   <script>
     firebase.initializeApp({
@@ -639,6 +721,145 @@
         '</div>';
     }
 
+    function renderSuspectArea(suspects) {
+      var container = document.getElementById('suspectArea');
+      if (!suspects || suspects.length === 0) {
+        container.innerHTML = '<div class="empty" style="background:#e8f5e9; color:#2e7d32;">' +
+          '✅ 不審な session は検出されませんでした</div>';
+        return;
+      }
+      var groups = { strong: [], medium: [], info: [] };
+      suspects.forEach(function (s) { groups[s.severity].push(s); });
+
+      var html = '';
+      var groupTitles = {
+        strong: { label: '🔴 強い疑い', desc: '(Y-1 と Y-2 の両方を満たす session — ほぼ確実に運営者テスト)' },
+        medium: { label: '🟠 中程度',  desc: '(Y-1 / Y-2 / Y-3 のいずれか単独)' },
+        info: {   label: '🟢 参考',    desc: '(Y-4: 会期前 — 時刻フィルタで自動除外済)' },
+      };
+      ['strong', 'medium', 'info'].forEach(function (sev) {
+        var list = groups[sev];
+        if (list.length === 0) return;
+        var meta = groupTitles[sev];
+        html += '<div class="suspect-group">'
+          + '<div class="suspect-group-title ' + sev + '">' + meta.label
+          + ' (' + list.length + ' 件) <span style="font-weight:normal; color:#666; font-size:0.9em;">'
+          + escapeHtml(meta.desc) + '</span></div>';
+        list.forEach(function (s) {
+          var sidShort = s.sessionId.length > 24 ? s.sessionId.slice(0, 24) + '…' : s.sessionId;
+          var times = '';
+          if (s.firstTimestamp) {
+            times = fmtDateTime(s.firstTimestamp) + ' 〜 ' + fmtDateTime(s.lastTimestamp);
+          }
+          var rulesHtml = s.rules.map(function (r) {
+            return '<div><span class="suspect-rule-badge">' + r.rule + '</span>' +
+              escapeHtml(r.detail) + '</div>';
+          }).join('');
+          var excludedBadge = s.excluded
+            ? '<span class="suspect-excluded-badge">⛔ 除外済</span>' : '';
+          html += '<div class="suspect-row">'
+            + '<input type="checkbox" class="suspect-check" data-sid="'
+              + escapeHtml(s.sessionId) + '"' + (s.excluded ? ' checked' : '') + '>'
+            + '<div class="suspect-row-detail">'
+            +   '<div><span class="suspect-sid" title="' + escapeHtml(s.sessionId) + '">'
+                + escapeHtml(sidShort) + '</span> '
+                + '<span style="color:#888; font-size:0.85em;">いいね ' + s.likeCount + ' 件</span> '
+                + excludedBadge + '</div>'
+            +   '<div class="suspect-rules">' + rulesHtml + '</div>'
+            +   (times ? '<div class="suspect-time">' + escapeHtml(times) + '</div>' : '')
+            + '</div>'
+            + '</div>';
+        });
+        html += '</div>';
+      });
+      container.innerHTML = html;
+    }
+
+    function _collectCheckedSessions() {
+      var nodes = document.querySelectorAll('.suspect-check:checked');
+      var ids = [];
+      for (var i = 0; i < nodes.length; i++) {
+        var sid = nodes[i].dataset.sid;
+        if (sid) ids.push(sid);
+      }
+      return ids;
+    }
+
+    function toggleSelectAll() {
+      var nodes = document.querySelectorAll('.suspect-check');
+      var allChecked = Array.prototype.every.call(nodes, function (n) { return n.checked; });
+      Array.prototype.forEach.call(nodes, function (n) { n.checked = !allChecked; });
+    }
+
+    function _setSuspectMsg(text, color) {
+      var el = document.getElementById('suspectMsg');
+      if (!el) return;
+      el.innerText = text || '';
+      el.style.color = color || '#888';
+    }
+
+    async function _callExcludeCf(sessionIds, excluded) {
+      if (!currentEx) throw new Error('展覧会未選択');
+      var fn = firebase.app().functions('asia-northeast1').httpsCallable('setLikesExcludedFromStats');
+      var res = await fn({ exCode: currentEx, sessionIds: sessionIds, excluded: excluded });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data;
+    }
+
+    async function excludeSelected(excluded) {
+      var ids = _collectCheckedSessions();
+      if (ids.length === 0) {
+        _setSuspectMsg('session が選択されていません', '#d93025');
+        return;
+      }
+      if (ids.length > 50) {
+        _setSuspectMsg('一度に処理できるのは 50 件までです (現在 ' + ids.length + ' 件選択)', '#d93025');
+        return;
+      }
+      var btn1 = document.getElementById('btnExcludeSelected');
+      var btn2 = document.getElementById('btnUnexcludeSelected');
+      btn1.disabled = true; btn2.disabled = true;
+      _setSuspectMsg(excluded ? '除外中…' : '解除中…');
+      try {
+        var r = await _callExcludeCf(ids, excluded);
+        _setSuspectMsg(
+          (excluded ? '⛔ ' : '↩ ') + ids.length + ' session / 計 ' + r.updated + ' いいね を ' +
+          (excluded ? '除外しました' : '集計に戻しました'),
+          '#0b8043');
+        recompute();
+      } catch (e) {
+        console.error('excludeSelected failed:', e);
+        _setSuspectMsg('失敗: ' + (e.message || e), '#d93025');
+      } finally {
+        btn1.disabled = false; btn2.disabled = false;
+      }
+    }
+
+    async function excludeManual(excluded) {
+      var input = document.getElementById('manualSessionIdInput');
+      var sid = (input.value || '').trim();
+      if (!sid) { _setSuspectMsg('sessionId を入力してください', '#d93025'); return; }
+      if (!/^[A-Za-z0-9_-]+$/.test(sid)) {
+        _setSuspectMsg('sessionId は英数・- _ のみ', '#d93025');
+        return;
+      }
+      _setSuspectMsg(excluded ? '除外中…' : '解除中…');
+      try {
+        var r = await _callExcludeCf([sid], excluded);
+        _setSuspectMsg(
+          (excluded ? '⛔ ' : '↩ ') + 'session ' + sid + ' の ' + r.updated + ' いいねを ' +
+          (excluded ? '除外しました' : '集計に戻しました'),
+          '#0b8043');
+        input.value = '';
+        recompute();
+      } catch (e) {
+        console.error('excludeManual failed:', e);
+        _setSuspectMsg('失敗: ' + (e.message || e), '#d93025');
+      }
+    }
+
     function renderZeroLikeList(zeroList, totalArtworkCount) {
       var el = document.getElementById('zeroLikeList');
       if (totalArtworkCount === 0) {
@@ -789,6 +1010,13 @@
         } else {
           artistSection.style.display = 'none';
         }
+
+        // Y 異常検知 (likes 全件、excluded 状態も拾う)
+        var suspects = window.DashboardMetrics.detectSuspectSessions(likes, artworks, {
+          openingAt: openingAt,
+          isGroupShow: kind === 'group',
+        });
+        renderSuspectArea(suspects);
 
       } catch (e) {
         console.error('recompute failed:', e);
