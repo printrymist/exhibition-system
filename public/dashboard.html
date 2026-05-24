@@ -278,7 +278,22 @@
   <div class="header">
     <div class="ex-name" id="exName">読み込み中...</div>
     <div class="updated-at" id="updatedAt"></div>
+    <div style="margin-top:10px;">
+      <a id="navAnalytics" href="analytics.html"
+         style="display:inline-block; padding:6px 14px; background:rgba(255,255,255,0.18); color:#fff; border:1px solid rgba(255,255,255,0.5); border-radius:8px; font-size:13px; text-decoration:none; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);">
+        📊 詳細分析
+      </a>
+    </div>
   </div>
+  <script>
+    (function () {
+      var ex = (new URLSearchParams(location.search).get('ex') || '').trim();
+      var link = document.getElementById('navAnalytics');
+      if (link && ex && /^[A-Za-z0-9_-]+$/.test(ex)) {
+        link.href = 'analytics.html?ex=' + encodeURIComponent(ex);
+      }
+    })();
+  </script>
 
   <div id="sandboxBadge" style="display:none;"></div>
 

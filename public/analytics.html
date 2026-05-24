@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>📊 詳細分析 - 展覧会システム</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: #1a2a4a;
+      padding: 24px;
+      max-width: 980px;
+      margin: 0 auto;
+      background: #f7f8fb;
+      line-height: 1.55;
+    }
+    h1 { font-size: 1.4em; margin: 0 0 4px; }
+    .subtitle { color: #666; font-size: 0.9em; margin-bottom: 18px; }
+    .header-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .header-nav a {
+      display: inline-block; padding: 6px 14px; background: white; color: #1a73e8;
+      border: 1px solid #1a73e8; border-radius: 8px; font-size: 13px; text-decoration: none;
+    }
+    .header-nav a:hover { background: #f0f7ff; }
+
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .auth-row button { padding: 10px 16px; background: #1a73e8; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 14px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+
+    .row { margin: 14px 0; }
+    select, button, input[type="datetime-local"] {
+      padding: 9px 12px; font-size: 14px; border-radius: 6px; border: 1px solid #ddd;
+      background: white; color: #1a2a4a;
+    }
+    button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; cursor: pointer; }
+    button.primary:hover:not(:disabled) { background: #1557b0; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+
+    .section {
+      background: white; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+      border: 1px solid #e6e8ef;
+    }
+    .section-title {
+      font-size: 1.05em; font-weight: bold; margin: 0 0 10px; color: #1a2a4a;
+      border-bottom: 1px solid #eee; padding-bottom: 6px;
+    }
+    .section-desc { font-size: 0.85em; color: #666; margin-bottom: 12px; }
+
+    .opening-at-banner {
+      background: #fff8e1; border: 1px solid #f0d875; border-radius: 8px;
+      padding: 12px 14px; margin-bottom: 12px; font-size: 0.9em;
+    }
+    .opening-at-banner strong { color: #7a5500; }
+
+    .metric-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0; align-items: baseline;
+    }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-label { color: #444; }
+    .metric-label .small { color: #888; font-size: 0.85em; margin-left: 6px; }
+    .metric-value {
+      font-variant-numeric: tabular-nums; color: #1a4f9c; font-weight: bold; font-size: 1.05em;
+    }
+    .metric-sub { color: #888; font-size: 0.85em; font-weight: normal; margin-left: 6px; }
+
+    .tier-grid {
+      display: grid; grid-template-columns: 1fr; gap: 6px;
+    }
+    .tier-item {
+      display: grid; grid-template-columns: 1fr auto; padding: 6px 0;
+      border-bottom: 1px dashed #f0f0f0;
+    }
+    .tier-item:last-child { border-bottom: none; }
+    .tier-name { color: #444; }
+    .tier-name .desc { color: #888; font-size: 0.85em; margin-left: 6px; }
+    .tier-value { font-variant-numeric: tabular-nums; color: #1a4f9c; font-weight: bold; }
+
+    .meta-row { font-size: 0.85em; color: #888; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+    .empty { padding: 24px; text-align: center; color: #999; background: #fafafa; border-radius: 6px; }
+    .save-msg { font-size: 0.85em; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+  <h1>📊 詳細分析</h1>
+  <div class="subtitle">visitor の関与パターンを「人数ベース」「行動パターンベース」で見る画面 (詳細はマニュアル参照)。</div>
+
+  <div class="header-nav">
+    <a id="navDashboard" href="dashboard.html">📈 ライブ表示</a>
+    <a id="navReports" href="reports.html">📤 出力・レポート</a>
+  </div>
+
+  <!-- 認証カード -->
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">主催者ログイン</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">展覧会を申し込んだ際のメールアドレスを入力してください。</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <!-- メインエリア -->
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+
+    <div class="row">
+      <label>展覧会:
+        <select id="exSelect" onchange="onExChange()"></select>
+      </label>
+      <button class="primary" onclick="recompute()" style="margin-left:8px;">🔄 更新</button>
+    </div>
+
+    <div id="contentArea" style="display:none;">
+
+      <!-- ④ opening_at 設定 -->
+      <div class="section">
+        <div class="section-title">⏱️ 集計対象の時刻フィルタ (任意設定)</div>
+        <div class="section-desc">
+          会期開始時刻を設定すると、それより前のいいね (= 会期前テスト) を集計から自動で除外できます。<br>
+          未設定でも問題ありません。会期前にテストいいねを大量に押した場合や、会期中・会期後にデータを綺麗にしたいときに設定してください。
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="datetime-local" id="openingAtInput" style="font-family:inherit;">
+          <button class="primary" id="btnSaveOpeningAt" onclick="saveOpeningAt()">保存</button>
+          <button onclick="clearOpeningAt()">クリア</button>
+          <span id="openingAtSaveMsg" class="save-msg"></span>
+        </div>
+        <div id="openingAtBanner" class="opening-at-banner" style="display:none; margin-top:10px;"></div>
+      </div>
+
+      <!-- visitor の質 (V-1 / V-2 / V-3) -->
+      <div class="section">
+        <div class="section-title">👥 visitor の質</div>
+        <div class="section-desc">
+          いいね数ではなく、「visitor がどれだけ深く関与したか」を測る指標。
+          出展作品数で歪まないよう <strong>likes はカバー率 (= visitor の押したいいね数 ÷ 出展作品数)</strong> で集計。
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            コメント率
+            <span class="small">(コメントを残した visitor / いいねを押した visitor)</span>
+          </div>
+          <div class="metric-value" id="metricCommentRate">―</div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            平均コメント長 (中央値)
+            <span class="small">(絵文字 1 字、前後空白除外)</span>
+          </div>
+          <div class="metric-value" id="metricCommentLength">―</div>
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:6px;">
+            関与の段階 (3 段階)
+            <span class="small">出展数: <span id="artworkCountSub">―</span> 作品</span>
+          </div>
+          <div class="tier-grid">
+            <div class="tier-item">
+              <div class="tier-name">
+                ≥1 like
+                <span class="desc">(反応した = いいねを押した visitor)</span>
+              </div>
+              <div class="tier-value" id="tier1">―</div>
+            </div>
+            <div class="tier-item">
+              <div class="tier-name">
+                ≥10% カバー
+                <span class="desc">(ハマった = 複数作品に深く反応)</span>
+              </div>
+              <div class="tier-value" id="tier2">―</div>
+            </div>
+            <div class="tier-item">
+              <div class="tier-name">
+                ≥30% カバー
+                <span class="desc">(沈み込んだ = 大きく投資)</span>
+              </div>
+              <div class="tier-value" id="tier3">―</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="meta-row">
+          <span id="metricMeta">―</span>
+          <span id="lastUpdated">―</span>
+        </div>
+      </div>
+
+      <div class="empty" id="loadingMsg" style="display:none;">読み込み中…</div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="js/dashboard-metrics.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var exMap = {};         // ex_code -> exhibitions doc
+    var currentEx = '';
+
+    // ===== Helpers =====
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+    function fmtPct(v) {
+      if (!isFinite(v)) return '―';
+      return (v * 100).toFixed(1) + '%';
+    }
+    function fmtNum(v) {
+      if (!isFinite(v)) return '―';
+      return Math.round(v * 10) / 10;
+    }
+    function fmtDateTime(d) {
+      try { return new Date(d).toLocaleString('ja-JP', { hour12: false }); } catch (e) { return ''; }
+    }
+    // ISO 8601 文字列 → datetime-local input value (YYYY-MM-DDTHH:MM)
+    function toLocalInputValue(iso) {
+      if (!iso) return '';
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+        + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    // ===== 展覧会選択 =====
+    async function loadExhibitionsForUser(userEmail) {
+      var sel = document.getElementById("exSelect");
+      sel.innerHTML = '';
+      exMap = {};
+      document.getElementById('contentArea').style.display = 'none';
+      if (!userEmail) return;
+      try {
+        var normalized = userEmail.trim().toLowerCase();
+        var snap = await db.collection("exhibitions")
+          .where("email", "==", normalized)
+          .get();
+        snap.docs.forEach(function(d){
+          var data = d.data();
+          exMap[d.id] = data;
+          var label = (data.ex_name || "(名称未設定)") + " (" + d.id + ")";
+          var opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+        if (snap.docs.length === 0) {
+          sel.innerHTML = '<option value="">主催する展覧会がありません</option>';
+          return;
+        }
+        var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+        if (urlEx && exMap[urlEx]) sel.value = urlEx;
+        onExChange();
+      } catch (e) {
+        console.error('loadExhibitionsForUser failed:', e);
+        sel.innerHTML = '<option value="">読み込み失敗: ' + escapeHtml(e.message || e) + '</option>';
+      }
+    }
+
+    function onExChange() {
+      var ex = document.getElementById('exSelect').value;
+      currentEx = ex;
+      if (!ex || !exMap[ex]) {
+        document.getElementById('contentArea').style.display = 'none';
+        return;
+      }
+      // URL に反映
+      try {
+        var u = new URL(location.href);
+        u.searchParams.set('ex', ex);
+        window.history.replaceState({}, '', u.toString());
+      } catch (_e) {}
+      // header link に ex 引き継ぎ
+      document.getElementById('navDashboard').href = 'dashboard.html?ex=' + encodeURIComponent(ex);
+      document.getElementById('navReports').href = 'reports.html?ex=' + encodeURIComponent(ex);
+      // opening_at 入力欄を反映
+      var existing = (exMap[ex] && exMap[ex].opening_at) ? exMap[ex].opening_at : '';
+      document.getElementById('openingAtInput').value = toLocalInputValue(existing);
+      document.getElementById('contentArea').style.display = 'block';
+      recompute();
+    }
+
+    // ===== ④ opening_at の保存 =====
+    function _setSaveMsg(text, color) {
+      var el = document.getElementById('openingAtSaveMsg');
+      el.style.color = color || '#888';
+      el.innerText = text || '';
+    }
+    async function saveOpeningAt() {
+      if (!currentEx) return;
+      var btn = document.getElementById('btnSaveOpeningAt');
+      var input = document.getElementById('openingAtInput');
+      var v = input.value || '';
+      if (!v) { _setSaveMsg('日時を入力してください。', '#d93025'); return; }
+      // datetime-local の値はローカル時刻、ISO に変換
+      var iso = new Date(v).toISOString();
+      btn.disabled = true;
+      _setSaveMsg('保存中…');
+      try {
+        await db.collection('exhibitions').doc(currentEx).set({
+          opening_at: iso,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        if (!exMap[currentEx]) exMap[currentEx] = {};
+        exMap[currentEx].opening_at = iso;
+        _setSaveMsg('✅ 保存しました', '#0b8043');
+        setTimeout(function(){ _setSaveMsg(''); }, 2500);
+        recompute();
+      } catch (e) {
+        console.error('saveOpeningAt failed:', e);
+        _setSaveMsg('保存失敗: ' + (e.message || e), '#d93025');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function clearOpeningAt() {
+      if (!currentEx) return;
+      var btn = document.getElementById('btnSaveOpeningAt');
+      btn.disabled = true;
+      _setSaveMsg('クリア中…');
+      try {
+        // null 書き込みで取り消し (Firestore は null で field 値を消せる)
+        await db.collection('exhibitions').doc(currentEx).set({
+          opening_at: null,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+        if (exMap[currentEx]) exMap[currentEx].opening_at = '';
+        document.getElementById('openingAtInput').value = '';
+        _setSaveMsg('✅ クリアしました', '#0b8043');
+        setTimeout(function(){ _setSaveMsg(''); }, 2500);
+        recompute();
+      } catch (e) {
+        console.error('clearOpeningAt failed:', e);
+        _setSaveMsg('クリア失敗: ' + (e.message || e), '#d93025');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ===== 集計と表示 =====
+    async function recompute() {
+      if (!currentEx) return;
+      document.getElementById('loadingMsg').style.display = 'block';
+      try {
+        // artworks と likes を取得
+        var [aSnap, lSnap] = await Promise.all([
+          db.collection('artworks').where('exCode', '==', currentEx).get(),
+          db.collection('likes').where('exCode', '==', currentEx).get(),
+        ]);
+        var artworks = aSnap.docs.map(function(d){ return d.data(); });
+        var likes = lSnap.docs.map(function(d){ return d.data(); });
+
+        // 集計対象を絞る (opening_at + excluded_from_stats)
+        var openingAt = exMap[currentEx] ? exMap[currentEx].opening_at : '';
+        var filtered = window.DashboardMetrics.filterExcluded(
+          window.DashboardMetrics.filterByOpeningAt(likes, openingAt)
+        );
+
+        // opening_at バナー
+        var banner = document.getElementById('openingAtBanner');
+        if (openingAt) {
+          var excluded = likes.length - filtered.length;
+          banner.style.display = 'block';
+          banner.innerHTML = '⏱️ <strong>' + escapeHtml(fmtDateTime(openingAt)) + '</strong> より前のいいね <strong>'
+            + excluded + ' 件</strong> を集計から除外しています。';
+        } else {
+          banner.style.display = 'none';
+        }
+
+        // 出展数 (status=='1' のみ)
+        var artworkCount = window.DashboardMetrics.countRegisteredArtworks(artworks);
+        document.getElementById('artworkCountSub').innerText = String(artworkCount);
+
+        // V-1
+        var cr = window.DashboardMetrics.computeCommentRate(filtered);
+        document.getElementById('metricCommentRate').innerHTML =
+          fmtPct(cr.rate) + '<span class="metric-sub">(' + cr.commenterCount + ' / ' + cr.likerCount + ' 人)</span>';
+
+        // V-2
+        var cl = window.DashboardMetrics.computeMedianCommentLength(filtered);
+        document.getElementById('metricCommentLength').innerHTML =
+          (cl.count === 0 ? '―' : fmtNum(cl.median) + ' 字')
+          + '<span class="metric-sub">(' + cl.count + ' コメント)</span>';
+
+        // V-3
+        var et = window.DashboardMetrics.computeEngagementTiers(filtered, artworkCount);
+        document.getElementById('tier1').innerText = et.tier1 + ' 人';
+        if (artworkCount > 0) {
+          document.getElementById('tier2').innerText = fmtPct(et.tier2Rate) + ' (' + et.tier2 + ' 人)';
+          document.getElementById('tier3').innerText = fmtPct(et.tier3Rate) + ' (' + et.tier3 + ' 人)';
+        } else {
+          document.getElementById('tier2').innerText = '出展数 0 のため計算不能';
+          document.getElementById('tier3').innerText = '出展数 0 のため計算不能';
+        }
+
+        // メタ
+        document.getElementById('metricMeta').innerText =
+          '対象: いいね ' + filtered.length + ' 件 / 全 ' + likes.length + ' 件 / 出展 ' + artworkCount + ' 作品';
+        document.getElementById('lastUpdated').innerText = '最終更新: ' + fmtDateTime(new Date());
+
+      } catch (e) {
+        console.error('recompute failed:', e);
+        document.getElementById('metricMeta').innerText = 'エラー: ' + (e.message || e);
+      } finally {
+        document.getElementById('loadingMsg').style.display = 'none';
+      }
+    }
+  </script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) {
+          if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8');
+        })
+        .catch(function (err) {
+          console.warn('completeSignInIfNeeded failed:', err);
+          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+        });
+      window.operatorAuth.onAuthChange(function (user, isOp) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && user.email) {
+          if (statusEl) {
+            statusEl.innerHTML = '🔓 ' + user.email + ' でログイン中 ' +
+              '<a href="#" onclick="window.operatorAuth.signOut();return false;" style="color:#1a73e8;margin-left:8px;text-decoration:underline;">ログアウト</a>';
+            statusEl.style.display = 'block';
+          }
+          authCard.style.display = 'none';
+          mainArea.style.display = 'block';
+          loadExhibitionsForUser(user.email);
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          if (statusEl) statusEl.style.display = 'none';
+        }
+      });
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () {
+            btn.disabled = false;
+            setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8');
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          });
+      };
+    })();
+  </script>
+  <div id="versionFooter"></div>
+  <script src="version.js"></script>
+  <script>renderVersionFooter();</script>
+</body>
+</html>
