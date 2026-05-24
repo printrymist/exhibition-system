@@ -526,6 +526,7 @@
     .tpl-mockup .tpl-qr-marker::before { content: "QR"; }
 
     .tpl-mockup[data-qr-pos="top-left"]      .tpl-qr-marker { top: 4px; left: 4px; }
+    .tpl-mockup[data-qr-pos="top-center"]    .tpl-qr-marker { top: 4px; left: 50%; transform: translateX(-50%); }
     .tpl-mockup[data-qr-pos="top-right"]     .tpl-qr-marker { top: 4px; right: 4px; }
     .tpl-mockup[data-qr-pos="bottom-left"]   .tpl-qr-marker { bottom: 4px; left: 4px; }
     .tpl-mockup[data-qr-pos="bottom-right"]  .tpl-qr-marker { bottom: 4px; right: 4px; }
@@ -1328,6 +1329,7 @@
             <select id="qrPosition" onchange="onQrPositionChange()">
               <optgroup label="固定配置">
                 <option value="top-left">左上</option>
+                <option value="top-center">上中央</option>
                 <option value="top-right">右上</option>
                 <option value="bottom-left">左下</option>
                 <option value="bottom-right" selected>右下</option>
@@ -1601,6 +1603,17 @@
               </div>
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_print')">📥 採用</button>
+          </div>
+          <div class="template-card official" id="tpl_official_qronly" onclick="selectTemplate('official_qronly')"
+            data-description="作品横に QR シールだけ貼る NY ギャラリー風オプション。25mm QR + 作品番号のみ、A4 縦に 30 枚 (5×6)。キャプション情報はスマホ側で表示。紙キャプを置きたくない / 作品との視覚干渉を最小化したい主催者向け。">
+            <h4>📍 QR のみ (NY スタイル)</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="top-center" style="display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:14px;">
+                <div class="tpl-qr-marker" style="position:relative; top:auto; left:auto; transform:none; width:38px; height:38px; font-size:10px;"></div>
+                <div style="font-size:7px;color:#888;margin-top:6px;">A-001</div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_qronly')">📥 採用</button>
           </div>
 
           <!-- ベース (PRESETS) — 同じ template-grid 内で続く。
@@ -3127,6 +3140,7 @@
       } else {
         // 作品データ未登録時の preview 用ダミー作品
         const dummyArt = {
+          artwork_id: 'A-001',
           title: '作品タイトル',
           title_en: 'Artwork Title',
           artist: '作家名',
@@ -3139,7 +3153,7 @@
           price_framed: '120000',
           qr_url: 'https://rohei-printer-system.web.app/'
         };
-        const dummyHeaders = ['title','title_en','artist','artist_en','year','technique','material','size','price','price_framed'];
+        const dummyHeaders = ['artwork_id','title','title_en','artist','artist_en','year','technique','material','size','price','price_framed'];
         // 公式テンプレ選択中なら、そのテンプレ用のサンプル作品データをダミーにマージ
         // (撮影地・撮影年・カメラ など、ダミーに無いフィールドを補う)
         const tplKey = currentTemplate || '';
@@ -3487,6 +3501,10 @@
       switch (pos) {
         case 'top-left':
           qrStyle += `top:calc(${offset}mm + ${dims.qrMV});left:${dims.qrMH};`;
+          textPadTop = `padding-top:calc(${offset}mm + ${dims.qrMV} + ${dims.qrSizeMm} + 1mm);`;
+          break;
+        case 'top-center':
+          qrStyle += `top:calc(${offset}mm + ${dims.qrMV});left:50%;transform:translateX(-50%);`;
           textPadTop = `padding-top:calc(${offset}mm + ${dims.qrMV} + ${dims.qrSizeMm} + 1mm);`;
           break;
         case 'top-right':

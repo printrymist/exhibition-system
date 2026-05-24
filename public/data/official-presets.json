@@ -256,6 +256,25 @@
         { "type": "field", "name": "price",        "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "",        "suffix": "", "affixScale": 0.75 },
         { "type": "field", "name": "price_framed", "size": 10, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "framed: ", "suffix": "", "affixScale": 0.75 }
       ]
+    },
+
+    "official_qronly": {
+      "label": "📍 QR のみ (NY スタイル)",
+      "tagline": "QR シールだけを作品横に。キャプション情報はスマホで表示。",
+      "size": "36×44mm — A4 縦に 30 枚 (5×6)",
+      "qrPosition": "top-center",
+      "qrOffset": 0,
+      "textAlign": "center",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 5, "rows": 6,
+        "qrSize": 25, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 0, "textMarginRight": 0,
+        "fontFamily": "sans-serif"
+      },
+      "items": [
+        { "type": "field", "name": "artwork_id", "size": 6, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "", "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+      ]
     }
   },
 
@@ -352,6 +371,10 @@
       "size": "410×318mm",
       "price": "65000",
       "price_framed": "92000",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_qronly": {
+      "artwork_id": "A-001",
       "qr_url": "https://rohei-printer-system.web.app/?demo=1"
     }
   }
