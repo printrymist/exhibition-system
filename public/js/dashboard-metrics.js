@@ -314,6 +314,161 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // V-7 リピート率
+  // ─────────────────────────────────────────────────────────────
+  // 複数 session を持つ visitor の割合。session 分割ルールは
+  // computeSessionsByVisitor (gap > 2h or 日付跨ぎ) と同じ。
+  function computeRepeatRate(visitors) {
+    const ids = Object.keys(visitors);
+    if (ids.length === 0) return { repeatCount: 0, totalVisitors: 0, rate: 0 };
+    let repeat = 0;
+    ids.forEach(function (sid) {
+      if (visitors[sid].length >= 2) repeat++;
+    });
+    return {
+      repeatCount: repeat,
+      totalVisitors: ids.length,
+      rate: repeat / ids.length,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // V-8 作品多様性カバー
+  // ─────────────────────────────────────────────────────────────
+  // いいね ≥1 の作品 / 全出展作品 (status='1' のみ対象)
+  // 90% 超が標準、低いと「響かない作品が多い」シグナル。
+  function computeCoverageRate(artworks, likes) {
+    const registered = (artworks || []).filter(function (a) {
+      if (!a) return false;
+      const s = String(a.status == null ? '' : a.status).trim();
+      return s === '1';
+    });
+    if (registered.length === 0) return { covered: 0, total: 0, rate: 0 };
+    const liked = {};
+    likes.forEach(function (l) {
+      if (!l || !l.workId || !l.isLike) return;
+      liked[l.workId] = true;
+    });
+    let covered = 0;
+    registered.forEach(function (a) {
+      if (liked[a.artwork_id]) covered++;
+    });
+    return {
+      covered: covered,
+      total: registered.length,
+      rate: covered / registered.length,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // V-9 ロングテール度 (上位 20% 占有率 + 棒グラフ用ソート済データ)
+  // ─────────────────────────────────────────────────────────────
+  // 計算: 上位 20% (作品数 × 0.2 切り上げ、最低 1) の作品が
+  //       全いいねの何 % を占めるか。完全均等なら 20%、完全集中なら 100%。
+  // 補助: sortedCounts (作品別いいね数の降順配列、棒グラフ用)
+  function computeLongTailIndex(artworks, likes) {
+    const counts = {};
+    likes.forEach(function (l) {
+      if (!l || !l.workId || !l.isLike) return;
+      counts[l.workId] = (counts[l.workId] || 0) + 1;
+    });
+    const registered = (artworks || []).filter(function (a) {
+      if (!a) return false;
+      const s = String(a.status == null ? '' : a.status).trim();
+      return s === '1';
+    });
+    if (registered.length === 0) {
+      return { topShare: 0, topN: 0, totalArtworks: 0, totalLikes: 0, sortedCounts: [] };
+    }
+    const artworkLikes = registered.map(function (a) {
+      return {
+        artworkId: a.artwork_id,
+        title: a.title || '',
+        artist: a.artist || '',
+        count: counts[a.artwork_id] || 0,
+      };
+    });
+    artworkLikes.sort(function (a, b) { return b.count - a.count; });
+    const totalLikes = artworkLikes.reduce(function (sum, x) { return sum + x.count; }, 0);
+    const topN = Math.max(1, Math.ceil(registered.length * 0.2));
+    const topLikes = artworkLikes.slice(0, topN).reduce(function (sum, x) { return sum + x.count; }, 0);
+    return {
+      topShare: totalLikes === 0 ? 0 : topLikes / totalLikes,
+      topN: topN,
+      totalArtworks: registered.length,
+      totalLikes: totalLikes,
+      sortedCounts: artworkLikes,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 展覧会タイプ判定 (動的)
+  // ─────────────────────────────────────────────────────────────
+  // artworks の unique artist 数で判定。
+  //   1 人 → solo
+  //   2 人以上 → group
+  // 将来 fair 用には exhibitions.kind 列を追加するが、現状は無し。
+  function detectExhibitionKind(artworks) {
+    const set = {};
+    (artworks || []).forEach(function (a) {
+      if (!a) return;
+      const s = String(a.status == null ? '' : a.status).trim();
+      if (s !== '1') return;
+      const artist = String(a.artist || '').trim();
+      if (artist) set[artist] = true;
+    });
+    const n = Object.keys(set).length;
+    return n <= 1 ? 'solo' : 'group';
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // G-1 / G-3 / G-4 作家別集計 (グループ展用)
+  // ─────────────────────────────────────────────────────────────
+  // 戻り値:
+  //   artists: [{ artist, uniqueLiker, reachRate, avgDepth, totalLikes }, ...]
+  //   totalVisitorCount
+  // uniqueLiker  (G-1): その作家にいいねした unique sessionId
+  // reachRate    (G-3): uniqueLiker / 全 unique visitor
+  // avgDepth     (G-4): 該当 visitor が押した、その作家の作品いいね数の平均
+  function computeArtistReach(artworks, likes) {
+    const artworkToArtist = {};
+    (artworks || []).forEach(function (a) {
+      if (!a) return;
+      const s = String(a.status == null ? '' : a.status).trim();
+      if (s !== '1') return;
+      artworkToArtist[a.artwork_id] = String(a.artist || '').trim();
+    });
+    const artistVisitors = {};
+    const artistTotalLikes = {};
+    const allVisitors = {};
+    likes.forEach(function (l) {
+      if (!l || !l.workId || !l.isLike || !l.sessionId) return;
+      const artist = artworkToArtist[l.workId];
+      if (!artist) return;
+      if (!artistVisitors[artist]) artistVisitors[artist] = {};
+      artistVisitors[artist][l.sessionId] = true;
+      artistTotalLikes[artist] = (artistTotalLikes[artist] || 0) + 1;
+      allVisitors[l.sessionId] = true;
+    });
+    const totalVisitorCount = Object.keys(allVisitors).length;
+    const result = Object.keys(artistVisitors).map(function (artist) {
+      const reachCount = Object.keys(artistVisitors[artist]).length;
+      const totalLikes = artistTotalLikes[artist];
+      return {
+        artist: artist,
+        uniqueLiker: reachCount,
+        reachRate: totalVisitorCount === 0 ? 0 : reachCount / totalVisitorCount,
+        avgDepth: reachCount === 0 ? 0 : totalLikes / reachCount,
+        totalLikes: totalLikes,
+      };
+    }).sort(function (a, b) { return b.uniqueLiker - a.uniqueLiker; });
+    return {
+      artists: result,
+      totalVisitorCount: totalVisitorCount,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // export
   // ─────────────────────────────────────────────────────────────
   global.DashboardMetrics = {
@@ -329,5 +484,10 @@
     computeDeepVisitors: computeDeepVisitors,
     computeCommentRanking: computeCommentRanking,
     findZeroLikeArtworks: findZeroLikeArtworks,
+    computeRepeatRate: computeRepeatRate,
+    computeCoverageRate: computeCoverageRate,
+    computeLongTailIndex: computeLongTailIndex,
+    detectExhibitionKind: detectExhibitionKind,
+    computeArtistReach: computeArtistReach,
   };
 })(typeof window !== 'undefined' ? window : this);

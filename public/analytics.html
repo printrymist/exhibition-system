@@ -284,6 +284,14 @@
             </div>
           </div>
         </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            リピート率
+            <span class="small">(複数 session を持つ visitor / 全 visitor)</span>
+          </div>
+          <div class="metric-value" id="metricRepeatRate">―</div>
+        </div>
       </div>
 
       <!-- 作品単位 (W-3 / W-4) -->
@@ -301,12 +309,47 @@
           <div id="commentRanking" class="artwork-list"></div>
         </div>
 
+        <div class="metric-row">
+          <div class="metric-label">
+            作品多様性カバー
+            <span class="small">(いいね ≥1 の作品 / 全出展作品、90% 超が標準)</span>
+          </div>
+          <div class="metric-value" id="metricCoverageRate">―</div>
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:8px;">
+            ロングテール度
+            <span class="small">(上位 20% の作品が占めるいいね比率)</span>
+          </div>
+          <div id="longTailSummary" style="margin-bottom:8px;"></div>
+          <div id="longTailBars"></div>
+        </div>
+
+        <div class="metric-row" style="display:block;">
+          <div class="metric-label" style="margin-bottom:8px;">
+            💬 コメントが集中する作品 <span class="small">(上位 10 件)</span>
+          </div>
+          <div id="commentRanking" class="artwork-list"></div>
+        </div>
+
         <div class="metric-row" style="display:block; border-bottom:none;">
           <div class="metric-label" style="margin-bottom:8px;">
             🌑 いいね 0 の作品 <span class="small">(出展中で response 無し)</span>
           </div>
           <div id="zeroLikeList" class="artwork-list"></div>
         </div>
+      </div>
+
+      <!-- 作家別 (グループ展時のみ表示) -->
+      <div class="section" id="artistSection" style="display:none;">
+        <div class="section-title">🎭 作家別 (グループ展)</div>
+        <div class="section-desc">
+          グループ展では、作品ごとではなく <strong>作家単位</strong> での評価が重要。
+          リーチ (= 興味を持った visitor の人数) と平均深さ (= 1 visitor が押した数の平均) を併記。
+          単一の「人気作」よりも、作家への幅広い関心を捉える。
+        </div>
+        <div id="artistRanking" class="artwork-list"></div>
       </div>
 
       <div class="empty" id="loadingMsg" style="display:none;">読み込み中…</div>
@@ -521,6 +564,81 @@
       }).join('');
     }
 
+    function renderLongTailBars(lt) {
+      var container = document.getElementById('longTailBars');
+      var summary = document.getElementById('longTailSummary');
+      if (lt.totalArtworks === 0 || lt.totalLikes === 0) {
+        summary.innerHTML = '<span style="color:#888;">作品 / いいねがまだありません</span>';
+        container.innerHTML = '';
+        return;
+      }
+      // 解釈ラベル
+      var pct = lt.topShare * 100;
+      var label = '';
+      if (pct < 30) label = '非常にロングテール (均等評価)';
+      else if (pct < 50) label = '自然な分布';
+      else if (pct < 70) label = '看板作中心';
+      else label = '1-2 作品に極端集中';
+      summary.innerHTML =
+        '上位 20% (= ' + lt.topN + ' 作品) が <strong>' + fmtNum(pct) + '%</strong> を占有'
+        + ' <span style="color:#888;">— ' + escapeHtml(label) + '</span>';
+      // 各作品の棒グラフ (横並びでなく縦リストにする方が読みやすい)
+      var max = lt.sortedCounts[0] ? lt.sortedCounts[0].count : 1;
+      if (max === 0) max = 1;
+      // 全作品出すと長すぎるので、上位 15 件のみ + 残り集約
+      var head = lt.sortedCounts.slice(0, 15);
+      var tail = lt.sortedCounts.slice(15);
+      var html = head.map(function (item, i) {
+        var w = (item.count / max) * 100;
+        var title = item.title || '(タイトルなし)';
+        var artist = item.artist ? ' — ' + item.artist : '';
+        return '<div class="dist-bars" style="grid-template-columns: 200px 1fr 50px;">' +
+          '<div class="dist-bar-label" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' +
+            escapeHtml(title + artist) + '">' +
+            escapeHtml(title) + '<span style="color:#aaa; font-size:0.85em;">' + escapeHtml(artist) + '</span></div>' +
+          '<div class="dist-bar-track"><div class="dist-bar-fill" style="width:' + w + '%;"></div></div>' +
+          '<div class="dist-bar-count">' + item.count + '</div>' +
+          '</div>';
+      }).join('');
+      if (tail.length > 0) {
+        var tailTotal = tail.reduce(function (s, x) { return s + x.count; }, 0);
+        html += '<div style="color:#999; font-size:0.85em; padding:6px 0 0;">… 他 ' +
+          tail.length + ' 作品 (合計 ' + tailTotal + ' いいね)</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function renderArtistRanking(reach) {
+      var container = document.getElementById('artistRanking');
+      var artists = reach.artists;
+      if (!artists || artists.length === 0) {
+        container.innerHTML = '<div class="empty">該当する作家のいいねがまだありません</div>';
+        return;
+      }
+      // 棒グラフ用の max
+      var max = artists[0] ? artists[0].uniqueLiker : 1;
+      if (max === 0) max = 1;
+      container.innerHTML = artists.map(function (a, i) {
+        var rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        var reachPct = (a.reachRate * 100).toFixed(1);
+        var w = (a.uniqueLiker / max) * 100;
+        return '<div class="artwork-item" style="grid-template-columns: 40px 1fr 240px 70px;">' +
+          '<div class="artwork-rank ' + rankCls + '">' + (i + 1) + '.</div>' +
+          '<div class="artwork-title">' + escapeHtml(a.artist) +
+            '<span class="artwork-artist">' +
+            ' (平均 ' + fmtNum(a.avgDepth) + ' 作品 / 人, 計 ' + a.totalLikes + ' いいね)' +
+            '</span></div>' +
+          '<div class="dist-bar-track" style="height:14px;"><div class="dist-bar-fill" style="width:' + w + '%;"></div></div>' +
+          '<div class="artwork-count">' + a.uniqueLiker + ' 人 (' + reachPct + '%)</div>' +
+          '</div>';
+      }).join('') +
+        '<div class="zero-list-note" style="background:#e8f0ff; border-left-color:#1a73e8; color:#1a4f9c;">' +
+        '全 unique visitor: ' + reach.totalVisitorCount + ' 人。' +
+        '<strong>リーチ率</strong> = その作家にいいねした visitor / 全 unique visitor。' +
+        '同じ visitor が複数作家に複数いいねしても、各作家のリーチには「1」としか加算されない (= 人数ベース)。' +
+        '</div>';
+    }
+
     function renderZeroLikeList(zeroList, totalArtworkCount) {
       var el = document.getElementById('zeroLikeList');
       if (totalArtworkCount === 0) {
@@ -637,6 +755,22 @@
             fmtPct(deep.sunkRate) + ' (' + deep.sunkCount + ' 人)';
         }
 
+        // V-7 リピート率
+        var repeat = window.DashboardMetrics.computeRepeatRate(sessions);
+        document.getElementById('metricRepeatRate').innerHTML =
+          (repeat.totalVisitors === 0 ? '―' : fmtPct(repeat.rate))
+          + '<span class="metric-sub">(' + repeat.repeatCount + ' / ' + repeat.totalVisitors + ' 人)</span>';
+
+        // V-8 作品多様性カバー
+        var coverage = window.DashboardMetrics.computeCoverageRate(artworks, filtered);
+        document.getElementById('metricCoverageRate').innerHTML =
+          (coverage.total === 0 ? '―' : fmtPct(coverage.rate))
+          + '<span class="metric-sub">(' + coverage.covered + ' / ' + coverage.total + ' 作品)</span>';
+
+        // V-9 ロングテール度
+        var longTail = window.DashboardMetrics.computeLongTailIndex(artworks, filtered);
+        renderLongTailBars(longTail);
+
         // W-3 コメント付き作品ランキング
         var commentRank = window.DashboardMetrics.computeCommentRanking(filtered);
         renderArtworkList('commentRanking', commentRank.slice(0, 10), artworks, 'commentCount', '件');
@@ -644,6 +778,17 @@
         // W-4 いいね 0 作品リスト
         var zeroList = window.DashboardMetrics.findZeroLikeArtworks(artworks, filtered);
         renderZeroLikeList(zeroList, artworkCount);
+
+        // 展覧会タイプ判定 + G 系作家別 (グループ展時のみ表示)
+        var kind = window.DashboardMetrics.detectExhibitionKind(artworks);
+        var artistSection = document.getElementById('artistSection');
+        if (kind === 'group') {
+          var reach = window.DashboardMetrics.computeArtistReach(artworks, filtered);
+          renderArtistRanking(reach);
+          artistSection.style.display = 'block';
+        } else {
+          artistSection.style.display = 'none';
+        }
 
       } catch (e) {
         console.error('recompute failed:', e);
