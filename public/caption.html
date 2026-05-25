@@ -3196,15 +3196,24 @@
         return;
       }
 
-      printHtml = buildPrintHtml(settings);
+      // QR-only テンプレでは「スマホで見える caption」をプレビューする
+      // (= 主催者が設計対象としてイメージしている画面)。紙に印刷されるのは
+      // QR シールだけだが、それは print-note で別途案内する。
+      const isQrOnly = currentTemplate === 'official_qronly';
+      printHtml = isQrOnly ? buildPhonePreviewHtml(settings) : buildPrintHtml(settings);
       artworkData = tempData;
 
       const frame = document.getElementById('previewFrame');
       const placeholder = document.getElementById('previewPlaceholder');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
-        const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
-        showOverflowWarning(overflow);
+        if (!isQrOnly) {
+          const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
+          showOverflowWarning(overflow);
+        } else {
+          // phone preview ではカード overflow は概念上発生しない
+          showOverflowWarning([]);
+        }
         // 初回 generate 後、placeholder を消して iframe を表示
         if (placeholder) placeholder.style.display = 'none';
         frame.style.display = 'block';
@@ -3365,10 +3374,9 @@
 
     // 1作品分の本文 (s.items を field / group / divider / spacer 別に HTML 化)
     function buildContent(s, art) {
-      // QR-only テンプレでは、items[] は **スマホ側 caption mode** で表示するための定義。
-      // 紙には QR シールだけを印刷したいので、紙描画時は text 部分を完全に空にする。
-      // items[] の編集は Custom タブで通常通り可能 (= スマホ caption の見た目を編集)。
-      if (currentTemplate === 'official_qronly') return '';
+      // items[] を HTML 化する。紙 / スマホ preview / 本番 caption mode で共通。
+      // QR-only の「紙には text 出さない」分岐は buildCard 側で処理 (= ここでは
+      // 必ず items を返す。phone preview / caption mode が items を取り出して使うため)。
       let html = '';
       s.items.forEach(item => {
         if (item.type === 'field') {
@@ -3492,7 +3500,9 @@
     function buildCard(s, dims, art) {
       const pos = s.qrPosition;
       const offset = s.qrOffset;
-      const content = buildContent(s, art);
+      // QR-only テンプレ: 紙には QR シールのみ印刷。items[] は phone preview /
+      // caption mode 用なので、ここでは text を空に。
+      const content = (currentTemplate === 'official_qronly') ? '' : buildContent(s, art);
       const qrImg = buildQrImg(s, dims, art);
       const ftHtml = s.fixedText
         ? `<div style="${buildFixedTextStyle(s.fixedText)}">${escapeHtmlAttr(s.fixedText.value)}</div>`
@@ -3540,6 +3550,100 @@
   <div style="${qrStyle}">${qrImg}</div>
   ${textDiv}
 </div>`;
+    }
+
+    // QR-only テンプレで preview に表示するスマホモックアップ HTML を生成。
+    // items[] を render し、来場者がスマホで実際に見る画面を再現する。
+    // 画像プレースホルダ + items + 「いいね & 感想」カードのモック を含む。
+    // 印刷用ではないので、印刷ボタン押下時は buildPrintHtml を別途呼ぶ。
+    function buildPhonePreviewHtml(s) {
+      // 表示用作品: 既存の artworkData の 1 件目を使う (preview の dummyArt が
+      // 既に generatePreview で artworkData に setup 済)
+      const art = (artworkData && artworkData.artworks && artworkData.artworks[0]) || {};
+      const itemsHtml = buildContent(s, art);
+      const imgUrl = art.image_url || '';
+      const imgHtml = imgUrl
+        ? `<img src="${escapeHtmlAttr(imgUrl)}" style="width:100%;border-radius:8px;display:block;margin-bottom:16px;">`
+        : `<div style="width:100%;height:200px;background:linear-gradient(135deg,#e8e8e8,#c0c0c0);display:flex;align-items:center;justify-content:center;border-radius:8px;color:#888;margin-bottom:16px;font-size:14px;">[作品画像]</div>`;
+      return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  background: #ececf0;
+  padding: 16px;
+  color: #222;
+}
+.phone-frame {
+  max-width: 360px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 18px 16px 20px;
+  overflow: hidden;
+}
+.cap-items { line-height: 1.5; margin-bottom: 6px; }
+.cap-items > div { overflow-wrap: break-word; word-break: break-word; }
+.cap-items hr { border: none; border-top: 1px solid #ddd; margin: 8px 0; }
+.like-mockup {
+  margin-top: 20px;
+  background: linear-gradient(135deg, #fff5f7 0%, #ffe8ec 100%);
+  border: 2px solid #f8b4c0;
+  border-radius: 16px;
+  padding: 18px 18px 14px;
+  text-align: center;
+}
+.like-mockup .heart {
+  font-size: 36px;
+  color: #e91e63;
+  filter: drop-shadow(0 2px 4px rgba(233, 30, 99, 0.3));
+}
+.like-mockup .label {
+  font-size: 0.95em;
+  font-weight: bold;
+  color: #ad1457;
+  margin: 4px 0 12px;
+}
+.like-mockup .form-mock {
+  text-align: left;
+  background: white;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.85em;
+  color: #999;
+}
+.print-note {
+  max-width: 360px;
+  margin: 14px auto 0;
+  background: #fff8e1;
+  border: 1px solid #f0d875;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.82em;
+  color: #7a5500;
+  line-height: 1.55;
+}
+.print-note strong { color: #5a4000; }
+</style></head><body>
+<div class="phone-frame">
+  ${imgHtml}
+  <div class="cap-items">${itemsHtml}</div>
+  <div class="like-mockup">
+    <div class="heart">❤</div>
+    <div class="label">いいね & 感想を送る</div>
+    <div class="form-mock">ニックネーム (任意)</div>
+    <div class="form-mock" style="height:60px;margin-top:6px;">作品の感想をどうぞ！</div>
+    <div style="background:#222;color:white;padding:8px;border-radius:8px;font-size:0.85em;margin-top:8px;">感想を送って「いいね」</div>
+  </div>
+</div>
+<div class="print-note">
+  📄 紙に印刷されるのは <strong>QR シール 30 枚 / A4 1 枚</strong> のみです。<br>
+  上の表示は来場者が QR シールをスキャンしたときに <strong>スマホで見る画面</strong> のプレビューです。<br>
+  Custom タブで items を編集すると、ここの表示が変わります。
+</div>
+</body></html>`;
     }
 
     function buildPrintHtml(s) {
@@ -3648,8 +3752,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     }
 
     function openPrint() {
+      // 印刷は常に紙レイアウト (paper) を出力。QR-only でも preview とは別に
+      // paper 版を再生成する (preview は phone モックアップを表示しているため)。
+      const settings = getSettings();
+      const paperHtml = buildPrintHtml(settings);
       const win = window.open('', '_blank');
-      win.document.write(printHtml);
+      win.document.write(paperHtml);
       win.document.close();
       setTimeout(function () {
         autoFitText(win.document, win);
