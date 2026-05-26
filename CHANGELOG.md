@@ -11,6 +11,61 @@
 
 ---
 
+## v0.11.0 — 2026-05-26
+
+### 新機能: QR のみキャプション (NY ギャラリースタイル)
+
+紙キャプションの代わりに **小さな QR シール** を作品横に貼り、来場者が QR をスキャンすると **スマホでリッチな作品情報** + いいね/コメントが見える運用を追加。NY 系ギャラリーの「作品優先・説明排除」スタイルや、印刷コストを最小化したい主催者向け。
+
+**新しい仕組み**:
+
+- **公式テンプレ「📍 QR のみ (NY スタイル)」** を caption.html のテンプレ一覧に追加
+- **paperMode 設定** (Page タブ、全テンプレ共通):
+  - `full` (デフォルト): 紙にキャプション + QR (= 従来の挙動、変化なし)
+  - `qr_only`: 紙には QR シールだけ、スマホで詳細表示
+- どの公式テンプレも paperMode を切替えて「キャプション → QR シール運用」に転用可能 (例: 個展推奨で paperMode='qr_only' を選ぶ)
+- **QR シールラベル** (Page タブの 5 択 select、qr_only 時のみ表示):
+  - なし (QR のみ、QR をカード中央配置で間延び解消)
+  - 作家名 / 作品 ID / 作家 + 作品 ID (default) / タイトル + 作家
+- **Custom タブの items[] の意味が paperMode で切替わる**:
+  - full モード時: 紙キャプションのデザイン (従来)
+  - qr_only モード時: **スマホ画面 (= 来場者が見るキャプション)** のデザイン
+
+**スマホ画面 (index.html caption mode)**:
+
+- URL `?caption=1` (QR-only モードの QR シールに自動付与) で起動
+- 画像 + items[] driven の作品情報 + ピンクの「いいね & 感想を送る」カード
+- 紙キャプと同じ design language (font-size pt / bold / italic / divider / spacer / group / between 等) でスマホに表示
+
+**preview の UX**:
+
+- preview エリアにタブ追加: 「📄 紙印刷」/「📱 スマホ caption」
+- paperMode='full' のときはスマホタブを **非表示** (= 普通の紙キャプ運用者は混乱しない)
+- paperMode='qr_only' のときだけ両タブが見えて、デフォルトはスマホ caption
+
+**reports.html ハブカードに「📊 詳細分析」を追加** (v0.10.0 の流れで動線整備)
+
+### 内部変更
+
+- `field-defs.js` に `artwork_id` を `isSystem: true` フィールドとして追加
+  - register.html の項目選択グリッドからは除外 (operator は入力しない)
+  - caption.html の +Add メニューには表示 (ラベルとして使える)
+  - isFieldVisible / PRESETS fallback / adoptTemplate で isSystem を考慮
+- cols/rows select の選択肢を拡張 (cols: 1-6 / rows: 2-10) — QR-only の 5×6 等に対応
+- `computePrintDims` の perPage に NaN フォールバック (= 二度と「シール 0 枚」事故が起きない安全装置)
+- `top-center` qrPosition を新規追加 (上中央配置)
+- `center` qrPosition を追加 (QR-only でラベル無しの時の縦横中央配置)
+- items[] を render する際、preset / caption_templates の双方で
+  `isFieldVisible` が isSystem を許容するよう統一
+
+### バグ修正
+
+- caption.html の getSettings が「タブ active かどうか」で items の source を分岐していたバグ — fieldsGrid に項目があれば常に DOM の現状を真とする
+- グループの両端揃え (justify-between) を追加 (= タイトル左 / 作家右 のような同行配置)
+- paperMode='qr_only' で cols/rows が select に無い値だったため `select.value=""` → NaN → 紙印刷プレビュー空白だった件
+
+---
+
 ## v0.10.0 — 2026-05-25
 
 ### 新機能: 詳細分析画面 (`analytics.html`)
