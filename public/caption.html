@@ -3733,6 +3733,10 @@ body {
 
     function buildPrintHtml(s) {
       const dims = computePrintDims(s);
+      // DEBUG: artwork 数とアイテム数を可視化 (運用時は削除予定)
+      const _dbgArtCount = (artworkData && artworkData.artworks) ? artworkData.artworks.length : -1;
+      const _dbgItemCount = (s.items || []).length;
+      const _dbgBanner = `<div style="background:#fffacd;color:#5a4000;padding:6px 12px;font:bold 12px sans-serif;border-bottom:2px solid #d4a83a;">[DEBUG] paperMode=${s.paperMode || 'undefined'} / artworks=${_dbgArtCount} / items=${_dbgItemCount}</div>`;
       const cards = artworkData.artworks.map(art => buildCard(s, dims, art));
       const pages = [];
       for (let i = 0; i < cards.length; i += dims.perPage) pages.push(cards.slice(i, i + dims.perPage));
@@ -3788,6 +3792,7 @@ body { font-family:${s.fontFamily}; background:white; }
   .auto-fit[data-overflow="true"] { background: transparent; outline: none; }
 }
 </style></head><body>
+${_dbgBanner}
 ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 </body></html>`;
     }
