@@ -3147,11 +3147,17 @@
       // 行が無いのは初期状態のみ — その時だけ PRESETS にフォールバック。
       const grid = document.getElementById('fieldsGrid');
       const hasGridItems = grid && topLevelRows(grid).length > 0;
+      // PRESETS fallback の filter も isSystem field (artwork_id 等) は常に通す
+      const _fieldVisibleForFallback = (name) => {
+        const def = (typeof FIELD_MAP !== 'undefined') ? FIELD_MAP[name] : null;
+        if (def && def.isSystem) return true;
+        return artworkData && artworkData.headers && artworkData.headers.includes(name);
+      };
       const items = hasGridItems
         ? collectItems()
         : (PRESETS[currentTemplate]
             ? PRESETS[currentTemplate].items.filter(item =>
-                item.type !== 'field' || (artworkData && artworkData.headers.includes(item.name))
+                item.type !== 'field' || _fieldVisibleForFallback(item.name)
               )
             : []);
       const paperModeEl = document.getElementById('paperMode');
