@@ -262,6 +262,7 @@
       "label": "📍 QR のみ (NY スタイル)",
       "tagline": "QR シールだけを作品横に。キャプション情報はスマホで表示。",
       "size": "36×44mm — A4 縦に 30 枚 (5×6)",
+      "paperMode": "qr_only",
       "qrPosition": "top-center",
       "qrOffset": 0,
       "textAlign": "left",

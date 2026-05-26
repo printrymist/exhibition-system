@@ -1267,6 +1267,17 @@
         <span>🖨️ Preview</span>
         <span id="previewStatus" style="font-size:0.75em;color:#888;font-weight:normal;"></span>
       </div>
+      <!-- Preview タブ (紙印刷 / スマホ caption の切替) -->
+      <div id="previewTabs" style="display:flex;gap:0;margin-bottom:8px;border-bottom:2px solid #e0e0e0;">
+        <button type="button" class="preview-tab" id="previewTabPaper" onclick="switchPreviewTab('paper')"
+          style="padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-size:0.88em;color:#888;font-weight:normal;">
+          📄 紙印刷
+        </button>
+        <button type="button" class="preview-tab" id="previewTabPhone" onclick="switchPreviewTab('phone')"
+          style="padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-size:0.88em;color:#888;font-weight:normal;">
+          📱 スマホ caption
+        </button>
+      </div>
       <div id="previewPlaceholder"
         style="padding:50px 16px;text-align:center;color:#888;background:#f7f7f9;border:1px dashed #ccc;border-radius:8px;font-size:0.92em;line-height:1.6;">
         設定を調整すると、印刷物のプレビューがここに表示されます。<br>
@@ -1292,6 +1303,16 @@
 
       <!-- ページ設定タブ: 用紙 / レイアウト / QR / 余白 / 固定文 -->
       <div id="pageTab" style="display:none;">
+        <!-- 紙の出力モード: 全テンプレ共通の orthogonal な選択 -->
+        <div class="layout-row" style="margin-bottom:8px;">
+          <div class="layout-item" style="flex:1;">
+            <label>紙の出力モード</label>
+            <select id="paperMode" onchange="onPaperModeChange()" style="width:100%;">
+              <option value="full" selected>キャプション + QR を印刷 (通常)</option>
+              <option value="qr_only">QR シールのみ印刷 (情報はスマホ表示)</option>
+            </select>
+          </div>
+        </div>
         <div class="layout-row">
           <div class="layout-item">
             <label>用紙</label>
@@ -1713,11 +1734,12 @@
         <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
           ↑↓ で並び替え · チェックで表示 · ＋ で挿入
         </p>
-        <!-- QR-only テンプレ採用中の補助 hint -->
+        <!-- paperMode='qr_only' のときの補助 hint -->
         <div id="qrOnlyHint" style="display:none; background:#fff8e1; border:1px solid #f0d875; border-radius:8px; padding:10px 14px; font-size:0.85em; color:#7a5500; margin-bottom:12px; line-height:1.55;">
-          📍 <strong>QR のみ (NY スタイル)</strong> 採用中。<br>
+          📄 紙の出力モード <strong>「QR シールのみ」</strong> 中。<br>
           ここで編集する項目は <strong>スマホ画面</strong> に表示されます (来場者が QR シールをスキャンしたときの見た目)。<br>
-          紙には QR シールだけが印刷されます (項目は印刷されない)。
+          紙には QR シールだけが印刷されます (項目は印刷されない)。<br>
+          <span style="color:#888;">通常の紙キャプ印刷に戻すには Page タブで「キャプション + QR を印刷」に切替。</span>
         </div>
         <div class="fields-list" id="fieldsGrid"></div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
@@ -2311,10 +2333,6 @@
       const card = document.getElementById('tpl_' + name);
       if (card) card.classList.add('selected');
 
-      // QR-only テンプレ採用時の Custom タブ hint 表示切替
-      const qrHint = document.getElementById('qrOnlyHint');
-      if (qrHint) qrHint.style.display = (name === 'official_qronly') ? 'block' : 'none';
-
       // 構造プレビュー (小) は常に更新 — クリックでテンプレの中身を比較する用途
       const sourcePreview = card ? card.querySelector('.template-preview') : null;
       const dest = document.getElementById('selectedTplPreview');
@@ -2336,10 +2354,16 @@
         document.getElementById('qrPosition').value = p.qrPosition;
         document.getElementById('qrOffset').value = p.qrOffset || 0;
         document.getElementById('textAlign').value = p.textAlign;
+        // テンプレに paperMode が指定されていればそれを採用、無ければ 'full' (現状互換)
+        const paperModeEl = document.getElementById('paperMode');
+        if (paperModeEl) paperModeEl.value = p.paperMode || 'full';
+        // adopt 時はプレビュータブの explicit 選択を解放 (paperMode に応じた default に戻す)
+        _previewTabExplicit = null;
         // テンプレに pageSettings ブロックがあれば用紙サイズ・列数・余白などもまとめて反映する。
         // テンプレ無指定のフィールドは現状値を維持 (backwards compat)。
         applyPageSettings(p.pageSettings);
         onQrPositionChange();
+        updatePaperModeHint();
         schedulePreviewUpdate();
       }
     }
@@ -3122,6 +3146,7 @@
                 item.type !== 'field' || (artworkData && artworkData.headers.includes(item.name))
               )
             : []);
+      const paperModeEl = document.getElementById('paperMode');
       return {
         paperSize: document.getElementById('paperSize').value,
         cols: parseInt(document.getElementById('cols').value),
@@ -3138,8 +3163,23 @@
         qrMarginV: parseInt(document.getElementById('qrMarginV').value),
         fixedText: getFixedText(),
         fontFamily: document.getElementById('fontFamily').value,
+        paperMode: (paperModeEl && paperModeEl.value) || 'full',
         items: items
       };
+    }
+
+    // paperMode 変更時: ヒント表示の切替 + preview 再描画
+    function onPaperModeChange() {
+      updatePaperModeHint();
+      schedulePreviewUpdate();
+    }
+
+    // 「QR シールのみ」モード時に出すヒント (Custom タブの上に表示)
+    function updatePaperModeHint() {
+      const el = document.getElementById('qrOnlyHint');
+      if (!el) return;
+      const mode = (document.getElementById('paperMode') || {}).value || 'full';
+      el.style.display = (mode === 'qr_only') ? 'block' : 'none';
     }
 
     function generatePreview() {
@@ -3196,18 +3236,19 @@
         return;
       }
 
-      // QR-only テンプレでは「スマホで見える caption」をプレビューする
-      // (= 主催者が設計対象としてイメージしている画面)。紙に印刷されるのは
-      // QR シールだけだが、それは print-note で別途案内する。
-      const isQrOnly = currentTemplate === 'official_qronly';
-      printHtml = isQrOnly ? buildPhonePreviewHtml(settings) : buildPrintHtml(settings);
+      // Preview タブの決定: 明示クリック > paperMode の default
+      const previewMode = _previewTabExplicit
+        || (settings.paperMode === 'qr_only' ? 'phone' : 'paper');
+      _updatePreviewTabStyle(previewMode);
+      const isPhone = previewMode === 'phone';
+      printHtml = isPhone ? buildPhonePreviewHtml(settings) : buildPrintHtml(settings);
       artworkData = tempData;
 
       const frame = document.getElementById('previewFrame');
       const placeholder = document.getElementById('previewPlaceholder');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
-        if (!isQrOnly) {
+        if (!isPhone) {
           const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
           showOverflowWarning(overflow);
         } else {
@@ -3220,6 +3261,28 @@
         const status = document.getElementById('previewStatus');
         if (status) status.innerText = '✓ 最新';
       }, { once: true });
+    }
+
+    // Preview タブの明示選択 (null = auto)。adopt 時 / 初期は null。
+    let _previewTabExplicit = null;
+    function switchPreviewTab(mode) {
+      if (mode !== 'paper' && mode !== 'phone') return;
+      _previewTabExplicit = mode;
+      _updatePreviewTabStyle(mode);
+      // 再描画 (現在の settings で iframe srcdoc を切替)
+      generatePreview();
+    }
+    function _updatePreviewTabStyle(activeMode) {
+      const paperBtn = document.getElementById('previewTabPaper');
+      const phoneBtn = document.getElementById('previewTabPhone');
+      const apply = (btn, on) => {
+        if (!btn) return;
+        btn.style.color = on ? '#1a4f9c' : '#888';
+        btn.style.fontWeight = on ? 'bold' : 'normal';
+        btn.style.borderBottomColor = on ? '#1a4f9c' : 'transparent';
+      };
+      apply(paperBtn, activeMode === 'paper');
+      apply(phoneBtn, activeMode === 'phone');
     }
 
     // C-2: 設定変更で自動プレビューを発火 (debounce 350ms)
@@ -3443,9 +3506,9 @@
       let url = art.qr_url;
       if (!url) return `<div style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};background:#eee;display:flex;align-items:center;`
         + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
-      // QR-only テンプレでは URL に &caption=1 を追加して、index.html を
+      // paperMode='qr_only' の場合は URL に &caption=1 を追加して、index.html を
       // caption mode で起動させる。紙キャプ用 QR とは別の QR コードになる。
-      if (currentTemplate === 'official_qronly') {
+      if (s && s.paperMode === 'qr_only') {
         url += (url.indexOf('?') !== -1 ? '&' : '?') + 'caption=1';
       }
       const logo = document.getElementById('qrLogo').value;
@@ -3500,9 +3563,9 @@
     function buildCard(s, dims, art) {
       const pos = s.qrPosition;
       const offset = s.qrOffset;
-      // QR-only テンプレ: 紙には QR シールのみ印刷。items[] は phone preview /
-      // caption mode 用なので、ここでは text を空に。
-      const content = (currentTemplate === 'official_qronly') ? '' : buildContent(s, art);
+      // paperMode='qr_only': 紙には QR シールのみ印刷 (text 空)。
+      // items[] は phone preview / caption mode で使われる。
+      const content = (s.paperMode === 'qr_only') ? '' : buildContent(s, art);
       const qrImg = buildQrImg(s, dims, art);
       const ftHtml = s.fixedText
         ? `<div style="${buildFixedTextStyle(s.fixedText)}">${escapeHtmlAttr(s.fixedText.value)}</div>`
@@ -3993,6 +4056,11 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         if (settings.textMarginRight !== undefined) document.getElementById('textMarginRight').value = settings.textMarginRight;
         // 旧テンプレ (textColor 未保存) は黒にリセット、新テンプレは保存値を適用
         document.getElementById('textColor').value = settings.textColor || '#000000';
+        // paperMode: 旧テンプレは 'full' default。新フィールドがあれば反映。
+        const pmEl = document.getElementById('paperMode');
+        if (pmEl) pmEl.value = settings.paperMode || 'full';
+        _previewTabExplicit = null;  // tab を paperMode 由来の default に戻す
+        updatePaperModeHint();
         if (settings.fixedText) {
           document.getElementById('fixedTextValue').value = settings.fixedText.value || '';
           document.getElementById('fixedTextPos').value = settings.fixedText.pos || 'none';
