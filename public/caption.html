@@ -3563,9 +3563,10 @@
     function buildCard(s, dims, art) {
       const pos = s.qrPosition;
       const offset = s.qrOffset;
-      // paperMode='qr_only': 紙には QR シールのみ印刷 (text 空)。
-      // items[] は phone preview / caption mode で使われる。
-      const content = (s.paperMode === 'qr_only') ? '' : buildContent(s, art);
+      // items[] (= items_paper) は常に紙に render。paperMode='qr_only' でも、
+      // operator が設計した paper-side の小さなラベル (作家・作品 ID など) は
+      // 識別のために残す。スマホ表示は別途 items_phone で設計 (preset 由来)。
+      const content = buildContent(s, art);
       const qrImg = buildQrImg(s, dims, art);
       const ftHtml = s.fixedText
         ? `<div style="${buildFixedTextStyle(s.fixedText)}">${escapeHtmlAttr(s.fixedText.value)}</div>`
@@ -3616,14 +3617,21 @@
     }
 
     // QR-only テンプレで preview に表示するスマホモックアップ HTML を生成。
-    // items[] を render し、来場者がスマホで実際に見る画面を再現する。
+    // items_phone (preset で定義) を優先的に使い、未定義なら items_paper にフォールバック。
     // 画像プレースホルダ + items + 「いいね & 感想」カードのモック を含む。
     // 印刷用ではないので、印刷ボタン押下時は buildPrintHtml を別途呼ぶ。
     function buildPhonePreviewHtml(s) {
       // 表示用作品: 既存の artworkData の 1 件目を使う (preview の dummyArt が
       // 既に generatePreview で artworkData に setup 済)
       const art = (artworkData && artworkData.artworks && artworkData.artworks[0]) || {};
-      const itemsHtml = buildContent(s, art);
+      // items_phone を preset から取得 (currentTemplate が公式テンプレなら)。
+      // 未定義の場合は items (= items_paper) を使う mirror 動作 (デフォルト)。
+      const tpl = PRESETS[currentTemplate] || {};
+      const phoneItems = Array.isArray(tpl.items_phone) && tpl.items_phone.length > 0
+        ? tpl.items_phone
+        : s.items;
+      const phoneSettings = Object.assign({}, s, { items: phoneItems });
+      const itemsHtml = buildContent(phoneSettings, art);
       const imgUrl = art.image_url || '';
       const imgHtml = imgUrl
         ? `<img src="${escapeHtmlAttr(imgUrl)}" style="width:100%;border-radius:8px;display:block;margin-bottom:16px;">`

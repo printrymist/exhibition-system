@@ -1161,8 +1161,13 @@
       const presetName = tplKey.slice('preset:'.length);
       const presets = await _loadAllPresets();
       const template = presets[presetName];
-      if (!template || !Array.isArray(template.items)) return false;
-      const html = renderCaptionItems(template.items, res.artwork || {});
+      if (!template) return false;
+      // items_phone (専用) を優先、なければ items (= items_paper) にフォールバック
+      const phoneItems = Array.isArray(template.items_phone) && template.items_phone.length > 0
+        ? template.items_phone
+        : template.items;
+      if (!Array.isArray(phoneItems) || phoneItems.length === 0) return false;
+      const html = renderCaptionItems(phoneItems, res.artwork || {});
       const view = document.getElementById('ansCaptionView');
       view.innerHTML = html;
       view.style.display = 'block';
