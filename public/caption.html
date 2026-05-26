@@ -1274,7 +1274,7 @@
           📄 紙印刷
         </button>
         <button type="button" class="preview-tab" id="previewTabPhone" onclick="switchPreviewTab('phone')"
-          style="padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-size:0.88em;color:#888;font-weight:normal;">
+          style="padding:6px 14px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-size:0.88em;color:#888;font-weight:normal;display:none;">
           📱 スマホ caption
         </button>
       </div>
@@ -2390,6 +2390,7 @@
         onQrPositionChange();
         updatePaperModeHint();
         updateQrStickerLabelVisibility();
+        updatePreviewTabsVisibility();
         schedulePreviewUpdate();
       }
     }
@@ -3206,10 +3207,11 @@
       };
     }
 
-    // paperMode 変更時: ヒント / qrStickerLabel select の表示切替 + preview 再描画
+    // paperMode 変更時: ヒント / qrStickerLabel select / preview タブの表示切替 + 再描画
     function onPaperModeChange() {
       updatePaperModeHint();
       updateQrStickerLabelVisibility();
+      updatePreviewTabsVisibility();
       schedulePreviewUpdate();
     }
 
@@ -3283,9 +3285,14 @@
         return;
       }
 
-      // Preview タブの決定: 明示クリック > paperMode の default
-      const previewMode = _previewTabExplicit
-        || (settings.paperMode === 'qr_only' ? 'phone' : 'paper');
+      // Preview タブの決定: paperMode='full' なら必ず paper (= スマホタブ非表示)。
+      // qr_only のときだけ明示選択 (phone or paper) を許容、未指定なら default phone。
+      let previewMode;
+      if (settings.paperMode !== 'qr_only') {
+        previewMode = 'paper';
+      } else {
+        previewMode = _previewTabExplicit || 'phone';
+      }
       _updatePreviewTabStyle(previewMode);
       const isPhone = previewMode === 'phone';
       printHtml = isPhone ? buildPhonePreviewHtml(settings) : buildPrintHtml(settings);
@@ -3314,6 +3321,10 @@
     let _previewTabExplicit = null;
     function switchPreviewTab(mode) {
       if (mode !== 'paper' && mode !== 'phone') return;
+      // paperMode='full' のときスマホタブには切替えない (= visitor が caption mode で
+      // 見ない画面なので、ここで設計する意味がない。混乱回避)
+      const paperMode = (document.getElementById('paperMode') || {}).value || 'full';
+      if (mode === 'phone' && paperMode !== 'qr_only') return;
       _previewTabExplicit = mode;
       _updatePreviewTabStyle(mode);
       // 再描画 (現在の settings で iframe srcdoc を切替)
@@ -3330,6 +3341,19 @@
       };
       apply(paperBtn, activeMode === 'paper');
       apply(phoneBtn, activeMode === 'phone');
+    }
+
+    // paperMode に応じてスマホタブの表示/非表示 + 強制 paper 切替
+    function updatePreviewTabsVisibility() {
+      const phoneBtn = document.getElementById('previewTabPhone');
+      if (!phoneBtn) return;
+      const paperMode = (document.getElementById('paperMode') || {}).value || 'full';
+      const showPhone = paperMode === 'qr_only';
+      phoneBtn.style.display = showPhone ? '' : 'none';
+      // スマホタブが非表示になった場合、現在の選択を paper に戻す
+      if (!showPhone && _previewTabExplicit === 'phone') {
+        _previewTabExplicit = 'paper';
+      }
     }
 
     // C-2: 設定変更で自動プレビューを発火 (debounce 350ms)
@@ -4153,6 +4177,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         _previewTabExplicit = null;  // tab を paperMode 由来の default に戻す
         updatePaperModeHint();
         updateQrStickerLabelVisibility();
+        updatePreviewTabsVisibility();
         if (settings.fixedText) {
           document.getElementById('fixedTextValue').value = settings.fixedText.value || '';
           document.getElementById('fixedTextPos').value = settings.fixedText.pos || 'none';
