@@ -13,6 +13,11 @@
 // 統一に伴い register.html の並びへ寄せる (フォーム設定タブのレイアウトが変わる)。
 
 const FIELD_DEFS = [
+  // システムフィールド (= 作品作成時に自動で振られる、operator が編集しない値)
+  // isSystem: true で register.html の項目選択グリッドからは除外、caption テンプレで
+  // 参照する場合のみ FIELD_MAP の lookup を通すために定義する。
+  { name: 'artwork_id',  label: '作品 ID',          desc: '作品の自動割当 ID (caption の識別ラベル用)',          textarea: false, isSystem: true },
+
   // 作品基本情報
   { name: 'image_url',   label: '作品画像',         desc: '作品の写真（JPEG/PNG）',                              textarea: false, type: 'image', isDefault: true },
   { name: 'title',       label: 'タイトル',         desc: '作品名（日本語）',                                    textarea: false, isDefault: true, isCaptionRequired: true, maxLines: 2 },
@@ -73,7 +78,7 @@ const SNS_FIELDS = FIELD_DEFS.filter(d => d.isSnsSection).map(d => d.name);
 const ALL_ARTIST_FIELDS = FIELD_DEFS.filter(d => d.isArtist).map(d => d.name);
 
 // register.html の項目設定グリッドに出すフィールド (pure SNS を除外: 常時表示のため選択不要)
-const GRID_FIELDS = FIELD_DEFS.filter(d => !d.isPureSns);
+const GRID_FIELDS = FIELD_DEFS.filter(d => !d.isPureSns && !d.isSystem);
 
 // 新規展覧会の項目設定で初期 ON にするフィールド
 const DEFAULT_FIELDS = FIELD_DEFS.filter(d => d.isDefault).map(d => d.name);
@@ -85,6 +90,7 @@ const ARTIST_LABELS = Object.fromEntries(FIELD_DEFS.filter(d => d.isArtist).map(
 const SNS_PLACEHOLDERS = Object.fromEntries(FIELD_DEFS.filter(d => d.isSnsSection).map(d => [d.name, d.desc]));
 
 // caption.html フォーム設定タブの候補リスト (画像と pure SNS は除外、shop_url は残す)
+// isSystem (artwork_id 等) は caption ラベルとして使う場合があるので含める。
 const FORM_FIELD_DEFS = FIELD_DEFS
   .filter(d => d.type !== 'image' && !d.isPureSns)
   .map(d => ({ name: d.name, label: d.label, required: !!d.isCaptionRequired }));

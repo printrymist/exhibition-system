@@ -2211,7 +2211,11 @@
       const neededFields = _extractTemplateFieldNames(preset.items);
       const currentRegFields = Array.isArray(artworkData.registrationFields) ? artworkData.registrationFields : [];
       const currentRegNames = new Set(currentRegFields.map(f => f && f.name).filter(Boolean));
-      const missing = neededFields.filter(n => !currentRegNames.has(n));
+      // isSystem フィールド (artwork_id 等) は自動値なので registration_fields の判定対象外
+      // (operator が register.html で編集する項目ではない、caption ラベルにだけ使う)
+      const missing = neededFields.filter(n =>
+        !currentRegNames.has(n) && !(FIELD_MAP[n] && FIELD_MAP[n].isSystem)
+      );
 
       // FIELD_DEFS に未定義のフィールドがあるとラベル等が出ないので弾く
       const unknown = missing.filter(n => !FIELD_MAP[n]);
