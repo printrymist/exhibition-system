@@ -1312,6 +1312,17 @@
               <option value="qr_only">QR シールのみ印刷 (情報はスマホ表示)</option>
             </select>
           </div>
+          <!-- qr_only モード時のみ表示: シールに何を一緒に印刷するか -->
+          <div class="layout-item" id="qrStickerLabelItem" style="flex:1; display:none;">
+            <label for="qrStickerLabel">QR シールのラベル</label>
+            <select id="qrStickerLabel" onchange="schedulePreviewUpdate()" style="width:100%;">
+              <option value="none">なし (QR のみ)</option>
+              <option value="artist">作家名</option>
+              <option value="artwork_id">作品 ID</option>
+              <option value="artist_id" selected>作家 + 作品 ID</option>
+              <option value="title_artist">タイトル + 作家</option>
+            </select>
+          </div>
         </div>
         <div class="layout-row">
           <div class="layout-item">
@@ -2368,6 +2379,9 @@
         // テンプレに paperMode が指定されていればそれを採用、無ければ 'full' (現状互換)
         const paperModeEl = document.getElementById('paperMode');
         if (paperModeEl) paperModeEl.value = p.paperMode || 'full';
+        // QR シールラベルの 5 択 preset (qr_only モード時のみ意味あり、無指定で artist_id)
+        const qrStickerEl = document.getElementById('qrStickerLabel');
+        if (qrStickerEl) qrStickerEl.value = p.qrStickerLabel || 'artist_id';
         // adopt 時はプレビュータブの explicit 選択を解放 (paperMode に応じた default に戻す)
         _previewTabExplicit = null;
         // テンプレに pageSettings ブロックがあれば用紙サイズ・列数・余白などもまとめて反映する。
@@ -2375,6 +2389,7 @@
         applyPageSettings(p.pageSettings);
         onQrPositionChange();
         updatePaperModeHint();
+        updateQrStickerLabelVisibility();
         schedulePreviewUpdate();
       }
     }
@@ -3168,6 +3183,7 @@
               )
             : []);
       const paperModeEl = document.getElementById('paperMode');
+      const qrStickerLabelEl = document.getElementById('qrStickerLabel');
       return {
         paperSize: document.getElementById('paperSize').value,
         cols: parseInt(document.getElementById('cols').value),
@@ -3185,14 +3201,24 @@
         fixedText: getFixedText(),
         fontFamily: document.getElementById('fontFamily').value,
         paperMode: (paperModeEl && paperModeEl.value) || 'full',
+        qrStickerLabel: (qrStickerLabelEl && qrStickerLabelEl.value) || 'artist_id',
         items: items
       };
     }
 
-    // paperMode 変更時: ヒント表示の切替 + preview 再描画
+    // paperMode 変更時: ヒント / qrStickerLabel select の表示切替 + preview 再描画
     function onPaperModeChange() {
       updatePaperModeHint();
+      updateQrStickerLabelVisibility();
       schedulePreviewUpdate();
+    }
+
+    // qrStickerLabel select の表示 (paperMode='qr_only' のときだけ見せる)
+    function updateQrStickerLabelVisibility() {
+      const el = document.getElementById('qrStickerLabelItem');
+      if (!el) return;
+      const mode = (document.getElementById('paperMode') || {}).value || 'full';
+      el.style.display = (mode === 'qr_only') ? '' : 'none';
     }
 
     // 「QR シールのみ」モード時に出すヒント (Custom タブの上に表示)
@@ -3580,14 +3606,42 @@
       return `<img src="${canvas.toDataURL('image/png')}" style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};display:block;">`;
     }
 
+    // QR シールに印刷するラベルの preset 群 (paperMode='qr_only' のとき適用)。
+    // operator は Page タブの select で 5 択から選ぶ (Custom タブの items[] とは別物)。
+    // items[] は **スマホ caption の本体** を表す (= 来場者が QR をスキャンしたときの画面)。
+    const STICKER_LABEL_PRESETS = {
+      none: [],
+      artist: [
+        { type: 'field', name: 'artist', size: 7, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 6, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 }
+      ],
+      artwork_id: [
+        { type: 'field', name: 'artwork_id', size: 6, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 5, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 }
+      ],
+      artist_id: [
+        { type: 'field', name: 'artist',     size: 7, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 6, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 },
+        { type: 'field', name: 'artwork_id', size: 5, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 5, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 }
+      ],
+      title_artist: [
+        { type: 'field', name: 'title',  size: 7, bold: true,  italic: false, align: 'center', maxLines: 1, minSize: 5, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 },
+        { type: 'field', name: 'artist', size: 6, bold: false, italic: false, align: 'center', maxLines: 1, minSize: 5, currency: '', comma: false, prefix: '', suffix: '', affixScale: 0.75 }
+      ]
+    };
+
     // 1作品分のカード (枠 + 固定文 + QR + 本文) を組む
     function buildCard(s, dims, art) {
       const pos = s.qrPosition;
       const offset = s.qrOffset;
-      // items[] (= items_paper) は常に紙に render。paperMode='qr_only' でも、
-      // operator が設計した paper-side の小さなラベル (作家・作品 ID など) は
-      // 識別のために残す。スマホ表示は別途 items_phone で設計 (preset 由来)。
-      const content = buildContent(s, art);
+      // paperMode='qr_only' なら、紙には sticker label preset (5 択) を render。
+      // items[] は **スマホ caption の本体** なので紙印刷側では使わない。
+      // paperMode='full' なら従来通り items[] を紙に render。
+      let content;
+      if (s.paperMode === 'qr_only') {
+        const stickerKey = s.qrStickerLabel || 'artist_id';
+        const stickerItems = STICKER_LABEL_PRESETS[stickerKey] || [];
+        content = buildContent(Object.assign({}, s, { items: stickerItems }), art);
+      } else {
+        content = buildContent(s, art);
+      }
       const qrImg = buildQrImg(s, dims, art);
       const ftHtml = s.fixedText
         ? `<div style="${buildFixedTextStyle(s.fixedText)}">${escapeHtmlAttr(s.fixedText.value)}</div>`
@@ -3638,21 +3692,14 @@
     }
 
     // QR-only テンプレで preview に表示するスマホモックアップ HTML を生成。
-    // items_phone (preset で定義) を優先的に使い、未定義なら items_paper にフォールバック。
+    // items[] (Custom タブで operator が設計したスマホ caption) をそのまま render。
     // 画像プレースホルダ + items + 「いいね & 感想」カードのモック を含む。
     // 印刷用ではないので、印刷ボタン押下時は buildPrintHtml を別途呼ぶ。
     function buildPhonePreviewHtml(s) {
       // 表示用作品: 既存の artworkData の 1 件目を使う (preview の dummyArt が
       // 既に generatePreview で artworkData に setup 済)
       const art = (artworkData && artworkData.artworks && artworkData.artworks[0]) || {};
-      // items_phone を preset から取得 (currentTemplate が公式テンプレなら)。
-      // 未定義の場合は items (= items_paper) を使う mirror 動作 (デフォルト)。
-      const tpl = PRESETS[currentTemplate] || {};
-      const phoneItems = Array.isArray(tpl.items_phone) && tpl.items_phone.length > 0
-        ? tpl.items_phone
-        : s.items;
-      const phoneSettings = Object.assign({}, s, { items: phoneItems });
-      const itemsHtml = buildContent(phoneSettings, art);
+      const itemsHtml = buildContent(s, art);
       const imgUrl = art.image_url || '';
       const imgHtml = imgUrl
         ? `<img src="${escapeHtmlAttr(imgUrl)}" style="width:100%;border-radius:8px;display:block;margin-bottom:16px;">`
@@ -4095,8 +4142,11 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         // paperMode: 旧テンプレは 'full' default。新フィールドがあれば反映。
         const pmEl = document.getElementById('paperMode');
         if (pmEl) pmEl.value = settings.paperMode || 'full';
+        const qsEl = document.getElementById('qrStickerLabel');
+        if (qsEl) qsEl.value = settings.qrStickerLabel || 'artist_id';
         _previewTabExplicit = null;  // tab を paperMode 由来の default に戻す
         updatePaperModeHint();
+        updateQrStickerLabelVisibility();
         if (settings.fixedText) {
           document.getElementById('fixedTextValue').value = settings.fixedText.value || '';
           document.getElementById('fixedTextPos').value = settings.fixedText.pos || 'none';

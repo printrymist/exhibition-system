@@ -1162,10 +1162,9 @@
       const presets = await _loadAllPresets();
       const template = presets[presetName];
       if (!template) return false;
-      // items_phone (専用) を優先、なければ items (= items_paper) にフォールバック
-      const phoneItems = Array.isArray(template.items_phone) && template.items_phone.length > 0
-        ? template.items_phone
-        : template.items;
+      // items[] が caption の本体 (operator が Custom タブで設計したもの)。
+      // paperMode='qr_only' のテンプレでは items はスマホ caption を表す。
+      const phoneItems = template.items;
       if (!Array.isArray(phoneItems) || phoneItems.length === 0) return false;
       const html = renderCaptionItems(phoneItems, res.artwork || {});
       const view = document.getElementById('ansCaptionView');
