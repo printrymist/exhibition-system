@@ -274,8 +274,8 @@
         "fontFamily": "sans-serif"
       },
       "items": [
-        { "type": "field", "name": "artist",     "size": 10, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
-        { "type": "field", "name": "artwork_id", "size": 8, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+        { "type": "field", "name": "artist",     "size": 7, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 6, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "artwork_id", "size": 6, "bold": false, "italic": false, "align": "center", "maxLines": 1, "minSize": 5, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
       ],
       "items_phone": [
         { "type": "field", "name": "title",       "size": 18, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },

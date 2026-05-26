@@ -1334,6 +1334,9 @@
               <option value="1">1</option>
               <option value="2" selected>2</option>
               <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
             </select>
           </div>
           <div class="layout-item">
@@ -1343,6 +1346,10 @@
               <option value="3">3</option>
               <option value="4" selected>4</option>
               <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
             </select>
           </div>
           <div class="layout-item">
@@ -3733,28 +3740,14 @@ body {
 
     function buildPrintHtml(s) {
       const dims = computePrintDims(s);
-      // DEBUG: artwork 数とアイテム数を可視化 (運用時は削除予定)
-      const _dbgArtCount = (artworkData && artworkData.artworks) ? artworkData.artworks.length : -1;
-      const _dbgItemCount = (s.items || []).length;
-      const _dbgFirstArt = (artworkData && artworkData.artworks && artworkData.artworks[0]) || {};
-      const _dbgKeys = Object.keys(_dbgFirstArt).slice(0, 8).join(',');
-      const _dbgVals = [
-        'artwork_id=' + (_dbgFirstArt.artwork_id || '(empty)'),
-        'artist=' + (_dbgFirstArt.artist || '(empty)'),
-        'qr_url=' + (_dbgFirstArt.qr_url ? 'set' : '(empty)'),
-        'status=' + (_dbgFirstArt.status || '(empty)')
-      ].join(' / ');
-      const _dbgBanner = `<div style="background:#fffacd;color:#5a4000;padding:6px 12px;font:11px monospace;border-bottom:2px solid #d4a83a;">
-        <div><b>[DEBUG]</b> paperMode=${s.paperMode || 'undefined'} / artworks=${_dbgArtCount} / items=${_dbgItemCount} / dims.perPage=${dims.perPage}</div>
-        <div>art[0] keys: ${_dbgKeys}</div>
-        <div>art[0] vals: ${_dbgVals}</div>
-      </div>`;
+      // perPage が NaN になった場合のフォールバック (cols/rows の select に対応 option が
+      // 無いと select.value='' → parseInt NaN → perPage NaN → cards.slice(0, NaN) = []
+      // で空ページになる。安全装置として 30 (= 5×6 = QR シール想定の上限) を default に。
+      if (!isFinite(dims.perPage) || dims.perPage <= 0) {
+        console.warn('[caption] perPage is invalid, defaulting to 30. cols=', s.cols, 'rows=', s.rows);
+        dims.perPage = 30;
+      }
       const cards = artworkData.artworks.map(art => buildCard(s, dims, art));
-      // DEBUG: カードが見えるか確認用に超目立つ赤枠で 1 枚だけ単独 render
-      const _dbgFirstCard = cards[0] ? `<div style="padding:10px;background:#ffe;border-bottom:2px solid #d4a83a;">
-        <div style="font:bold 12px sans-serif;color:#5a4000;margin-bottom:6px;">[DEBUG] 単独カード (3px 赤枠):</div>
-        <div style="display:inline-block;width:36mm;height:44mm;border:3px solid red;position:relative;background:white;">${cards[0].replace(/border:1px solid #ccc;/, 'border:3px solid red;')}</div>
-      </div>` : '<div style="padding:10px;color:red;">[DEBUG] cards is empty</div>';
       const pages = [];
       for (let i = 0; i < cards.length; i += dims.perPage) pages.push(cards.slice(i, i + dims.perPage));
 
@@ -3809,8 +3802,6 @@ body { font-family:${s.fontFamily}; background:white; }
   .auto-fit[data-overflow="true"] { background: transparent; outline: none; }
 }
 </style></head><body>
-${_dbgBanner}
-${_dbgFirstCard}
 ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 </body></html>`;
     }
