@@ -3629,7 +3629,7 @@
 
     // 1作品分のカード (枠 + 固定文 + QR + 本文) を組む
     function buildCard(s, dims, art) {
-      const pos = s.qrPosition;
+      let pos = s.qrPosition;
       const offset = s.qrOffset;
       // paperMode='qr_only' なら、紙には sticker label preset (5 択) を render。
       // items[] は **スマホ caption の本体** なので紙印刷側では使わない。
@@ -3639,6 +3639,8 @@
         const stickerKey = s.qrStickerLabel || 'artist_id';
         const stickerItems = STICKER_LABEL_PRESETS[stickerKey] || [];
         content = buildContent(Object.assign({}, s, { items: stickerItems }), art);
+        // ラベル「なし」のときは QR をカード中央に (間延び防止)
+        if (stickerKey === 'none') pos = 'center';
       } else {
         content = buildContent(s, art);
       }
@@ -3682,6 +3684,10 @@
         case 'bottom-left':   qrStyle += `bottom:${dims.qrMV};left:${dims.qrMH};`; break;
         case 'bottom-right':  qrStyle += `bottom:${dims.qrMV};right:${dims.qrMH};`; break;
         case 'bottom-center': qrStyle += `bottom:${dims.qrMV};left:50%;transform:translateX(-50%);`; break;
+        case 'center':
+          // QR-only ラベルなし時の中央配置 (間延び防止)。textDiv は空のはずだが念のため padding 不要
+          qrStyle += `top:50%;left:50%;transform:translate(-50%,-50%);`;
+          break;
       }
       const textDiv = `<div style="${textPadTop}padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
       return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
