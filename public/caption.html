@@ -3009,7 +3009,11 @@
       // 作品データ未登録 (artworks 0 件) のとき headers は空配列になるので、
       // headers でフィルタすると登録済 field が全部弾かれて divider/spacer だけ残ってしまう。
       // → registrationFields があるならそれで判定、無いときだけ headers にフォールバック。
+      // ただし isSystem フィールド (artwork_id 等の自動値) は登録項目に含まれない
+      // ので、registrationFields の有無に関係なく常に可視扱いにする。
       const isFieldVisible = (fieldName) => {
+        const def = (typeof FIELD_MAP !== 'undefined') ? FIELD_MAP[fieldName] : null;
+        if (def && def.isSystem) return true;
         if (regFieldNames) return regFieldNames.includes(fieldName);
         if (artworkData) return artworkData.headers.includes(fieldName);
         return true;
@@ -4101,8 +4105,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           const regFieldNames = artworkData && artworkData.registrationFields
             ? artworkData.registrationFields.map(f => f.name)
             : null;
-          // フィールド可視性判定 (buildFieldsGridFromPreset と同じロジック)
+          // フィールド可視性判定 (buildFieldsGridFromPreset と同じロジック、isSystem も同条件)
           const isFieldVisible = (fieldName) => {
+            const def = (typeof FIELD_MAP !== 'undefined') ? FIELD_MAP[fieldName] : null;
+            if (def && def.isSystem) return true;
             if (regFieldNames) return regFieldNames.includes(fieldName);
             if (artworkData) return artworkData.headers.includes(fieldName);
             return true;
