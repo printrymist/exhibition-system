@@ -1305,6 +1305,16 @@
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
         if (typeof loadFieldsAndUI === 'function') loadFieldsAndUI(currentEx);
+        // 展覧会切替時に現在開いているタブの内容を refresh する。
+        // 元実装は switchTab() のときだけ load*() を呼んでおり、
+        // 'list' タブを開いたまま exhibition を切替えると前の展覧会のキャッシュが
+        // 残るバグがあった。
+        if (document.getElementById('tabList').classList.contains('active')) {
+          loadArtworkList();
+        }
+        if (document.getElementById('tabInput').classList.contains('active')) {
+          loadArtistList();
+        }
         return;
       }
       // 認証済みだが主催者本人ではない
@@ -2683,8 +2693,7 @@ ${fieldsText}
       const label = document.getElementById('currentArtworkCountLabel');
       if (!label || !currentEx) return;
       try {
-        const snap = await firebase.firestore()
-          .collection('artworks').where('exCode', '==', currentEx).get();
+        const snap = await artworksBaseQuery(currentEx).get();
         let total = 0;
         let registered = 0;
         snap.forEach(d => {
@@ -2794,18 +2803,34 @@ ${fieldsText}
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
-    const fsStorage = firebase.storage();
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+    const _uploadArtworkImageFn = firebase.app().functions('asia-northeast1').httpsCallable('uploadArtworkImage');
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
-      const blob = await (await fetch(dataUrl)).blob();
-      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
-      await ref.put(blob, { contentType: 'image/jpeg' });
-      return await ref.getDownloadURL();
+      // operator / organizer (Firebase Auth) で uploadArtworkImage CF を呼ぶ。
+      const res = await _uploadArtworkImageFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        imageBase64: dataUrl,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data.url;
     };
+    // β-3 rules require organizerEmail filter for non-operator queries.
+    function artworksBaseQuery(exCode) {
+      const user = firebase.auth().currentUser;
+      const email = ((user || {}).email || '').trim().toLowerCase();
+      const isOp = email === 'rymist1@gmail.com';
+      let q = fsDb.collection('artworks').where('exCode', '==', exCode);
+      if (!isOp) {
+        if (!email) throw new Error('ログインが必要です');
+        q = q.where('organizerEmail', '==', email);
+      }
+      return q;
+    }
     window.fsGetArtworkList = async (exCode) => {
-      const snap = await fsDb.collection('artworks')
-        .where('exCode', '==', exCode)
-        .get();
+      const snap = await artworksBaseQuery(exCode).get();
       const artworks = [];
       snap.forEach(doc => {
         const d = doc.data();
@@ -2878,7 +2903,7 @@ ${fieldsText}
       return out;
     };
     window.fsSaveArtwork = async (exCode, data) => {
-      const snap = await fsDb.collection('artworks').where('exCode', '==', exCode).get();
+      const snap = await artworksBaseQuery(exCode).get();
       const candidates = [];
       snap.forEach(doc => {
         const d = doc.data();
@@ -2899,8 +2924,7 @@ ${fieldsText}
       let updatedArtistCount = 1;
       const target = (originalArtist || '').toString().trim();
       if (target && Object.keys(artistData).length > 0) {
-        const snap = await fsDb.collection('artworks')
-          .where('exCode', '==', exCode)
+        const snap = await artworksBaseQuery(exCode)
           .where('artist', '==', target)
           .get();
         const tasks = [];
@@ -2915,9 +2939,7 @@ ${fieldsText}
       return { success: true, updatedArtistCount: updatedArtistCount };
     };
     window.fsGetArtistList = async (exCode) => {
-      const snap = await fsDb.collection('artworks')
-        .where('exCode', '==', exCode)
-        .get();
+      const snap = await artworksBaseQuery(exCode).get();
       const seen = new Set();
       const artists = [];
       snap.forEach(doc => {

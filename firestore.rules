@@ -14,11 +14,30 @@ service cloud.firestore {
     }
 
     match /artworks/{docId} {
-      // 来場者・作家フローで広く読める必要があるため公開読み取りは継続
-      allow read: if true;
-      // 書き込みはすべて Cloud Function (submitArtwork / finalizeExhibitionSetup)
-      // 経由で admin SDK から行う。クライアント直接書き込みは禁止。
+      // β-3 (2026-05-26): 公開 read を撤去。直 read は 3 経路に絞る。
+      //   1. operator: 常時
+      //   2. organizer: doc に denormalize した organizerEmail と一致する Firebase Auth
+      //   3. visitor (gallery): role=visitor + exCode claim 一致 +
+      //      _published=true + status='1' (空きスロットは隠す)
+      //   それ以外 (anon QR / artist 招待 URL) は Cloud Function 経由
+      //   (getArtwork / listArtworksByArtist / findEmptyArtworkSlot)。
+      // 書き込みはすべて Cloud Function (submitArtwork / uploadArtworkImage 等) 経由。
       // security_key は使われなくなったが、互換性のために doc には残置。
+      allow read: if
+        isOperator()
+        || (
+          request.auth != null
+          && request.auth.token.email != null
+          && resource.data.organizerEmail is string
+          && resource.data.organizerEmail.lower() == request.auth.token.email.lower()
+        )
+        || (
+          request.auth != null
+          && request.auth.token.role == 'visitor'
+          && request.auth.token.exCode == resource.data.exCode
+          && resource.data._published == true
+          && resource.data.status == '1'
+        );
       allow create, update: if false;
       allow delete: if isOperator();
     }
@@ -104,6 +123,14 @@ service cloud.firestore {
       // 返信履歴サブコレクション
       // 読み取りは親 inquiry を読める者なら可（リンク所持者）。
       // 書き込みは運営者か、from='admin' で本文がある場合のみ（リンク所持者の続報）。
+      //
+      // NOTE: ここでの from='admin' は「問い合わせスレッドの author = リンク所持者本人」
+      //   を指す legacy 命名で、運営者ではない。運営者の返信は inbox.html が
+      //   from='operator' を書く (こちらは isOperator() 経由で通る)。
+      //   non-operator が任意 inquiry に message create できるのは事実だが、
+      //   inquiryId は Firestore auto-ID (20 文字ランダム) で unguessable なので
+      //   実質的にメールリンク所持者しか到達できない。body は inbox.html /
+      //   inquiry.html とも escapeHtml 経由で render され、stored XSS は成立しない。
       match /messages/{messageId} {
         allow read: if true;
         allow create: if isOperator() || (

@@ -896,8 +896,13 @@
       document.getElementById('loadingMsg').style.display = 'block';
       try {
         // artworks と likes を取得
+        var _u = firebase.auth().currentUser;
+        var _email = ((_u || {}).email || '').trim().toLowerCase();
+        var _isOp = _email === 'rymist1@gmail.com';
+        var artQ = db.collection('artworks').where('exCode', '==', currentEx);
+        if (!_isOp && _email) artQ = artQ.where('organizerEmail', '==', _email);
         var [aSnap, lSnap] = await Promise.all([
-          db.collection('artworks').where('exCode', '==', currentEx).get(),
+          artQ.get(),
           db.collection('likes').where('exCode', '==', currentEx).get(),
         ]);
         var artworks = aSnap.docs.map(function(d){ return d.data(); });

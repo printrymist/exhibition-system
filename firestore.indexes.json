@@ -7,6 +7,32 @@
         { "fieldPath": "exCode",    "order": "ASCENDING"  },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "artworks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "exCode",     "order": "ASCENDING" },
+        { "fieldPath": "_published", "order": "ASCENDING" },
+        { "fieldPath": "status",     "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "artworks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "exCode",         "order": "ASCENDING" },
+        { "fieldPath": "organizerEmail", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "artworks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "exCode",         "order": "ASCENDING" },
+        { "fieldPath": "artist",         "order": "ASCENDING" },
+        { "fieldPath": "organizerEmail", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -350,6 +350,8 @@
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
     firebase.initializeApp({
@@ -404,9 +406,10 @@
       document.getElementById('endedBanner').classList.remove('show');
     }
 
-    if (!exVal) {
-      document.getElementById('exName').textContent = '展覧会コードが指定されていません（?ex=...）';
-    } else {
+    // β-3 (2026-05-27): artworks の直 read に Firebase Auth (operator/organizer) が必要に
+    // なったので、operator-auth.js でログイン状態を確認してから query を始める。
+    // 未ログインなら「運営者ログインが必要です」のメッセージを出して停止。
+    function startDashboard() {
       let artworks = [];
       let likes = [];
       const seenLikeIds = new Set();
@@ -428,7 +431,12 @@
         }
       });
 
-      fsDb.collection('artworks').where('exCode', '==', exVal).onSnapshot(snap => {
+      const _u = firebase.auth().currentUser;
+      const _email = ((_u || {}).email || '').trim().toLowerCase();
+      const _isOp = _email === 'rymist1@gmail.com';
+      let artQ = fsDb.collection('artworks').where('exCode', '==', exVal);
+      if (!_isOp && _email) artQ = artQ.where('organizerEmail', '==', _email);
+      artQ.onSnapshot(snap => {
         artworks = [];
         snap.forEach(d => artworks.push(d.data()));
         renderAll();
@@ -535,6 +543,35 @@
     }
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/operator-auth.js"></script>
+  <script>
+    (function () {
+      var exNameEl = document.getElementById('exName');
+      if (!exVal) {
+        exNameEl.textContent = '展覧会コードが指定されていません（?ex=...）';
+        return;
+      }
+      // 認証完了を待つ。メールリンクからの遷移はまず completeSignInIfNeeded。
+      window.operatorAuth.completeSignInIfNeeded()
+        .catch(function (err) { console.warn('completeSignInIfNeeded:', err); });
+      var started = false;
+      window.operatorAuth.onAuthChange(function (user) {
+        if (started) return;
+        if (user && user.email) {
+          started = true;
+          startDashboard();
+        } else {
+          // 未ログイン: 来場者画面と区別する穏やかなメッセージ。register.html 経由で
+          // ログインしてから戻ってきてもらう。
+          exNameEl.innerHTML =
+            '🔒 運営者ログインが必要です。' +
+            '<a href="register.html?ex=' + encodeURIComponent(exVal) + '" ' +
+            'style="color:#1a73e8;margin-left:8px;text-decoration:underline;">' +
+            'ログイン画面へ</a>';
+        }
+      });
+    })();
+  </script>
 </body>
 
 </html>

@@ -2150,7 +2150,7 @@
         if (catStopFlag) { catLogMsg('--- 中断 ---'); break; }
         const id = a.artwork_id;
         try {
-          const res = (await _categorizeFn({ imageUrl: a.image_url })).data;
+          const res = (await _categorizeFn({ exCode: ex, imageUrl: a.image_url })).data;
           if (res && res.success) {
             await _submitFn({
               exCode: ex,
@@ -4657,9 +4657,14 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
     };
     window.fsLoadAllData = async (exCode) => {
       try {
+        const _u = firebase.auth().currentUser;
+        const _email = ((_u || {}).email || '').trim().toLowerCase();
+        const _isOp = _email === 'rymist1@gmail.com';
+        let artQ = fsDb.collection('artworks').where('exCode', '==', exCode);
+        if (!_isOp && _email) artQ = artQ.where('organizerEmail', '==', _email);
         const [exSnap, artSnap] = await Promise.all([
           fsDb.collection('exhibitions').doc(exCode).get(),
-          fsDb.collection('artworks').where('exCode', '==', exCode).get()
+          artQ.get()
         ]);
         if (!exSnap.exists) return { success: false, error: 'Exhibition code "' + exCode + '" not found.' };
         const ex = exSnap.data();
