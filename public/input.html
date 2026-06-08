@@ -1353,8 +1353,11 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
-    const fsStorage = firebase.storage();
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+    const _uploadArtworkImageFn = firebase.app().functions('asia-northeast1').httpsCallable('uploadArtworkImage');
+    const _getArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('getArtwork');
+    const _listArtworksByArtistFn = firebase.app().functions('asia-northeast1').httpsCallable('listArtworksByArtist');
+    const _findEmptyArtworkSlotFn = firebase.app().functions('asia-northeast1').httpsCallable('findEmptyArtworkSlot');
 
     // 招待 URL の exp+sig (exhibition / artist token) のみ受け付ける。
     // legacy security_key 経路はセッション 3 で撤去済 (誰でも doc を読めるため
@@ -1372,10 +1375,20 @@
       return { kind: 'exhibition', exp: Number(exp), sig: sig };
     }
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
-      const blob = await (await fetch(dataUrl)).blob();
-      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
-      await ref.put(blob, { contentType: 'image/jpeg' });
-      return await ref.getDownloadURL();
+      const accessToken = _resolveAccessToken();
+      if (!accessToken) {
+        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
+      }
+      const res = await _uploadArtworkImageFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        imageBase64: dataUrl,
+        accessToken: accessToken,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data.url;
     };
     window.fsGetRegistrationFields = async (exCode) => {
       const snap = await fsDb.collection('exhibitions').doc(exCode).get();
@@ -1385,26 +1398,33 @@
       try { return JSON.parse(raw); } catch (e) { return null; }
     };
     window.fsGetArtworksByArtist = async (exCode, artistName) => {
-      const snap = await fsDb.collection('artworks')
-        .where('exCode', '==', exCode)
-        .where('artist', '==', artistName)
-        .get();
-      const artworks = [];
-      snap.forEach(doc => artworks.push(doc.data()));
-      return { success: true, artworks: artworks };
+      // β-3: artworks の直 read 不可になったので CF 経由。
+      const accessToken = _resolveAccessToken();
+      if (!accessToken) {
+        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
+      }
+      const res = await _listArtworksByArtistFn({
+        exCode: exCode,
+        artistName: artistName,
+        accessToken: accessToken,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return { success: true, artworks: res.data.artworks || [] };
     };
     window.fsSaveArtwork = async (exCode, data) => {
-      const snap = await fsDb.collection('artworks').where('exCode', '==', exCode).get();
-      const candidates = [];
-      snap.forEach(doc => {
-        const d = doc.data();
-        if (!d.artwork_id) return;
-        const status = (d.status || '').toString().trim();
-        if (status === '0' || status === '') candidates.push(d);
-      });
-      candidates.sort((a, b) => (a.artwork_id || '').localeCompare(b.artwork_id || ''));
-      if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
-      const targetId = candidates[0].artwork_id;
+      // β-3: 空きスロット検索を CF 経由に。race は依然として残る (Phase 2 課題)。
+      const accessToken = _resolveAccessToken();
+      if (!accessToken) {
+        throw new Error('招待 URL の exp/sig が見つかりません。');
+      }
+      const findRes = await _findEmptyArtworkSlotFn({ exCode: exCode, accessToken: accessToken });
+      const findData = findRes && findRes.data;
+      if (!findData || !findData.success) {
+        return { success: false, error: (findData && findData.error) || '空きスロットが見つかりません' };
+      }
+      const targetId = findData.artworkId;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
       gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: 1 })
         .catch(e => console.warn('bumpArtworkCount failed:', e));
@@ -1415,18 +1435,25 @@
       let updatedArtistCount = 1;
       const target = (originalArtist || '').toString().trim();
       if (target && Object.keys(artistData).length > 0) {
-        const snap = await fsDb.collection('artworks')
-          .where('exCode', '==', exCode)
-          .where('artist', '==', target)
-          .get();
-        const tasks = [];
-        snap.forEach(doc => {
-          const d = doc.data();
-          if (!d.artwork_id || d.artwork_id === artworkId) return;
-          tasks.push(window.fsSetArtwork(exCode, d.artwork_id, artistData).catch(e => console.error('Firestore propagation:', e)));
-          updatedArtistCount++;
-        });
-        await Promise.all(tasks);
+        // β-3: artwork doc 直 read 不可 → CF 経由で同作家の他作品を取得し fan-out 反映。
+        const accessToken = _resolveAccessToken();
+        if (!accessToken) {
+          console.warn('fsUpdateArtwork: accessToken なし。同作家への反映をスキップ');
+          return { success: true, updatedArtistCount: updatedArtistCount };
+        }
+        try {
+          const res = await _listArtworksByArtistFn({ exCode: exCode, artistName: target, accessToken: accessToken });
+          const others = (res && res.data && res.data.artworks) || [];
+          const tasks = [];
+          others.forEach(d => {
+            if (!d.artwork_id || d.artwork_id === artworkId) return;
+            tasks.push(window.fsSetArtwork(exCode, d.artwork_id, artistData).catch(e => console.error('Firestore propagation:', e)));
+            updatedArtistCount++;
+          });
+          await Promise.all(tasks);
+        } catch (e) {
+          console.warn('fsUpdateArtwork: 同作家への反映に失敗', e);
+        }
       }
       return { success: true, updatedArtistCount: updatedArtistCount };
     };
@@ -1451,9 +1478,21 @@
       // こうしないと artist で query するリスト系の関数 (fsGetArtworksByArtist 等) で
       // 「削除済」が見えたままになる。Firestore は merge でフィールドを「消す」操作が
       // 弱いので、空文字を上書きすることで実質的にクリアする。
-      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const snap = await docRef.get();
-      const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
+      // β-3: artwork doc 直 read 不可 → CF 経由で existing status を確認。
+      const accessToken = _resolveAccessToken();
+      if (!accessToken) {
+        throw new Error('招待 URL の exp/sig が見つかりません。');
+      }
+      let wasRegistered = false;
+      try {
+        const res = await _getArtworkFn({ exCode: exCode, artworkId: artworkId, accessToken: accessToken });
+        const aData = res && res.data;
+        if (aData && aData.success && aData.artwork) {
+          wasRegistered = (String(aData.artwork.status || '').trim() === '1');
+        }
+      } catch (e) {
+        console.warn('fsDeleteArtwork: existing status 確認失敗', e);
+      }
       await window.fsSetArtwork(exCode, artworkId, {
         status: "0",
         title: "", title_en: "",

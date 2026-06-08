@@ -179,6 +179,51 @@ async function deriveSignInLinkContext(continueUrl) {
   };
 }
 
+// sendSignInLink の per-email rate limit。
+// 任意 email 宛にサインインリンクを誰でも投げられる構造なので、
+// inbox flooding / 送信元 Gmail SMTP 100/day 制限の被害を防ぐ。
+// email_throttle/{sha256(email)[:32]} に最近の送信時刻配列を保持。
+// 5 分以内に 3 回を超えると resource-exhausted で reject。
+// fail-open (Firestore 障害時は throttle を諦めて送信は続行する)。
+async function checkSendLinkThrottle(email) {
+  const RATE_LIMIT_WINDOW_SEC = 5 * 60;
+  const RATE_LIMIT_MAX = 3;
+  const now = Math.floor(Date.now() / 1000);
+  const emailHash = crypto.createHash("sha256")
+    .update(email).digest("hex").slice(0, 32);
+  const docRef = admin.firestore().collection("email_throttle").doc(emailHash);
+
+  let rateLimited = false;
+  try {
+    await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const prev = snap.exists ? (snap.data().attempts || []) : [];
+      const recent = prev.filter((t) =>
+        typeof t === "number" && (now - t) < RATE_LIMIT_WINDOW_SEC,
+      );
+      if (recent.length >= RATE_LIMIT_MAX) {
+        rateLimited = true;
+        return;
+      }
+      recent.push(now);
+      tx.set(docRef, { attempts: recent, updatedAt: now });
+    });
+  } catch (e) {
+    logger.warn("sendSignInLink throttle txn failed (fail-open)", {
+      emailHash, error: e && e.message,
+    });
+    return;
+  }
+  if (rateLimited) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "メール送信が短時間に集中しています。" +
+        Math.ceil(RATE_LIMIT_WINDOW_SEC / 60) +
+        " 分ほど待ってから再度お試しください",
+    );
+  }
+}
+
 exports.sendSignInLink = onCall(
   { secrets: [SMTP_PASSWORD] },
   async (request) => {
@@ -188,6 +233,8 @@ exports.sendSignInLink = onCall(
     if (!email || !continueUrl) {
       throw new HttpsError("invalid-argument", "email と continueUrl が必要です");
     }
+
+    await checkSendLinkThrottle(email);
 
     // Admin SDK でサインイン URL を生成 (Firebase Auth 標準フローと互換)
     let link;
@@ -374,6 +421,10 @@ exports.finalizeExhibitionSetup = onCall(async (request) => {
         artworkId: aId,
         exCode: exCode,
         createdAt: ts,
+        // β-3 server-managed: empty slot は初期 _published=false。
+        // organizerEmail は denormalize (Rules で organizer 直 read 用)。
+        _published: false,
+        organizerEmail: verifiedEmail,
       });
       writes.push(
         db.collection("artworks").doc(docId).set(docData, { merge: true }),
@@ -948,6 +999,60 @@ function computeArtistSig(secret, exCode, artistName, exp) {
     .digest("hex");
 }
 
+// HMAC access token (exhibition / artwork / artist) を検証する共通ヘルパ。
+// 戻り値: 'exhibition_token' / 'artwork_token' / 'artist_token' (検証成功時) または null。
+// 不正な形式は HttpsError を投げる。
+// 呼出側で operator/organizer 認可と組み合わせる前提。
+// β-3 で getArtwork / listArtworksByArtist にも同じ検証が必要になったため共通化。
+// (既存 submitArtwork / uploadArtworkImage は重複コードを残しているが、リスクを避けて
+// 今は触らない。将来的に揃える方向で。)
+function verifyHmacAccessToken(tok, exCode, artworkId, secret) {
+  if (!tok || !tok.kind) return null;
+  const exp = Number(tok.exp);
+  const sig = String(tok.sig || "");
+  if (!Number.isFinite(exp) || !sig) {
+    throw new HttpsError(
+      "invalid-argument",
+      tok.kind + " token に exp/sig が必要です",
+    );
+  }
+  if (exp <= Math.floor(Date.now() / 1000)) {
+    throw new HttpsError(
+      "deadline-exceeded",
+      "アクセストークンの有効期限が切れています",
+    );
+  }
+  let expected;
+  if (tok.kind === "exhibition") {
+    expected = computeExhibitionSig(secret, exCode, exp);
+  } else if (tok.kind === "artwork") {
+    if (!artworkId) {
+      throw new HttpsError(
+        "invalid-argument",
+        "artwork token は artworkId が必要です",
+      );
+    }
+    expected = computeArtworkSig(secret, exCode, artworkId, exp);
+  } else if (tok.kind === "artist") {
+    const tokArtist = String(tok.artist || "").trim();
+    if (!tokArtist) {
+      throw new HttpsError(
+        "invalid-argument",
+        "artist token に artist が必要です",
+      );
+    }
+    expected = computeArtistSig(secret, exCode, tokArtist, exp);
+  } else {
+    return null;
+  }
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(sig, "hex");
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+    return tok.kind + "_token";
+  }
+  return null;
+}
+
 async function isOrganizerForEx(authEmail, exCode) {
   if (!authEmail || !exCode) return false;
   const exSnap = await admin.firestore()
@@ -1325,11 +1430,41 @@ exports.graduateExhibition = onCall(async (request) => {
   }
 
   // is_sandbox = false にして自動削除予定をクリア
+  const updatedAt = new Date().toISOString();
   await db.collection("exhibitions").doc(exCode).set({
     is_sandbox: false,
     expire_at: null,
-    updatedAt: new Date().toISOString(),
+    updatedAt,
   }, { merge: true });
+
+  // audit log に削除内容を記録 (submitArtwork と同 collection)。
+  // graduate は破壊的操作なので運用透明性のため必ず痕跡を残す。
+  // audit 書込み失敗は本処理を止めない (logger.warn に降ろす)。
+  try {
+    await db.collection("audit").add({
+      exCode,
+      artworkId: "",
+      timestamp: updatedAt,
+      authMode: isOperator ? "operator" : "organizer",
+      callerEmail: authEmail,
+      action: "graduateExhibition",
+      changedFields: ["卒業時統計"],
+      before: {
+        "卒業時統計":
+          "artworks " + stats.artworks + " 件 / " +
+          "likes " + stats.likes + " 件 / " +
+          "作品画像 " + stats.artworkImages + " 枚 / " +
+          "ギャラリー画像 " + stats.galleryImages + " 枚",
+      },
+      after: { "卒業時統計": "全削除" },
+      isNew: false,
+    });
+  } catch (auditErr) {
+    logger.warn("graduateExhibition audit write failed", {
+      exCode,
+      error: auditErr && auditErr.message ? auditErr.message : String(auditErr),
+    });
+  }
 
   logger.info("graduateExhibition success", { exCode, caller: authEmail, stats });
   return Object.assign({ success: true, exCode }, stats);
@@ -1394,6 +1529,10 @@ exports.submitArtwork = onCall(
     const artworkId = String(data.artworkId || "").trim();
     const fields = data.fields || {};
     const tok = data.accessToken || {};
+    // β-3 Phase 2 (b): artwork_token (1 枚の QR) で同作家の他作品に fan-out write
+    // するときに、HMAC 検証用の "元 artwork" を指定するためのパラメータ。
+    // sourceArtworkId !== artworkId のとき = fan-out mode、追加制約を課す。
+    const sourceArtworkId = String(data.sourceArtworkId || "").trim();
 
     if (!exCode || !artworkId) {
       throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
@@ -1401,14 +1540,20 @@ exports.submitArtwork = onCall(
     if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
       throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
     }
+    if (sourceArtworkId && !/^[A-Za-z0-9_-]+$/.test(sourceArtworkId)) {
+      throw new HttpsError("invalid-argument", "sourceArtworkId が不正です");
+    }
     if (typeof fields !== "object" || Array.isArray(fields)) {
       throw new HttpsError("invalid-argument", "fields は object である必要があります");
     }
 
     // クライアントが上書き不可のフィールド (システム管理) を除外。
+    // _published / organizerEmail は β-3 で Rules による read 認可に使う server-managed
+    // フィールド。client から書き換えられると Rules チェックが意味を失う。
     const FORBIDDEN = new Set([
       "security_key", "exCode", "artworkId", "artwork_id",
       "createdAt", "migratedAt", "backfilledAt", "updatedAt",
+      "_published", "organizerEmail",
     ]);
     const cleanFields = {};
     for (const k of Object.keys(fields)) {
@@ -1467,7 +1612,10 @@ exports.submitArtwork = onCall(
         if (exp <= Math.floor(Date.now() / 1000)) {
           throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
         }
-        const expected = computeArtworkSig(secret, exCode, artworkId, exp);
+        // Phase 2 (b): fan-out のとき HMAC は sourceArtworkId (= QR の元作品) で検証する。
+        // 後段で「target = 同作家」「fields = artist 情報のみ」制約を別途課す。
+        const verifyArtworkId = sourceArtworkId || artworkId;
+        const expected = computeArtworkSig(secret, exCode, verifyArtworkId, exp);
         const a = Buffer.from(expected, "hex");
         const b = Buffer.from(sig, "hex");
         if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
@@ -1599,6 +1747,54 @@ exports.submitArtwork = onCall(
       }
     }
 
+    // Phase 2 (b): artwork_token で sourceArtworkId !== artworkId のとき = fan-out write。
+    //   1. source artwork doc が存在し、artist が空でない
+    //   2. target artwork doc が存在し、artist が source と一致
+    //   3. cleanFields は ARTIST_FANOUT_FIELDS の subset (= SNS 系のみ)
+    //   どれか満たさないなら permission-denied。
+    if (
+      authMode === "artwork_token" &&
+      sourceArtworkId &&
+      sourceArtworkId !== artworkId
+    ) {
+      const ARTIST_FANOUT_FIELDS = new Set([
+        "artist", "insta", "x", "facebook", "web",
+      ]);
+      for (const k of Object.keys(cleanFields)) {
+        if (!ARTIST_FANOUT_FIELDS.has(k)) {
+          throw new HttpsError(
+            "permission-denied",
+            "fan-out 書込みでは作家情報フィールドのみ許可されます (" + k + " は拒否)",
+          );
+        }
+      }
+      const sourceSnap = await admin.firestore()
+        .collection("artworks").doc(exCode + "_" + sourceArtworkId).get();
+      if (!sourceSnap.exists) {
+        throw new HttpsError("not-found", "fan-out 元の作品が見つかりません");
+      }
+      const sourceArtist =
+        String((sourceSnap.data() || {}).artist || "").trim();
+      if (!sourceArtist) {
+        throw new HttpsError(
+          "failed-precondition",
+          "fan-out 元の作品に作家名が設定されていません",
+        );
+      }
+      if (!existingSnap.exists) {
+        throw new HttpsError("not-found", "fan-out 先の作品が見つかりません");
+      }
+      const targetArtist =
+        String((existingSnap.data() || {}).artist || "").trim();
+      if (sourceArtist !== targetArtist) {
+        throw new HttpsError(
+          "permission-denied",
+          "fan-out は同じ作家の作品にのみ可能です (" +
+            sourceArtist + " ≠ " + targetArtist + ")",
+        );
+      }
+    }
+
     const writePayload = Object.assign({}, cleanFields, {
       exCode: exCode,
       artworkId: artworkId,
@@ -1607,6 +1803,25 @@ exports.submitArtwork = onCall(
     });
     if (!existingSnap.exists) {
       writePayload.security_key = writePayload.security_key || "";
+      // β-3 server-managed fields: create 時に必ず初期化。
+      //   _published は最初 false (= visitor 直 read 不可)。後で
+      //   syncArtworkPublishedFlags が gallery_visibility に応じて更新する。
+      //   organizerEmail は exhibitions doc から denormalize。Rules が
+      //   request.auth.token.email == resource.data.organizerEmail で
+      //   organizer の直 read を許可するための鍵。
+      writePayload._published = false;
+      try {
+        const exSnap = await admin.firestore()
+          .collection("exhibitions").doc(exCode).get();
+        const exData = exSnap.exists ? (exSnap.data() || {}) : {};
+        writePayload.organizerEmail =
+          String(exData.email || "").trim().toLowerCase();
+      } catch (e) {
+        logger.warn("submitArtwork: organizerEmail lookup failed", {
+          exCode, error: e && e.message,
+        });
+        writePayload.organizerEmail = "";
+      }
     }
 
     const existingDataForAudit = existingSnap.exists ?
@@ -1781,12 +1996,34 @@ exports.categorizeArtwork = onCall(
       throw new HttpsError("permission-denied", "Firebase Auth が必要です");
     }
 
-    const imageUrl = String((request.data || {}).imageUrl || "").trim();
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const imageUrl = String(data.imageUrl || "").trim();
+    if (!exCode) {
+      throw new HttpsError("invalid-argument", "exCode が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
     if (!imageUrl) {
       throw new HttpsError("invalid-argument", "imageUrl が必要です");
     }
     if (!/^https?:\/\//i.test(imageUrl)) {
       throw new HttpsError("invalid-argument", "imageUrl は http(s) URL である必要があります");
+    }
+
+    // 認可: operator OR 該当 exhibition の organizer。
+    // (visitor custom token / その他 Firebase Auth 経由でも authEmail は非空に
+    // なるため、role-aware なチェックが必要。Claude API 課金漏れ対策。)
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (!isOperator) {
+      const ok = await isOrganizerForEx(authEmail, exCode);
+      if (!ok) {
+        throw new HttpsError(
+          "permission-denied",
+          "この展覧会の主催者または運営者の Firebase Auth が必要です",
+        );
+      }
     }
 
     const apiKey = CLAUDE_API_KEY.value();
@@ -1889,6 +2126,575 @@ exports.categorizeArtwork = onCall(
 //   出力: { success: true, updated: number }
 //   制限: sessionIds は最大 50 件まで
 // =========================================================
+// =========================================================
+// uploadArtworkImage / uploadGalleryImage
+//   画像アップロードを CF 経由に倒し、Storage Rules では
+//   /artworks /gallery とも write:false にする。これにより
+//   filename を当てて誰でも上書きできる D-1 脆弱性を塞ぐ。
+//
+//   - uploadArtworkImage: artist 経路 (token) も含めて受ける。
+//       認可は submitArtwork と同じパターン (operator / organizer /
+//       exhibition_token / artwork_token / artist_token)。
+//       既存 doc が無い場合 artist 経路は拒否、is_locked / artist 不一致
+//       も submitArtwork に揃える。
+//   - uploadGalleryImage: operator / organizer のみ。
+//
+//   どちらも base64 で受け、admin SDK で Storage に書く。
+//   firebaseStorageDownloadTokens を付けて返す URL は SDK の
+//   getDownloadURL() と同じ形式 (translateImageUrl の正規表現と互換)。
+// =========================================================
+
+function constructDownloadUrl(bucketName, objPath, downloadToken) {
+  return "https://firebasestorage.googleapis.com/v0/b/" +
+    bucketName + "/o/" + encodeURIComponent(objPath) +
+    "?alt=media&token=" + downloadToken;
+}
+
+function decodeImageBase64(imageBase64, maxBytes) {
+  let raw = String(imageBase64 || "");
+  const m = raw.match(/^data:image\/[^;]+;base64,(.+)$/);
+  if (m) raw = m[1];
+  if (!raw) {
+    throw new HttpsError("invalid-argument", "画像データが必要です");
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(raw, "base64");
+  } catch (e) {
+    throw new HttpsError("invalid-argument", "画像データの形式が不正です");
+  }
+  if (!buffer || buffer.length === 0) {
+    throw new HttpsError("invalid-argument", "画像データが空です");
+  }
+  if (buffer.length > maxBytes) {
+    const mb = Math.round(maxBytes / (1024 * 1024));
+    throw new HttpsError("invalid-argument", "画像は " + mb + "MB 以下にしてください");
+  }
+  return buffer;
+}
+
+exports.uploadArtworkImage = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET], memory: "512MiB", timeoutSeconds: 60 },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const tok = data.accessToken || {};
+
+    if (!exCode || !artworkId) {
+      throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+
+    const buffer = decodeImageBase64(data.imageBase64, 1 * 1024 * 1024);
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    let authMode = null;
+
+    if (authEmail) {
+      if (OPERATOR_EMAILS.indexOf(authEmail) !== -1) {
+        authMode = "operator";
+      } else if (await isOrganizerForEx(authEmail, exCode)) {
+        authMode = "organizer";
+      }
+    }
+
+    const docRef = admin.firestore()
+      .collection("artworks").doc(exCode + "_" + artworkId);
+    const existingSnap = await docRef.get();
+
+    if (!authMode && tok.kind) {
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+      if (tok.kind === "exhibition") {
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "exhibition token に exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeExhibitionSig(secret, exCode, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "exhibition_token";
+        }
+      } else if (tok.kind === "artwork") {
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "artwork token に exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeArtworkSig(secret, exCode, artworkId, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "artwork_token";
+        }
+      } else if (tok.kind === "artist") {
+        const tokArtist = String(tok.artist || "").trim();
+        const exp = Number(tok.exp);
+        const sig = String(tok.sig || "");
+        if (!tokArtist || !Number.isFinite(exp) || !sig) {
+          throw new HttpsError("invalid-argument", "artist token に artist/exp/sig が必要です");
+        }
+        if (exp <= Math.floor(Date.now() / 1000)) {
+          throw new HttpsError("deadline-exceeded", "アクセストークンの有効期限が切れています");
+        }
+        const expected = computeArtistSig(secret, exCode, tokArtist, exp);
+        const a = Buffer.from(expected, "hex");
+        const b = Buffer.from(sig, "hex");
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          authMode = "artist_token";
+        }
+      }
+    }
+
+    if (!authMode) {
+      throw new HttpsError(
+        "permission-denied",
+        "書き込み権限がありません (operator / organizer auth または有効なアクセストークンが必要)",
+      );
+    }
+
+    const isArtistAuth = (
+      authMode === "exhibition_token" ||
+      authMode === "artwork_token" ||
+      authMode === "artist_token"
+    );
+
+    if (!existingSnap.exists) {
+      if (isArtistAuth) {
+        throw new HttpsError("not-found", "対象の作品枠が見つかりません");
+      }
+    } else {
+      const existing = existingSnap.data() || {};
+      const existingEx = String(existing.exCode || "");
+      if (existingEx && existingEx !== exCode) {
+        throw new HttpsError("failed-precondition", "doc の exCode が一致しません");
+      }
+      if (isArtistAuth && existing.is_locked === true) {
+        throw new HttpsError(
+          "permission-denied",
+          "この作品はロックされています。編集が必要な場合は主催者にご連絡ください",
+        );
+      }
+      if (authMode === "artist_token") {
+        const tokArtist = String(tok.artist || "").trim();
+        const existingArtist = String(existing.artist || "").trim();
+        if (existingArtist && existingArtist !== tokArtist) {
+          throw new HttpsError(
+            "permission-denied",
+            "このトークンでは他の作家の作品を編集できません",
+          );
+        }
+      }
+      // artwork_token の artist 物理スキャン乗っ取り対策は image 単独では
+      // 弱められない (image_url 自体は artist field を書き換えないため、
+      // submitArtwork 側の artist 整合チェックで十分)。
+    }
+
+    const downloadToken = crypto.randomUUID();
+    const objPath = "artworks/" + exCode + "_" + artworkId + ".jpg";
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(objPath);
+    await file.save(buffer, {
+      metadata: {
+        contentType: "image/jpeg",
+        metadata: { firebaseStorageDownloadTokens: downloadToken },
+      },
+      resumable: false,
+    });
+
+    logger.info("artwork image uploaded", {
+      exCode,
+      artworkId,
+      size: buffer.length,
+      authMode,
+      caller: authEmail || "(anon)",
+    });
+
+    return {
+      success: true,
+      url: constructDownloadUrl(bucket.name, objPath, downloadToken),
+    };
+  },
+);
+
+exports.uploadGalleryImage = onCall(
+  { memory: "512MiB", timeoutSeconds: 60 },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const kind = String(data.kind || "").trim();
+
+    if (!exCode || !/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+    if (kind !== "hero" && kind !== "bg") {
+      throw new HttpsError("invalid-argument", "kind は hero または bg のみです");
+    }
+
+    const buffer = decodeImageBase64(data.imageBase64, 3 * 1024 * 1024);
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+    }
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (!isOperator) {
+      const ok = await isOrganizerForEx(authEmail, exCode);
+      if (!ok) {
+        throw new HttpsError(
+          "permission-denied",
+          "この展覧会の主催者または運営者の Firebase Auth が必要です",
+        );
+      }
+    }
+
+    const downloadToken = crypto.randomUUID();
+    const objPath = "gallery/" + exCode + "_" + kind + ".jpg";
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(objPath);
+    await file.save(buffer, {
+      metadata: {
+        contentType: "image/jpeg",
+        metadata: { firebaseStorageDownloadTokens: downloadToken },
+      },
+      resumable: false,
+    });
+
+    logger.info("gallery image uploaded", {
+      exCode,
+      kind,
+      size: buffer.length,
+      caller: authEmail,
+      role: isOperator ? "operator" : "organizer",
+    });
+
+    return {
+      success: true,
+      url: constructDownloadUrl(bucket.name, objPath, downloadToken),
+    };
+  },
+);
+
+// =========================================================
+// β-3 mediation CFs (artworks read 経路の認可集中化)
+//
+//   firestore.rules で artworks の read を狭めた上で、anon (物理 QR) と
+//   artist (招待 URL) の経路だけ CF 経由に倒す。operator / organizer は
+//   Firebase Auth + Rules で直 read 可、visitor は Firebase Auth custom
+//   token (role=visitor + exCode claim) + _published フィールドで直 read 可。
+//
+//   - getArtwork: 単一 doc。anon / artist / operator / organizer 受ける
+//   - listArtworksByArtist: artist 経路で自分の作品一覧を取得
+//   - syncArtworkPublishedFlags: web-exhibition.html の保存処理を mediate し、
+//       exhibitions.gallery_visibility 更新と同時に artworks._published を
+//       batch update する
+// =========================================================
+
+exports.getArtwork = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const tok = data.accessToken || {};
+
+    if (!exCode || !artworkId) {
+      throw new HttpsError("invalid-argument", "exCode と artworkId が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    let authMode = null;
+
+    if (authEmail) {
+      if (OPERATOR_EMAILS.indexOf(authEmail) !== -1) authMode = "operator";
+      else if (await isOrganizerForEx(authEmail, exCode)) authMode = "organizer";
+    }
+
+    if (!authMode && tok && tok.kind) {
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+      authMode = verifyHmacAccessToken(tok, exCode, artworkId, secret);
+    }
+
+    if (!authMode) {
+      throw new HttpsError(
+        "permission-denied",
+        "読取り権限がありません (operator / organizer auth または有効なアクセストークンが必要)",
+      );
+    }
+
+    const snap = await admin.firestore()
+      .collection("artworks").doc(exCode + "_" + artworkId).get();
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "対象の作品が見つかりません");
+    }
+    const docData = snap.data() || {};
+
+    // artist_token: 既存 artist と token artist の一致を強制 (submitArtwork と同じポリシー)。
+    if (authMode === "artist_token") {
+      const tokArtist = String(tok.artist || "").trim();
+      const docArtist = String(docData.artist || "").trim();
+      if (docArtist && docArtist !== tokArtist) {
+        throw new HttpsError(
+          "permission-denied",
+          "このトークンでは他の作家の作品を読めません",
+        );
+      }
+    }
+
+    return { success: true, artwork: docData };
+  },
+);
+
+exports.listArtworksByArtist = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artistName = String(data.artistName || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const tok = data.accessToken || {};
+
+    if (!exCode || !artistName) {
+      throw new HttpsError("invalid-argument", "exCode と artistName が必要です");
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    let authMode = null;
+
+    if (authEmail) {
+      if (OPERATOR_EMAILS.indexOf(authEmail) !== -1) authMode = "operator";
+      else if (await isOrganizerForEx(authEmail, exCode)) authMode = "organizer";
+    }
+
+    // exhibition_token / artist_token: token kind に依らず list 用途で受ける。
+    if (!authMode && tok && tok.kind && tok.kind !== "artwork") {
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+      authMode = verifyHmacAccessToken(tok, exCode, "", secret);
+    }
+
+    // artwork_token (= 物理 QR 1 枚) も受ける。Phase 2 (b):
+    //   QR 経由の anon 来場者が「自分の作品の作家として、他にも自作があるか」を
+    //   index.html の案 C で確認するための経路。
+    //   条件:
+    //     - artworkId パラメータが必要 (= どの QR の話か CF が知る必要がある)
+    //     - artwork_token の HMAC が exCode+artworkId に対して有効
+    //     - artwork doc の現在の artist と要求された artistName が一致
+    //   不一致 → permission-denied (他作家の一覧を覗き見されない)
+    if (!authMode && tok && tok.kind === "artwork") {
+      if (!artworkId || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+        throw new HttpsError(
+          "invalid-argument",
+          "artwork token 使用時は artworkId が必要です",
+        );
+      }
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+      const tokAuthMode = verifyHmacAccessToken(tok, exCode, artworkId, secret);
+      if (tokAuthMode === "artwork_token") {
+        const artSnap = await admin.firestore()
+          .collection("artworks").doc(exCode + "_" + artworkId).get();
+        if (!artSnap.exists) {
+          throw new HttpsError("not-found", "対象の作品が見つかりません");
+        }
+        const docArtist = String((artSnap.data() || {}).artist || "").trim();
+        if (docArtist && docArtist === artistName) {
+          authMode = "artwork_token";
+        } else {
+          // doc.artist が空 (= 新規スロット) や別作家の場合は拒否
+          throw new HttpsError(
+            "permission-denied",
+            "この QR の作品の作家と異なる作家の一覧は読めません",
+          );
+        }
+      }
+    }
+
+    if (!authMode) {
+      throw new HttpsError(
+        "permission-denied",
+        "読取り権限がありません",
+      );
+    }
+
+    // artist_token のときは token.artist と要求 artistName が一致しなければならない。
+    if (authMode === "artist_token") {
+      const tokArtist = String(tok.artist || "").trim();
+      if (tokArtist !== artistName) {
+        throw new HttpsError(
+          "permission-denied",
+          "このトークンでは指定された作家以外の一覧を読めません",
+        );
+      }
+    }
+
+    const snap = await admin.firestore().collection("artworks")
+      .where("exCode", "==", exCode)
+      .where("artist", "==", artistName)
+      .get();
+    const artworks = snap.docs.map((d) => d.data());
+    return { success: true, artworks: artworks };
+  },
+);
+
+exports.findEmptyArtworkSlot = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const tok = data.accessToken || {};
+
+    if (!exCode || !/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    let authMode = null;
+
+    if (authEmail) {
+      if (OPERATOR_EMAILS.indexOf(authEmail) !== -1) authMode = "operator";
+      else if (await isOrganizerForEx(authEmail, exCode)) authMode = "organizer";
+    }
+
+    // artwork_token は単一 doc 用なので list には使えない。
+    // exhibition_token / artist_token / operator / organizer のみ受ける。
+    if (!authMode && tok && tok.kind && tok.kind !== "artwork") {
+      const secret = ARTIST_TOKEN_SECRET.value();
+      if (!secret) {
+        throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+      }
+      authMode = verifyHmacAccessToken(tok, exCode, "", secret);
+    }
+
+    if (!authMode) {
+      throw new HttpsError("permission-denied", "読取り権限がありません");
+    }
+
+    // 空きスロット = status='0' or status=''。artwork_id でソートして先頭を返す。
+    // (artist 経路で並列に 2 人が同じスロットを取る race は残るが、これは β-3 で
+    // 直すべき問題ではなく submitArtwork 側で原子的に解決する別課題。Phase 2 候補。)
+    const snap = await admin.firestore().collection("artworks")
+      .where("exCode", "==", exCode)
+      .get();
+    const candidates = [];
+    snap.docs.forEach((d) => {
+      const data = d.data() || {};
+      if (!data.artwork_id) return;
+      const status = String(data.status || "").trim();
+      if (status === "0" || status === "") candidates.push(data);
+    });
+    candidates.sort((a, b) => String(a.artwork_id).localeCompare(String(b.artwork_id)));
+    if (candidates.length === 0) {
+      return { success: false, error: "登録可能な空きがありません。すべての作品枠が埋まっています。" };
+    }
+    return { success: true, artworkId: candidates[0].artwork_id };
+  },
+);
+
+exports.syncArtworkPublishedFlags = onCall(async (request) => {
+  const data = request.data || {};
+  const exCode = String(data.exCode || "").trim();
+  const visibility = String(data.gallery_visibility || "").trim();
+  const interactions = String(data.gallery_interactions || "").trim();
+
+  if (!exCode || !/^[A-Za-z0-9_-]+$/.test(exCode)) {
+    throw new HttpsError("invalid-argument", "exCode が不正です");
+  }
+  const VALID_VIS = ["closed", "visitor_only", "public"];
+  if (VALID_VIS.indexOf(visibility) === -1) {
+    throw new HttpsError("invalid-argument", "gallery_visibility が不正です");
+  }
+
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  if (!authEmail) {
+    throw new HttpsError("permission-denied", "Firebase Auth が必要です");
+  }
+  const isOp = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+  if (!isOp) {
+    const ok = await isOrganizerForEx(authEmail, exCode);
+    if (!ok) {
+      throw new HttpsError(
+        "permission-denied",
+        "この展覧会の主催者または運営者の Firebase Auth が必要です",
+      );
+    }
+  }
+
+  const db = admin.firestore();
+  const published = (visibility === "public" || visibility === "visitor_only");
+
+  // exhibitions doc を更新 (gallery_visibility + gallery_interactions)
+  const exhibitionUpdate = { gallery_visibility: visibility };
+  if (interactions) {
+    exhibitionUpdate.gallery_interactions = interactions;
+  }
+  await db.collection("exhibitions").doc(exCode).set(exhibitionUpdate, { merge: true });
+
+  // 全 artworks._published を batch update。
+  // status 区別なく一律 set する (Rules で visitor は status='1' も別途要求するため
+  // 空きスロットが漏れる心配はない)。
+  const snap = await db.collection("artworks").where("exCode", "==", exCode).get();
+  let updated = 0;
+  let batch = db.batch();
+  let pendingInBatch = 0;
+  const BATCH_LIMIT = 400;
+  for (const doc of snap.docs) {
+    batch.update(doc.ref, { _published: published });
+    pendingInBatch++;
+    updated++;
+    if (pendingInBatch >= BATCH_LIMIT) {
+      await batch.commit();
+      batch = db.batch();
+      pendingInBatch = 0;
+    }
+  }
+  if (pendingInBatch > 0) await batch.commit();
+
+  logger.info("syncArtworkPublishedFlags success", {
+    exCode, visibility, updated, caller: authEmail,
+    role: isOp ? "operator" : "organizer",
+  });
+  return { success: true, exCode, visibility, updated };
+});
+
 exports.setLikesExcludedFromStats = onCall(async (request) => {
   const authEmail = String(
     (request.auth && request.auth.token && request.auth.token.email) || "",

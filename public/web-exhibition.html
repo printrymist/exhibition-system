@@ -303,7 +303,8 @@
       appId: "1:762429995901:web:f3b330d26897dc3214ea14"
     });
     const fsDb = firebase.firestore();
-    const fsStorage = firebase.storage();
+    const _uploadGalleryImageFn = firebase.app().functions('asia-northeast1').httpsCallable('uploadGalleryImage');
+    const _syncArtworkPublishedFlagsFn = firebase.app().functions('asia-northeast1').httpsCallable('syncArtworkPublishedFlags');
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
@@ -483,10 +484,16 @@
     }
 
     async function uploadAppearanceImage(kind, dataUrl) {
-      const blob = await (await fetch(dataUrl)).blob();
-      const ref = fsStorage.ref('gallery/' + currentEx + '_' + kind + '.jpg');
-      await ref.put(blob, { contentType: 'image/jpeg' });
-      return await ref.getDownloadURL();
+      // operator / organizer (Firebase Auth) で uploadGalleryImage CF を呼ぶ。
+      const res = await _uploadGalleryImageFn({
+        exCode: currentEx,
+        kind: kind,
+        imageBase64: dataUrl,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('画像アップロードに失敗しました');
+      }
+      return res.data.url;
     }
 
     async function saveGalleryAppearance() {
@@ -545,11 +552,18 @@
       msgEl.innerText = '保存中...';
       msgEl.style.color = '#888';
       try {
-        await fsDb.collection('exhibitions').doc(currentEx).set({
+        // β-3: gallery_visibility の変更時に artworks._published を同期する必要があるため、
+        //   CF 経由 (syncArtworkPublishedFlags) で exhibitions doc 更新と batch 反映を一括実行。
+        const res = await _syncArtworkPublishedFlagsFn({
+          exCode: currentEx,
           gallery_visibility: visibility,
           gallery_interactions: interactions,
-        }, { merge: true });
-        msgEl.innerText = '✅ 保存しました。';
+        });
+        const d = res && res.data;
+        if (!d || !d.success) {
+          throw new Error('保存に失敗しました');
+        }
+        msgEl.innerText = '✅ 保存しました (' + (d.updated || 0) + ' 件の作品を同期)。';
         msgEl.style.color = '#1a73e8';
       } catch (e) {
         msgEl.innerText = '❌ 保存失敗: ' + (e && e.message ? e.message : e);

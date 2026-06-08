@@ -728,14 +728,18 @@
       }
 
       // 作品取得。status='1' のみ表示 (登録完了した作品)。
+      // β-3: Rules で visitor は _published=true AND status='1' を要求するため、
+      //   query 側でも同じ条件を含める必要がある (Rules は filter ではなく、
+      //   ヒットした全 doc が条件を満たさないと query 自体が失敗する)。
       try {
         const snap = await fsDb.collection('artworks')
           .where('exCode', '==', exCode)
+          .where('_published', '==', true)
+          .where('status', '==', '1')
           .get();
         const artworks = [];
         snap.forEach(d => {
           const a = d.data();
-          if (String(a.status || '') !== '1') return;
           if (!getArtworkImageUrl(a, 'display')) return;
           artworks.push(a);
         });

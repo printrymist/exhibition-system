@@ -825,31 +825,24 @@
       try {
         await regLoadImageRequired(ex);
 
-        const [exSnap, awSnap, artistsSnap] = await Promise.all([
+        // β-3: artwork doc は anon 直 read 不可。CF 経由で取得。
+        //   全作家一覧 (autocomplete 用) も where() で anon read していたが、
+        //   こちらは Phase 1 では撤去。autocomplete UX を諦めて作家は手入力。
+        //   Phase 2 で listExhibitionArtists 等の CF を追加すれば復活可能。
+        const accessToken = _resolveArtworkAccessToken(ex, id);
+        const [exSnap, awRes] = await Promise.all([
           fsDb.collection('exhibitions').doc(ex).get(),
-          fsDb.collection('artworks').doc(ex + '_' + id).get(),
-          fsDb.collection('artworks').where('exCode', '==', ex).get(),
+          _getArtworkFn({ exCode: ex, artworkId: id, accessToken: accessToken }),
         ]);
         if (!exSnap.exists) {
           alert('エラー: 展覧会データが見つかりません');
           return;
         }
         const exData = exSnap.data() || {};
-        const awData = awSnap.exists ? (awSnap.data() || {}) : {};
+        const awApiData = awRes && awRes.data;
+        const awData = (awApiData && awApiData.success) ? (awApiData.artwork || {}) : {};
 
         const artistsMap = new Map();
-        artistsSnap.forEach(d => {
-          const a = d.data() || {};
-          if (String(a.status || '') !== '1') return;
-          if (!a.artist || artistsMap.has(a.artist)) return;
-          artistsMap.set(a.artist, {
-            name: a.artist,
-            insta: a.insta || '',
-            x: a.x || '',
-            fb: a.facebook || '',
-            web: a.web || '',
-          });
-        });
 
         regConfig = {
           exName: exData.ex_name || ex,
@@ -1000,19 +993,34 @@
         let updatedArtistCount = 1;
         const targetArtist = artistName.trim();
         if (targetArtist) {
-          const snap = await fsDb.collection('artworks')
-            .where('exCode', '==', exVal)
-            .where('artist', '==', targetArtist)
-            .get();
-          const tasks = [];
-          snap.forEach(doc => {
-            if (doc.id === exVal + '_' + idVal) return;
-            const otherId = doc.data().artwork_id;
-            if (!otherId) return;
-            tasks.push(window.fsSetArtwork(exVal, otherId, artistFields).catch(e => console.error('Firestore propagation:', e)));
-            updatedArtistCount++;
-          });
-          await Promise.all(tasks);
+          // β-3 Phase 2 (b): 案 C で同作家の他作品にも SNS 等を fan-out 反映する。
+          //   artwork_token (QR スキャン経由の anon visitor) では CF
+          //   listArtworksByArtist 経由で取得し、CF 側で「現 artist と targetArtist の一致」
+          //   をチェックしている。一致しなければ permission-denied で返る (= fan-out スキップ)。
+          try {
+            const accessToken = _resolveArtworkAccessToken(exVal, idVal);
+            const res = await _listArtworksByArtistFn({
+              exCode: exVal,
+              artworkId: idVal,
+              artistName: targetArtist,
+              accessToken: accessToken,
+            });
+            const others = (res && res.data && res.data.artworks) || [];
+            const results = await Promise.allSettled(others
+              .filter(d => d.artwork_id && d.artwork_id !== idVal)
+              .map(d => window.fsSetArtwork(exVal, d.artwork_id, artistFields, { sourceArtworkId: idVal })));
+            results.forEach((r, i) => {
+              if (r.status === 'fulfilled') {
+                updatedArtistCount++;
+              } else {
+                console.error('Firestore propagation failed:', r.reason);
+              }
+            });
+          } catch (e) {
+            // 他作家の一覧を読もうとした等で permission-denied になっても、
+            // 自作品の更新は既に成功しているので致命的にしない。warn だけ残す。
+            console.warn('案 C fan-out skipped:', e && e.message);
+          }
         }
 
         document.getElementById('regLoadingOverlay').style.display = 'none';
@@ -1461,29 +1469,43 @@
       .catch(e => console.warn('visitor auth persistence:', e));
 
     const fsDb = firebase.firestore();
-    const fsStorage = firebase.storage();
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
-      const blob = await (await fetch(dataUrl)).blob();
-      const ref = fsStorage.ref('artworks/' + exCode + '_' + artworkId + '.jpg');
-      await ref.put(blob, { contentType: 'image/jpeg' });
-      return await ref.getDownloadURL();
+      const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
+      if (!accessToken) {
+        throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
+      }
+      const res = await _uploadArtworkImageFn({
+        exCode: exCode,
+        artworkId: artworkId,
+        imageBase64: dataUrl,
+        accessToken: accessToken,
+      });
+      if (!res || !res.data || !res.data.success) {
+        throw new Error('Cloud Function が失敗しました');
+      }
+      return res.data.url;
     };
     // Phase 6c: GAS バックフィル経路を撤去。Firestore のみが artwork データのソース。
     // (rules も Phase 5-A で固めてあり、anon クライアントから artworks の create/update は
     // できないので、そもそも backfill は silent fail していた経路。)
     window.fsGetArtworkData = async (exCode, artworkId) => {
       try {
-        const [aSnap, eSnap] = await Promise.all([
-          fsDb.collection('artworks').doc(exCode + '_' + artworkId).get(),
+        // β-3: artwork doc は anon 直 read 不可になったので CF 経由で取得。
+        //   URL の exp+sig (artwork_token) を accessToken として渡す。
+        //   exhibitions doc は引き続き public get で直接読む。
+        const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
+        const [aRes, eSnap] = await Promise.all([
+          _getArtworkFn({ exCode: exCode, artworkId: artworkId, accessToken: accessToken }),
           fsDb.collection('exhibitions').doc(exCode).get()
         ]);
         if (eSnap.exists && window.sandboxBadge) {
           window.sandboxBadge.render('sandboxBadge', eSnap.data(), 'visitor', { maxWidth: '600px' });
         }
-        if (!aSnap.exists) {
+        const aData = aRes && aRes.data;
+        if (!aData || !aData.success || !aData.artwork) {
           return { success: false, msg: '作品IDが見つかりません' };
         }
-        const a = aSnap.data() || {};
+        const a = aData.artwork;
         const e = eSnap.exists ? eSnap.data() : {};
         return {
           success: true,
@@ -1514,6 +1536,9 @@
       return ref.id;
     };
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+    const _uploadArtworkImageFn = firebase.app().functions('asia-northeast1').httpsCallable('uploadArtworkImage');
+    const _getArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('getArtwork');
+    const _listArtworksByArtistFn = firebase.app().functions('asia-northeast1').httpsCallable('listArtworksByArtist');
 
     // index.html (QR スキャン経路) は URL の exp+sig (artwork_token) のみ受け付ける。
     // legacy security_key 経路はセッション 3 で撤去済。
@@ -1524,17 +1549,31 @@
       return null;
     }
 
-    window.fsSetArtwork = async (exCode, artworkId, data) => {
-      const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
-      if (!accessToken) {
-        throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
+    window.fsSetArtwork = async (exCode, artworkId, data, opts) => {
+      opts = opts || {};
+      // Phase 2 (b) fan-out: source !== target のときは URL の token をそのまま使い、
+      //   CF に sourceArtworkId を渡す。CF が HMAC を sourceArtworkId で検証する。
+      const isFanOut = opts.sourceArtworkId && opts.sourceArtworkId !== artworkId;
+      let accessToken;
+      if (isFanOut) {
+        if (!expVal || !sigVal || opts.sourceArtworkId !== idVal) {
+          throw new Error('fan-out: URL の token と sourceArtworkId が一致しません');
+        }
+        accessToken = { kind: 'artwork', exp: Number(expVal), sig: sigVal };
+      } else {
+        accessToken = _resolveArtworkAccessToken(exCode, artworkId);
+        if (!accessToken) {
+          throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
+        }
       }
-      const res = await _submitArtworkFn({
+      const payload = {
         exCode: exCode,
         artworkId: artworkId,
         fields: data,
         accessToken: accessToken,
-      });
+      };
+      if (isFanOut) payload.sourceArtworkId = opts.sourceArtworkId;
+      const res = await _submitArtworkFn(payload);
       if (!res || !res.data || !res.data.success) {
         throw new Error('Cloud Function が失敗しました');
       }

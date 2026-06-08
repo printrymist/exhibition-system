@@ -528,6 +528,9 @@
 
       try {
         const docRef = db.collection('inquiries').doc(threadCtx.id);
+        // NOTE: from='admin' は「問い合わせスレッドの author (= リンク所持者本人)」を
+        // 指す legacy 命名。運営側 (inbox.html) の返信は from='operator' を書く。
+        // firestore.rules の messages/create 条件もこの 'admin' 値を期待している。
         await docRef.collection('messages').add({
           from: 'admin',
           body: body,

@@ -11,6 +11,53 @@
 
 ---
 
+## v0.12.0 — 2026-05-27
+
+### セキュリティ強化 + AI-Native アーキテクチャ整備
+
+利用者から見える機能変更はありませんが、データ保護とサーバ側ルールを大きく整備しました。主催者・運営者の通常操作には影響しません。
+
+#### D-1: 作品画像の上書きを Cloud Function 経由に
+従来、`/artworks/` や `/gallery/` の Storage にファイル名さえ分かれば誰でも画像を上書きできる構造でした。Cloud Function (`uploadArtworkImage` / `uploadGalleryImage`) 経由に倒し、Storage Rules を読取り専用に。アップロード時に主催者 / 運営者 / 招待 URL の token が検証されるようになりました。
+
+#### D-2: AI 分類機能 (categorizeArtwork) の権限強化
+来場者の認証だけで AI 分類 API を叩ける状態だったのを、主催者 / 運営者のみに限定。Claude API 課金の抜け穴を塞ぎました。
+
+#### D-3: サインインリンク送信に rate limit
+任意のメールアドレスに対して大量の招待メールを送れる構造だったのを、5 分以内に同一アドレスへ 3 回までに制限。`email_throttle/{hash}` collection で server-side で管理。
+
+#### D-6: 展覧会卒業 (graduateExhibition) の audit log 記録
+展覧会全データを削除する破壊的操作の痕跡を `audit` collection に必ず残すように。`admin/audit.html` から閲覧可能。
+
+#### D-7: inquiries の `from='admin'` 命名意図を明文化
+firestore.rules と inquiry.html のコメントを補強。`from='admin'` が「問い合わせスレッドの作成者本人」を指す legacy 命名であることを明示。
+
+#### β-3: 作品データの read 経路を整理 (AI-Native 不変条件の徹底)
+
+`artworks` collection の公開 read を撤去し、3 経路だけに絞り込みました:
+- **運営者**: Firebase Auth で常時 read
+- **主催者**: 作品 doc に保存された `organizerEmail` と一致する Firebase Auth (denormalize)
+- **来場者 (Web 展覧会)**: visitor custom token + 展覧会公開状態 (`_published=true`) + 登録済 (`status='1'`)
+
+それ以外 (QR スキャンで来た来場者・招待 URL から来た作家) は Cloud Function (`getArtwork` / `listArtworksByArtist` / `findEmptyArtworkSlot`) 経由で取得するように変更。
+
+これにより:
+- 非公開状態の展覧会の作品データが exhibitionId + artworkId 既知でも漏れない
+- LLM / 自動化ツールが Firebase SDK を直接叩いても不変条件を破れない
+- 将来の公募展 (審査期間中は秘匿) / アートフェア (フェア前 VIP プレビュー) など、機密性要求の高い機能の土台
+
+web-exhibition.html の「Web 公開設定」保存も Cloud Function (`syncArtworkPublishedFlags`) 経由になり、`gallery_visibility` 変更時に全作品の `_published` flag が一括同期されます。
+
+### マイグレーション
+
+新規展覧会 / 新規作品は自動的に新フィールドが入りますが、既存の作品 doc には `node functions/scripts/backfill-artwork-published.js --all` での一度きりのバックフィルが必要です (`--dry-run` で事前確認可)。
+
+### 撤去された機能 (一時)
+
+- index.html の「同じ展覧会の作家名 autocomplete」(SNS 自動入力に使われていた dropdown)。代替の Cloud Function を Phase 2 で追加すれば復活可能。
+
+---
+
 ## v0.11.0 — 2026-05-26
 
 ### 新機能: QR のみキャプション (NY ギャラリースタイル)

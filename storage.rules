@@ -1,25 +1,17 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // 作品画像 / Web 展覧会の外観画像とも、書き込みは Cloud Function
+    // (uploadArtworkImage / uploadGalleryImage) 経由のみ。
+    // 直アップは filename を当てて誰でも上書き可になるため塞ぐ。
     match /artworks/{filename} {
       allow read: if true;
-      allow create, update: if
-        request.resource != null
-        && request.resource.size < 1 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*')
-        && filename.matches('.+\\.jpg');
-      allow delete: if false;
+      allow write: if false;
     }
 
-    // gallery 用の hero / 背景画像。クライアント側で JPEG 化してから上げる。
     match /gallery/{filename} {
       allow read: if true;
-      allow create, update: if
-        request.resource != null
-        && request.resource.size < 3 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*')
-        && filename.matches('.+\\.jpg');
-      allow delete: if false;
+      allow write: if false;
     }
 
     match /{allPaths=**} {

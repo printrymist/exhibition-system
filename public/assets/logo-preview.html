@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR+いいね ロゴ案 v1</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0f0; margin: 0; padding: 40px 20px; color: #222; }
+    h1 { text-align: center; margin: 0 0 10px 0; }
+    .subtitle { text-align: center; color: #666; margin: 0 0 36px 0; font-size: 0.9em; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; max-width: 1200px; margin: 0 auto; }
+    .card { background: white; padding: 22px; border-radius: 14px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .card h3 { margin: 0 0 14px 0; color: #333; font-size: 1.05em; }
+    .logo-box { background: #f5f7fb; padding: 24px; border-radius: 10px; display: flex; justify-content: center; align-items: center; min-height: 280px; }
+    .desc { color: #666; font-size: 0.83em; margin-top: 14px; line-height: 1.55; text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>QR+いいね ロゴ案 v1</h1>
+  <p class="subtitle">前作 PlusLIKE と同じ構造 (黒地・白枠・上にアイコン+「+」・下にテキスト) を踏襲。<br>
+    気に入った方向を教えてください。色味・サイズ・字体は後で細かく調整できます。</p>
+
+  <div class="grid">
+
+    <!-- 案 A: 👍 + ＋ -->
+    <div class="card">
+      <h3>案 A: 👍 + ＋</h3>
+      <div class="logo-box">
+        <svg width="200" height="240" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="240" rx="22" fill="white"/>
+          <rect x="10" y="10" width="180" height="220" rx="16" fill="#0a0a0a"/>
+          <!-- 親指 (上方向) -->
+          <rect x="55" y="55" width="20" height="38" rx="10" fill="white"/>
+          <!-- 拳 -->
+          <rect x="48" y="88" width="50" height="35" rx="7" fill="white"/>
+          <!-- 指の線 (装飾) -->
+          <rect x="58" y="100" width="34" height="2" fill="#0a0a0a" opacity="0.18"/>
+          <rect x="58" y="106" width="34" height="2" fill="#0a0a0a" opacity="0.18"/>
+          <rect x="58" y="112" width="34" height="2" fill="#0a0a0a" opacity="0.18"/>
+          <!-- + 記号 (右上) -->
+          <g transform="translate(145, 75)">
+            <rect x="-13" y="-4" width="26" height="8" rx="2" fill="white"/>
+            <rect x="-4" y="-13" width="8" height="26" rx="2" fill="white"/>
+          </g>
+          <!-- テキスト -->
+          <text x="100" y="200" font-family="-apple-system, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">QR+いいね</text>
+        </svg>
+      </div>
+      <div class="desc">前作 PlusLIKE と同じ構造。👍 と「+」を組合せたシンプル形。馴染みあるパターンで安心感。</div>
+    </div>
+
+    <!-- 案 B: ❤️ + ＋ -->
+    <div class="card">
+      <h3>案 B: ❤️ + ＋</h3>
+      <div class="logo-box">
+        <svg width="200" height="240" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="240" rx="22" fill="white"/>
+          <rect x="10" y="10" width="180" height="220" rx="16" fill="#0a0a0a"/>
+          <!-- Heart -->
+          <g transform="translate(75, 60)">
+            <path d="M 0 14
+                     C -5 0, -28 0, -28 18
+                     C -28 36, 0 56, 0 56
+                     C 0 56, 28 36, 28 18
+                     C 28 0, 5 0, 0 14 Z"
+                  fill="#ff4081"/>
+          </g>
+          <!-- + 記号 (右上) -->
+          <g transform="translate(150, 75)">
+            <rect x="-13" y="-4" width="26" height="8" rx="2" fill="white"/>
+            <rect x="-4" y="-13" width="8" height="26" rx="2" fill="white"/>
+          </g>
+          <!-- テキスト -->
+          <text x="100" y="200" font-family="-apple-system, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">QR+いいね</text>
+        </svg>
+      </div>
+      <div class="desc">👍 を ❤️ に置換えた版。「いいね」の本質を直接的に表現。ピンクの差し色が黒地に映える。</div>
+    </div>
+
+    <!-- 案 C: QR ブロック + ❤️ -->
+    <div class="card">
+      <h3>案 C: QR + ❤️</h3>
+      <div class="logo-box">
+        <svg width="200" height="240" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="240" rx="22" fill="white"/>
+          <rect x="10" y="10" width="180" height="220" rx="16" fill="#0a0a0a"/>
+          <!-- QR 風の Finder Pattern (3 corners) -->
+          <g transform="translate(65, 50)">
+            <!-- top-left finder -->
+            <rect x="0" y="0" width="20" height="20" fill="white"/>
+            <rect x="4" y="4" width="12" height="12" fill="#0a0a0a"/>
+            <rect x="7" y="7" width="6" height="6" fill="white"/>
+            <!-- top-right finder -->
+            <rect x="50" y="0" width="20" height="20" fill="white"/>
+            <rect x="54" y="4" width="12" height="12" fill="#0a0a0a"/>
+            <rect x="57" y="7" width="6" height="6" fill="white"/>
+            <!-- bottom-left finder -->
+            <rect x="0" y="50" width="20" height="20" fill="white"/>
+            <rect x="4" y="54" width="12" height="12" fill="#0a0a0a"/>
+            <rect x="7" y="57" width="6" height="6" fill="white"/>
+            <!-- bottom-right: heart instead of finder -->
+            <g transform="translate(60, 60)">
+              <path d="M 0 3
+                       C -1.5 -1, -11 -1, -11 7
+                       C -11 14, 0 22, 0 22
+                       C 0 22, 11 14, 11 7
+                       C 11 -1, 1.5 -1, 0 3 Z"
+                    fill="#ff4081"/>
+            </g>
+            <!-- decorative middle dots -->
+            <rect x="26" y="6" width="4" height="4" fill="white"/>
+            <rect x="36" y="6" width="4" height="4" fill="white"/>
+            <rect x="6" y="26" width="4" height="4" fill="white"/>
+            <rect x="6" y="36" width="4" height="4" fill="white"/>
+            <rect x="26" y="36" width="4" height="4" fill="white"/>
+          </g>
+          <!-- テキスト -->
+          <text x="100" y="200" font-family="-apple-system, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">QR+いいね</text>
+        </svg>
+      </div>
+      <div class="desc">QR コードの 3 つの Finder Pattern を配置 + 4 つ目の角に ❤️ を置く。QR と いいね の融合が一目で伝わる。</div>
+    </div>
+
+    <!-- 案 D: 大きな ＋ (タイポ寄り) -->
+    <div class="card">
+      <h3>案 D: 大きな ＋</h3>
+      <div class="logo-box">
+        <svg width="200" height="240" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+          <rect width="200" height="240" rx="22" fill="white"/>
+          <rect x="10" y="10" width="180" height="220" rx="16" fill="#0a0a0a"/>
+          <!-- 大きな + (横バー白、縦バー赤ピンク) -->
+          <g transform="translate(100, 95)">
+            <rect x="-40" y="-12" width="80" height="24" rx="3" fill="white"/>
+            <rect x="-12" y="-40" width="24" height="80" rx="3" fill="#ff4081"/>
+          </g>
+          <!-- テキスト -->
+          <text x="100" y="200" font-family="-apple-system, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">QR+いいね</text>
+        </svg>
+      </div>
+      <div class="desc">アイコンを使わず、「+」自体を大きく主役に。縦は赤ピンク (= いいね)、横は白 (= QR/中性) で機能を象徴。ミニマル方向。</div>
+    </div>
+
+  </div>
+</body>
+</html>

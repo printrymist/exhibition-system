@@ -17,6 +17,7 @@
       padding: 20px;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: safe center;
       justify-content: center;
     }
@@ -48,6 +49,18 @@
       font-size: 0.95em;
       line-height: 1.6;
       margin: 0;
+    }
+    .beta-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #fff8e1;
+      color: #8a6d3b;
+      border: 1px solid #faebcc;
+      border-radius: 10px;
+      font-size: 0.72em;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
     }
 
     /* 機能グリッド */
@@ -90,6 +103,33 @@
     }
     .sandbox-spotlight strong { color: #c77700; }
 
+    /* 実際の流れ */
+    .flow-section {
+      background: #fafbff;
+      border: 1px solid #e3e9f5;
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin: 24px 0;
+    }
+    .flow-section h3 {
+      margin: 0 0 12px 0;
+      color: #1a2a4a;
+      font-size: 1.05em;
+    }
+    .flow-steps {
+      margin: 0;
+      padding-left: 22px;
+      line-height: 1.7;
+      color: #444;
+      font-size: 0.92em;
+    }
+    .flow-steps li {
+      margin: 6px 0;
+    }
+    .flow-steps strong {
+      color: #1a73e8;
+    }
+
     /* CTA リンク群 */
     .cta-row {
       display: flex;
@@ -130,6 +170,17 @@
     }
 
     @media (max-width: 480px) {
+      /* features は 2 列のまま維持 (= 縦の占有を半分に) */
+      .card { padding: 24px 16px; }
+      /* section 間 margin 圧縮 */
+      .features          { margin: 16px 0; }
+      .sandbox-spotlight { margin: 16px 0; }
+      .flow-section      { margin: 16px 0; }
+      .cta-row           { margin: 12px 0 6px; }
+    }
+
+    /* 極小幅端末 (≤340px) では features を 1 列に戻すフォールバック */
+    @media (max-width: 340px) {
       .features { grid-template-columns: 1fr; }
     }
 
@@ -315,6 +366,7 @@
 
       <!-- Hero -->
       <div class="hero">
+        <span class="beta-badge">🧪 ベータ運用中</span>
         <h2>展覧会運営を、シンプルに。</h2>
         <p>キャプション印刷・QR いいね・Web 展覧会・データ集計を 1 つのツールで。</p>
       </div>
@@ -341,6 +393,18 @@
           <div class="name">リアルタイム集計</div>
           <div class="desc">いいねランキングが見える</div>
         </div>
+      </div>
+
+      <!-- 実際の流れ -->
+      <div class="flow-section">
+        <h3>🎬 実際の流れ (5 分で展覧会を立ち上げ)</h3>
+        <ol class="flow-steps">
+          <li><strong>申し込み</strong> — 下記フォームを送信 → 確認メールから展覧会主催者としてログイン</li>
+          <li><strong>項目を選ぶ</strong> — 「作品登録/設定」画面で、作家に入力してもらう項目を選択 (タイトル・サイズ・価格 等)</li>
+          <li><strong>作家招待</strong> — 招待 URL を発行して DM / メールで作家に転送 → 作家がスマホから自分の作品情報を登録</li>
+          <li><strong>キャプション印刷</strong> — 公式テンプレを選んで「📥 採用」→ 必要に応じてレイアウトを編集 → A4 に並んだキャプション + QR を一括印刷 → 会場で作品横に貼る</li>
+          <li><strong>会期中の運営</strong> — ダッシュボードで来場者のいいね・コメントをリアルタイム表示。会期後は Excel / CSV で集計データを取得</li>
+        </ol>
       </div>
 
       <!-- 練習モードの強調 -->
