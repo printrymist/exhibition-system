@@ -482,10 +482,11 @@
 
     <!-- 入力フォーム -->
     <div id="formView" style="display:none;">
-      <label>Exhibition code
-        <input type="text" id="exCode" placeholder="e.g. IT26" maxlength="10">
+      <label>展覧会コード
+        <input type="text" id="exCode" placeholder="e.g. TSUJI26" maxlength="10" oninput="onExCodeInput()">
       </label>
-      <div class="hint">A short unique code for this exhibition.</div>
+      <div class="hint">展覧会を識別する短いコードです。URL や QR に使われます。英数字・ハイフン・アンダースコアのみ使用できます。</div>
+      <div id="exCodeStatus" style="font-size:0.85em; min-height:1.4em; margin-top:4px;"></div>
 
       <label>Exhibition name
         <input type="text" id="exName" value="<?= exName ?>" readonly style="background:#f0f0f0; color:#555;">
@@ -592,6 +593,12 @@
             document.getElementById('formView').style.display = 'block';
             document.getElementById('exName').value = res.exName || '';
             document.getElementById('email').value = res.email || '';
+            // 展覧会名から展覧会コードを自動サジェスト
+            const _suggested = suggestExCode(res.exName || '');
+            if (_suggested) {
+              document.getElementById('exCode').value = _suggested;
+              onExCodeInput();
+            }
             // Firebase 認証用メアド欄に申請メアドを自動入力
             const authInput = document.getElementById('setupAuthEmailInput');
             if (authInput && res.email) authInput.value = res.email;
@@ -654,8 +661,66 @@
     }
 
     // =========================================================
-    // エラー表示
+    // 展覧会コード — 自動サジェスト & バリデーション
     // =========================================================
+    function suggestExCode(exName) {
+      const tokens = exName
+        .replace(/[^\x00-\x7F]/g, '')
+        .replace(/[^A-Za-z0-9\s]/g, '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      const yearToken = tokens.find(t => /^20\d{2}$/.test(t));
+      const yearSuffix = yearToken ? yearToken.slice(2) : '';
+      const nonYear = tokens.filter(t => !/^20\d{2}$/.test(t));
+      const allCaps = nonYear.filter(t => t.length >= 3 && t === t.toUpperCase() && /[A-Z]/.test(t));
+      let base = '';
+      if (allCaps.length > 0) {
+        base = allCaps[0].slice(0, 6);
+      } else {
+        const cap = nonYear.filter(t => t.length >= 2 && /^[A-Z]/.test(t));
+        if (cap.length > 0) {
+          cap.sort((a, b) => b.length - a.length);
+          base = cap[0].slice(0, 6).toUpperCase();
+        } else if (nonYear.length > 0) {
+          base = nonYear[0].slice(0, 6).toUpperCase();
+        }
+      }
+      if (!base) return '';
+      return (base + yearSuffix).slice(0, 10);
+    }
+
+    window._exCodeTaken = false;
+    let _exCodeCheckTimer = null;
+
+    function onExCodeInput() {
+      const code = document.getElementById('exCode').value.trim();
+      const statusEl = document.getElementById('exCodeStatus');
+      window._exCodeTaken = false;
+      clearTimeout(_exCodeCheckTimer);
+
+      if (!code) { statusEl.innerText = ''; return; }
+      if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+        statusEl.innerHTML = '<span style="color:#d93025;">⚠️ 英数字・ハイフン・アンダースコアのみ使用できます。</span>';
+        return;
+      }
+      statusEl.innerHTML = '<span style="color:#aaa;">確認中...</span>';
+      _exCodeCheckTimer = setTimeout(async () => {
+        try {
+          const snap = await window.fsDb.collection('exhibitions').doc(code).get();
+          if (snap.exists) {
+            window._exCodeTaken = true;
+            statusEl.innerHTML = '<span style="color:#d93025;">❌ このコードはすでに使われています。別のコードを入力してください。</span>';
+          } else {
+            window._exCodeTaken = false;
+            statusEl.innerHTML = '<span style="color:#2e7d32;">✅ 使用可能です。</span>';
+          }
+        } catch (e) {
+          statusEl.innerHTML = '<span style="color:#aaa;">（重複確認できませんでした）</span>';
+        }
+      }, 500);
+    }
+
     function showError(msg) {
       const el = document.getElementById('errorMsg');
       el.innerText = msg;
@@ -676,10 +741,12 @@
       const workCount = parseInt(document.getElementById('workCount').value) || 30;
       const email = document.getElementById('email').value.trim();
 
-      if (!exCode) return showError('Please enter an exhibition code.');
-      if (!exName) return showError('Please enter an exhibition name.');
-      if (!email) return showError('Please enter your email address.');
-      if (workCount < 1 || workCount > 100) return showError('Number of artworks must be between 1 and 100.');
+      if (!exCode) return showError('展覧会コードを入力してください。');
+      if (!/^[A-Za-z0-9_-]+$/.test(exCode)) return showError('展覧会コードは英数字・ハイフン・アンダースコアのみ使用できます。');
+      if (window._exCodeTaken) return showError('この展覧会コードはすでに使われています。別のコードを入力してください。');
+      if (!exName) return showError('展覧会名が取得できていません。');
+      if (!email) return showError('メールアドレスが取得できていません。');
+      if (workCount < 1 || workCount > 100) return showError('作品数は 1〜100 の範囲で入力してください。');
 
       document.getElementById('formView').style.display = 'none';
       document.getElementById('loadingView').style.display = 'block';
