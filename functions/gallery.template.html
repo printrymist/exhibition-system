@@ -1049,7 +1049,9 @@
       if (!commentId) return;
       if (!confirm('このコメントを削除しますか?')) return;
       try {
-        await fsDb.collection('likes').doc(commentId).delete();
+        // #3 対策: 直接 delete でなく CF deleteLike に ownerKey を渡して本人確認。
+        const fn = visitorFunctions.httpsCallable('deleteLike');
+        await fn({ likeId: commentId, ownerKey: window.getOrCreateOwnerKey() });
         // 一覧はリスナー経由で自動更新
       } catch (e) {
         console.error('comment 削除失敗:', e);
@@ -1084,6 +1086,7 @@
       try {
         // コメントは isLike: false で書く (いいねボタンと独立)。
         // ダッシュボードはこの shape で likes/comments を別カウントしている。
+        const ownerKeyHash = await window.getOwnerKeyHash();
         await fsDb.collection('likes').add({
           exCode: exCodeCache,
           ex_name: exNameCache,
@@ -1095,6 +1098,7 @@
           comment: comment,
           isLike: false,
           source: 'gallery',
+          ownerKeyHash: ownerKeyHash,
           timestamp: new Date().toISOString()
         });
         if (nickname) localStorage.setItem('nickname_' + exCodeCache, nickname);
@@ -1123,11 +1127,13 @@
       const existingId = myLikeIdByWork[a.artwork_id];
       try {
         if (existingId) {
-          // Unlike: 自分の like doc を削除 (Firestore Rules で sessionId 一致を要求)
-          await fsDb.collection('likes').doc(existingId).delete();
+          // Unlike: CF deleteLike に ownerKey を渡して本人確認してから削除 (#3 対策)。
+          const fn = visitorFunctions.httpsCallable('deleteLike');
+          await fn({ likeId: existingId, ownerKey: window.getOrCreateOwnerKey() });
           delete myLikeIdByWork[a.artwork_id];
         } else {
           // Like: 新規 doc を作成
+          const ownerKeyHash = await window.getOwnerKeyHash();
           await fsDb.collection('likes').add({
             exCode: exCodeCache,
             ex_name: exNameCache,
@@ -1137,6 +1143,7 @@
             sessionId: sid,
             isLike: true,
             source: 'gallery',
+            ownerKeyHash: ownerKeyHash,
             timestamp: new Date().toISOString()
           });
           // doc id は subscribeToLikes が拾い直すので、ここで手動 myLikeIdByWork は触らない

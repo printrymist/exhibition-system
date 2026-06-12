@@ -2894,3 +2894,59 @@ exports.callGasAuthed = onCall(
     return json;
   },
 );
+
+// =========================================================
+// deleteLike: いいね / コメントの取消・削除を本人確認してから行う「削除専用窓口」。
+//   #3 対策。従来は Firestore Rules の sessionId 一致で visitor が直接 delete していたが、
+//   sessionId は likes の公開 read で誰でも見え、かつ任意 sessionId の custom token を
+//   発行できたため、他人の like/comment を消せてしまった。
+//   本 CF は doc の ownerKeyHash (= sha256(ownerKey)) と、クライアントが持つ ownerKey を
+//   照合し、一致した本人だけ削除する。Rules 側は likes の delete/update を operator のみに
+//   絞ったので、visitor の削除はこの経路だけになる。
+//
+//   入力: { likeId, ownerKey }
+//   - operator (Firebase Auth) は ownerKey 不要でモデレーション削除可。
+//   - それ以外は ownerKey の指紋一致が必須。指紋を持たない旧 doc は operator のみ削除可。
+// =========================================================
+exports.deleteLike = onCall(async (request) => {
+  const data = request.data || {};
+  const likeId = String(data.likeId || "").trim();
+  const ownerKey = String(data.ownerKey || "");
+  if (!likeId) {
+    throw new HttpsError("invalid-argument", "likeId が必要です");
+  }
+
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+
+  const ref = admin.firestore().collection("likes").doc(likeId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return { success: true, alreadyGone: true };
+  }
+
+  if (!isOperator) {
+    if (!ownerKey) {
+      throw new HttpsError("permission-denied", "本人確認の鍵がありません");
+    }
+    const storedHash = String((snap.data() || {}).ownerKeyHash || "");
+    if (!/^[0-9a-f]{64}$/.test(storedHash)) {
+      throw new HttpsError(
+        "permission-denied",
+        "この項目は本人確認の対象外です (古いデータのため取消できません)",
+      );
+    }
+    const computed = crypto.createHash("sha256").update(ownerKey).digest("hex");
+    const a = Buffer.from(computed, "hex");
+    const b = Buffer.from(storedHash, "hex");
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new HttpsError("permission-denied", "本人確認に失敗しました");
+    }
+  }
+
+  await ref.delete();
+  logger.info("deleteLike", { likeId, by: isOperator ? "operator" : "owner" });
+  return { success: true };
+});

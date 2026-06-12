@@ -60,7 +60,8 @@ service cloud.firestore {
       allow create: if
         request.resource.data.keys().hasOnly([
           'exCode', 'ex_name', 'workId', 'title', 'artist',
-          'sessionId', 'nickname', 'comment', 'isLike', 'source', 'timestamp'
+          'sessionId', 'nickname', 'comment', 'isLike', 'source', 'timestamp',
+          'ownerKeyHash'
         ])
         && request.resource.data.exCode is string
         && request.resource.data.exCode.size() > 0
@@ -76,6 +77,7 @@ service cloud.firestore {
         && (!('ex_name' in request.resource.data) || (request.resource.data.ex_name is string && request.resource.data.ex_name.size() < 300))
         && (!('source' in request.resource.data) || (request.resource.data.source is string && request.resource.data.source.size() < 50))
         && (!('timestamp' in request.resource.data) || (request.resource.data.timestamp is string && request.resource.data.timestamp.size() < 100))
+        && (!('ownerKeyHash' in request.resource.data) || (request.resource.data.ownerKeyHash is string && request.resource.data.ownerKeyHash.size() <= 64))
         && (
           request.auth == null
           || (
@@ -84,26 +86,13 @@ service cloud.firestore {
           )
           || isOperator()
         );
-      // visitor は自分の sessionId 一致 doc の comment field のみ更新可 (コメントの誤字直し等)。
-      // 他フィールド (isLike / exCode / workId / sessionId / nickname / source 等) は更新不可。
-      // operator はモデレーション目的で何でも更新可。
-      allow update: if isOperator() || (
-        request.auth != null
-        && request.auth.token.role == 'visitor'
-        && request.auth.token.exCode == resource.data.exCode
-        && request.auth.token.sessionId is string
-        && request.auth.token.sessionId == resource.data.sessionId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment'])
-        && request.resource.data.comment is string
-        && request.resource.data.comment.size() < 2000
-      );
-      allow delete: if isOperator() || (
-        request.auth != null
-        && request.auth.token.role == 'visitor'
-        && request.auth.token.exCode == resource.data.exCode
-        && request.auth.token.sessionId is string
-        && request.auth.token.sessionId == resource.data.sessionId
-      );
+      // #3 対策 (2026-06-13): visitor の直接 update/delete を撤去。
+      // sessionId は公開 read で見えるうえ任意 sessionId の custom token を発行できたため、
+      // sessionId 一致 gate は他人の like/comment 削除を許してしまっていた。
+      // 取消/削除は CF deleteLike が ownerKey の指紋照合で本人確認してから admin SDK で行う。
+      // operator はモデレーション目的で update/delete 可。
+      allow update: if isOperator();
+      allow delete: if isOperator();
     }
 
     match /exhibitions/{docId} {

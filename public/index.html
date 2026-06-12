@@ -1304,16 +1304,12 @@
         return;
       }
       if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
-      const ok = await ensureVisitorAuth();
-      if (!ok) {
-        alert('認証ができませんでした。新しい QR コードで開き直してください。');
-        return;
-      }
       const btn = document.getElementById('ansSubmittedUndoBtn');
       if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
       try {
-        const visitorFsDb = _visitorApp.firestore();
-        await visitorFsDb.collection('likes').doc(_lastSubmitted.docId).delete();
+        // #3 対策: 直接 delete でなく CF deleteLike に ownerKey を渡して本人確認。
+        const fn = visitorFunctions.httpsCallable('deleteLike');
+        await fn({ likeId: _lastSubmitted.docId, ownerKey: window.getOrCreateOwnerKey() });
         if (_lastSubmitted.wasLike) {
           // 初回 like だった場合は voted_* もクリア (再 submit できるように)
           localStorage.removeItem('voted_' + exVal + '_' + idVal);
@@ -1407,12 +1403,8 @@
         if (undoBtn) {
           undoBtn.disabled = false;
           undoBtn.textContent = '🔄 取消';
-          undoBtn.style.display = 'none';
-          if (_lastSubmitted) {
-            ensureVisitorAuth().then(ok => {
-              if (ok && _lastSubmitted) undoBtn.style.display = 'inline-block';
-            });
-          }
+          // 取消は CF deleteLike が ownerKey で本人確認するので visitor 認証は不要。
+          undoBtn.style.display = _lastSubmitted ? 'inline-block' : 'none';
         }
 
         var isAdditional = (formPayload.isLike === "0");
@@ -1532,7 +1524,9 @@
       }
     };
     window.fsAddLike = async (data) => {
-      const ref = await fsDb.collection('likes').add({ ...data, timestamp: new Date().toISOString() });
+      // #3 対策: 取消/削除の本人確認用に ownerKey の指紋を doc に保存する。
+      const ownerKeyHash = await window.getOwnerKeyHash();
+      const ref = await fsDb.collection('likes').add({ ...data, ownerKeyHash, timestamp: new Date().toISOString() });
       return ref.id;
     };
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
