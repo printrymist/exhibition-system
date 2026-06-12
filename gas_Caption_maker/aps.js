@@ -141,6 +141,40 @@ function doPost(e) {
     const action = e.parameter.action;
     const ex = e.parameter.ex || '';
 
+    // --- 鍵かけ (2026-06-12): ログイン必須の操作は Cloud Function callGasAuthed 経由
+    //     (Firebase Auth + organizer/operator 認可済) でのみ呼べるよう ADMIN_SECRET を必須にする。
+    //     直叩き (adminSecret 無し / 不一致) は拒否。CF が adminSecret を付けて中継する。
+    //     第2回でデータ改変系 (updateExName / addArtworks / regenerateQrUrls /
+    //     saveRegistrationFields / setArtworkCount / bumpArtworkCount / graduateExhibition) を追加予定。
+    var PROTECTED_ACTIONS = ['sendArtistGuide', 'sendInquiryReply',
+      'updateExName', 'addArtworks', 'saveRegistrationFields',
+      'bumpArtworkCount', 'graduateExhibition'];
+    if (PROTECTED_ACTIONS.indexOf(action) !== -1) {
+      var expectedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
+      var gotSecret = e.parameter.adminSecret || '';
+      if (!expectedSecret || gotSecret !== expectedSecret) {
+        output.setContent(JSON.stringify({ success: false, error: '権限がありません (この操作はログインが必要です)' }));
+        return output;
+      }
+    }
+
+    // --- 回数制限 (2026-06-12): ログイン不要なメール通知は短時間の連投を制限し、
+    //     なりすまし送信・送信枠枯渇・受信箱フラッドを防ぐ。
+    var RATE_LIMITED_ACTIONS = ['sendInquiryNotification', 'sendAdminFollowupNotification'];
+    if (RATE_LIMITED_ACTIONS.indexOf(action) !== -1) {
+      var throttleKey;
+      try {
+        var pl = JSON.parse(e.parameter.payload || '{}');
+        throttleKey = String(pl.exCode || pl.inquiryId || ex || 'global');
+      } catch (_e) {
+        throttleKey = ex || 'global';
+      }
+      if (!checkInquiryMailThrottle(throttleKey)) {
+        output.setContent(JSON.stringify({ success: false, error: '短時間にメール送信が集中しています。数分待ってから再度お試しください。' }));
+        return output;
+      }
+    }
+
     // Phase 6d: dead handlers (loadAllData / getQrData / saveActiveFields /
     // verifyExCode / getArtworksByArtist / saveArtwork / updateArtwork /
     // deleteArtwork) を撤去。Cloud Function (submitArtwork 等) または
@@ -265,6 +299,29 @@ function doPost(e) {
       success: false, error: err.message
     }));
     return output;
+  }
+}
+
+// メール通知の連投を抑える簡易レートリミッタ (CacheService ベース)。
+// key 単位で WINDOW_SEC 秒に MAX 回まで許可。超過で false を返す。
+// CacheService はベストエフォート (まれに揮発する) だが、連投スパム防止には十分。
+// キャッシュ障害時は fail-open (正規ユーザーを止めない方を優先)。
+function checkInquiryMailThrottle(key) {
+  var WINDOW_SEC = 300; // 5 分
+  var MAX = 5;
+  try {
+    var cache = CacheService.getScriptCache();
+    var cacheKey = 'inq_mail_throttle_' + key;
+    var now = Math.floor(Date.now() / 1000);
+    var raw = cache.get(cacheKey);
+    var arr = raw ? JSON.parse(raw) : [];
+    arr = arr.filter(function (t) { return (now - t) < WINDOW_SEC; });
+    if (arr.length >= MAX) return false;
+    arr.push(now);
+    cache.put(cacheKey, JSON.stringify(arr), WINDOW_SEC);
+    return true;
+  } catch (_e) {
+    return true;
   }
 }
 

@@ -1811,7 +1811,7 @@ ${fieldsText}
       document.getElementById('btnSendGuide').disabled = true;
       showMsg('sendGuideMsg', '<span class="spinner-sm"></span> 送信中...', '#888');
 
-      gasCall({ action: 'sendArtistGuide', ex: currentEx, subject, body })
+      gasCallAuthed('sendArtistGuide', { ex: currentEx, subject, body })
         .then(res => {
           document.getElementById('btnSendGuide').disabled = false;
           if (res.success) {
@@ -2659,8 +2659,7 @@ ${fieldsText}
 
       try {
         // 1. GAS の master sheet を更新 (is_sandbox=FALSE, expire_at='')
-        const gasRes = await gasCall({
-          action: 'graduateExhibition',
+        const gasRes = await gasCallAuthed('graduateExhibition', {
           ex: ex,
           email: user.email
         });
@@ -2767,7 +2766,7 @@ ${fieldsText}
       msg.innerText = '追加中…';
 
       try {
-        const res = await gasCall({ action: 'addArtworks', ex: currentEx, addCount: addCount });
+        const res = await gasCallAuthed('addArtworks', { ex: currentEx, addCount: addCount });
         if (!res.success) {
           msg.style.color = '#d93025';
           msg.innerText = 'エラー: ' + res.error;
@@ -2844,7 +2843,7 @@ ${fieldsText}
         updatedAt: new Date().toISOString()
       }, { merge: true });
       // SS にも反映（caption 側の参照向け、fire-and-forget）
-      gasCall({ action: 'saveRegistrationFields', ex: exCode, fieldsJson: fieldsJson })
+      gasCallAuthed('saveRegistrationFields', { ex: exCode, fieldsJson: fieldsJson })
         .catch(e => console.warn('SS saveRegistrationFields sync failed:', e));
       return { success: true };
     };
@@ -2915,7 +2914,7 @@ ${fieldsText}
       if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
       const targetId = candidates[0].artwork_id;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
-      gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: 1 })
+      gasCallAuthed('bumpArtworkCount', { ex: exCode, dT: 0, dR: 1 })
         .catch(e => console.warn('bumpArtworkCount failed:', e));
       return { success: true, artworkId: targetId };
     };
@@ -2984,13 +2983,14 @@ ${fieldsText}
         insta: "", x: "", facebook: "", web: "", shop_url: "",
       });
       if (wasRegistered) {
-        gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
+        gasCallAuthed('bumpArtworkCount', { ex: exCode, dT: 0, dR: -1 })
           .catch(e => console.warn('bumpArtworkCount failed:', e));
       }
     };
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/gas-authed-call.js"></script>
   <script>
     // ===== Email Link 認証の起動処理 =====
     (function () {

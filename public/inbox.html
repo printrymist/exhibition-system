@@ -352,6 +352,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="js/gas-authed-call.js"></script>
   <script>
     const ALLOWED_EMAIL = 'rymist1@gmail.com';
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
@@ -557,8 +559,7 @@
           at: firebase.firestore.FieldValue.serverTimestamp()
         });
         // 2. メール通知
-        const mailRes = await gasCall({
-          action: 'sendInquiryReply',
+        const mailRes = await gasCallAuthed('sendInquiryReply', {
           payload: JSON.stringify({
             toEmail: currentInquiry.email,
             exCode: currentInquiry.ex_code,

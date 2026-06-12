@@ -54,14 +54,28 @@ service cloud.firestore {
     //   - 運営者はモデレーション目的で update/delete 可
     match /likes/{anyId} {
       allow read: if true;
+      // anon (物理 QR) も create できる構造なので、各フィールドに型 + サイズ上限を課し、
+      // さらに keys().hasOnly() で想定外フィールドの混入を禁止する (巨大 doc スパム / コスト対策)。
+      // 列挙キーは index.html fsAddLike / gallery onLikeClick / onCommentSubmit が送る全フィールドの和集合。
       allow create: if
-        request.resource.data.exCode is string
+        request.resource.data.keys().hasOnly([
+          'exCode', 'ex_name', 'workId', 'title', 'artist',
+          'sessionId', 'nickname', 'comment', 'isLike', 'source', 'timestamp'
+        ])
+        && request.resource.data.exCode is string
         && request.resource.data.exCode.size() > 0
         && request.resource.data.exCode.size() < 50
         && request.resource.data.isLike is bool
         && request.resource.data.sessionId is string
         && request.resource.data.sessionId.size() < 200
         && (!('comment' in request.resource.data) || (request.resource.data.comment is string && request.resource.data.comment.size() < 2000))
+        && (!('nickname' in request.resource.data) || (request.resource.data.nickname is string && request.resource.data.nickname.size() < 200))
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() < 1000))
+        && (!('artist' in request.resource.data) || (request.resource.data.artist is string && request.resource.data.artist.size() < 500))
+        && (!('workId' in request.resource.data) || (request.resource.data.workId is string && request.resource.data.workId.size() < 200))
+        && (!('ex_name' in request.resource.data) || (request.resource.data.ex_name is string && request.resource.data.ex_name.size() < 300))
+        && (!('source' in request.resource.data) || (request.resource.data.source is string && request.resource.data.source.size() < 50))
+        && (!('timestamp' in request.resource.data) || (request.resource.data.timestamp is string && request.resource.data.timestamp.size() < 100))
         && (
           request.auth == null
           || (

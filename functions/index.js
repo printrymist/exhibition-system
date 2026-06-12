@@ -41,6 +41,14 @@ const GAS_EXEC_URL = defineString("GAS_EXEC_URL", {
     "https://script.google.com/macros/s/AKfycbyZgi8PuS8aq7empliidJahNwYRjm_bWYi6cdLI0tugEH91Gtk7NAJxDKwzn7JPacnF/exec",
 });
 
+// Caption Manager GAS の exec URL。callGasAuthed (受付 CF) が
+// ログイン必須の操作をここに中継する。クライアントが直叩きしていた経路を
+// Firebase Auth + organizer/operator 認可 + ADMIN_SECRET の後ろに移すため。
+const GAS_CAPTION_EXEC_URL = defineString("GAS_CAPTION_EXEC_URL", {
+  default:
+    "https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec",
+});
+
 // 全関数共通: 東京リージョン + 最大同時実行数 10 (暴走防止)
 setGlobalOptions({ maxInstances: 10, region: "asia-northeast1" });
 
@@ -2768,3 +2776,121 @@ exports.setLikesExcludedFromStats = onCall(async (request) => {
   });
   return { success: true, updated };
 });
+
+// =========================================================
+// callGasAuthed: ログイン必須の GAS 操作を集約する「受付」。
+//   従来クライアントは GAS Web App (ANYONE_ANONYMOUS) を直接叩いており、
+//   exCode さえ知れば誰でも運営者権限で操作・メール送信できる状態だった。
+//   この CF を間に挟み、Firebase Auth + organizer/operator 認可を通してから
+//   ADMIN_SECRET 付きで GAS に中継する。GAS 側は対象 action を adminSecret
+//   必須にすることで直叩きを塞ぐ (CLAUDE.md AI-Native 原則: 認可を奥に置く)。
+//
+//   入力: { action, params }  (organizer 認可の action は params に ex を含む)
+//   出力: GAS doPost の JSON をそのまま返す (既存クライアントの戻り値処理と互換)。
+//
+//   GAS_PROXY_ACTIONS: action ごとの認可種別。
+//     "organizer" = 対象 ex の主催者 or operator、"operator" = operator のみ。
+//   段階的移行中。乗せ替えた action から順にここへ追加していく。
+// =========================================================
+const GAS_PROXY_ACTIONS = {
+  sendArtistGuide: "organizer",
+  sendInquiryReply: "operator",
+  // 第2回 (2026-06-12): データ改変系。すべて対象 ex の主催者 (or operator)。
+  updateExName: "organizer",
+  addArtworks: "organizer",
+  saveRegistrationFields: "organizer",
+  bumpArtworkCount: "organizer",
+  graduateExhibition: "organizer",
+};
+
+exports.callGasAuthed = onCall(
+  { secrets: [GAS_ADMIN_SECRET] },
+  async (request) => {
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("permission-denied", "ログインが必要です");
+    }
+
+    const data = request.data || {};
+    const action = String(data.action || "").trim();
+    const params = (data.params && typeof data.params === "object" &&
+      !Array.isArray(data.params)) ? data.params : {};
+
+    const authKind = GAS_PROXY_ACTIONS[action];
+    if (!authKind) {
+      throw new HttpsError(
+        "invalid-argument",
+        "許可されていないアクションです: " + action,
+      );
+    }
+
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+    if (authKind === "operator") {
+      if (!isOperator) {
+        throw new HttpsError("permission-denied", "運営者の権限が必要です");
+      }
+    } else { // "organizer"
+      const exCode = String(params.ex || params.exCode || "").trim();
+      if (!exCode || !/^[A-Za-z0-9_-]+$/.test(exCode)) {
+        throw new HttpsError("invalid-argument", "ex が不正です");
+      }
+      if (!isOperator) {
+        const ok = await isOrganizerForEx(authEmail, exCode);
+        if (!ok) {
+          throw new HttpsError(
+            "permission-denied",
+            "この展覧会の主催者または運営者の権限が必要です",
+          );
+        }
+      }
+    }
+
+    const adminSecret = GAS_ADMIN_SECRET.value();
+    if (!adminSecret) {
+      throw new HttpsError("internal", "GAS_ADMIN_SECRET が未設定です");
+    }
+
+    // params をそのまま GAS doPost に転送 (object は JSON 文字列化)。
+    const form = new URLSearchParams();
+    form.set("action", action);
+    form.set("adminSecret", adminSecret);
+    for (const k of Object.keys(params)) {
+      const v = params[k];
+      if (v === null || v === undefined) continue;
+      form.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
+
+    let res;
+    try {
+      res = await fetch(GAS_CAPTION_EXEC_URL.value(), {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+        redirect: "follow",
+      });
+    } catch (e) {
+      logger.error("callGasAuthed GAS fetch failed", {
+        action, error: e && e.message,
+      });
+      throw new HttpsError(
+        "internal",
+        "GAS との通信に失敗しました: " + (e && e.message),
+      );
+    }
+    const text = await res.text();
+    if (!res.ok) {
+      logger.warn("callGasAuthed GAS non-200", { action, status: res.status });
+      throw new HttpsError("internal", "GAS エラー HTTP " + res.status);
+    }
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new HttpsError("internal", "GAS の応答が JSON ではありません");
+    }
+    logger.info("callGasAuthed ok", { action, caller: authEmail });
+    return json;
+  },
+);

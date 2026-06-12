@@ -2613,7 +2613,7 @@
 
       // Master SS (運用台帳) と Firestore (アプリの表示元) の両方を並列更新。
       // 片方だけ失敗するケースを見えるようにする。
-      const gasPromise = gasCall({ action: 'updateExName', ex: ex, newName: newName });
+      const gasPromise = gasCallAuthed('updateExName', { ex: ex, newName: newName });
       const fsPromise = firebase.firestore().collection('exhibitions').doc(ex).set({
         ex_name: newName,
         updatedAt: new Date().toISOString()
@@ -4704,6 +4704,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/gas-authed-call.js"></script>
   <script>
     // ===== Email Link 認証の起動処理 =====
     (function () {

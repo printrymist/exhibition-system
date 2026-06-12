@@ -510,10 +510,15 @@
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
+    // 属性値 (src= / href= / alt= 等) にも埋め込むため " ' まで含めてエスケープする。
+    // textContent→innerHTML 版は " ' を残すので、作家入力を属性に入れると XSS になる。
     function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str == null ? '' : String(str);
-      return div.innerHTML;
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
     function safeHttpUrl(url) {
       if (!url) return '';

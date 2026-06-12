@@ -687,7 +687,13 @@
         }
       }
       if (!base) return '';
-      return (base + yearSuffix).slice(0, 10);
+      let code = (base + yearSuffix).slice(0, 10);
+      // 数字だけのコードは保存時に先頭ゼロが落ちる (0612→612) ため、
+      // 英字が 1 文字も無いときは EX を前置して数字のみを避ける。
+      if (!/[A-Za-z]/.test(code)) {
+        code = ('EX' + code).slice(0, 10);
+      }
+      return code;
     }
 
     window._exCodeTaken = false;
@@ -831,7 +837,7 @@
       addMsg.innerText = 'Adding artworks...';
       addMsg.style.display = 'block';
 
-      gasCall({ action: 'addArtworks', exCode, addCount })
+      gasCall({ action: 'addArtworks', exCode, addCount, token: window._confirmedToken || '' })
         .then(res => {
           if (!res.success) { addMsg.innerText = 'Error: ' + res.error; return; }
           addMsg.innerText = `✅ ${addCount} artworks added successfully.`;

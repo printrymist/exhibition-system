@@ -182,6 +182,36 @@ function doPost(e) {
       return output;
     }
 
+    // --- 施錠 (2026-06-12): graduateExhibition / regenerateQrUrls は正規の呼び出し元が無く、
+    //     無認証で叩くと sandbox 自動削除の停止 / 印刷済 QR の無効化 を招く。ADMIN_SECRET 必須化。
+    var PROTECTED_ACTIONS = ['graduateExhibition', 'regenerateQrUrls'];
+    if (PROTECTED_ACTIONS.indexOf(action) !== -1) {
+      var expectedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
+      var gotSecret = e.parameter.adminSecret || '';
+      if (!expectedSecret || gotSecret !== expectedSecret) {
+        output.setContent(JSON.stringify({ success: false, error: '権限がありません' }));
+        return output;
+      }
+    }
+
+    // --- 作品追加 (addArtworks) は setup フロー (ログイン前) で使うため、確認トークンで本人確認。
+    //     applications シートで confirmed=TRUE かつ ex_code 一致のトークンのみ通す。
+    if (action === 'addArtworks') {
+      if (!verifyConfirmTokenForEx(e.parameter.token, e.parameter.exCode)) {
+        output.setContent(JSON.stringify({ success: false, error: '認証が確認できません。メールの確認リンクから操作してください。' }));
+        return output;
+      }
+    }
+
+    // --- 申し込み (submitApplication) は誰でも送れる必要があるが、連投を回数制限で抑える。
+    if (action === 'submitApplication') {
+      var applicantEmail = String(e.parameter.email || '').trim().toLowerCase();
+      if (!checkApplicationThrottle(applicantEmail || 'global')) {
+        output.setContent(JSON.stringify({ success: false, error: '短時間に申し込みが集中しています。数分待ってから再度お試しください。' }));
+        return output;
+      }
+    }
+
     if (action === 'submitApplication') {
       const payload = {
         exName: e.parameter.exName,
@@ -255,6 +285,54 @@ function doPost(e) {
   } catch (err) {
     output.setContent(JSON.stringify({ success: false, error: err.message }));
     return output;
+  }
+}
+
+// setup フローの確認トークン検証。applications シートで confirmed=TRUE かつ
+// ex_code 一致のトークンが存在すれば true。addArtworks (ログイン前) の本人確認に使う。
+function verifyConfirmTokenForEx(token, exCode) {
+  token = (token || '').toString().trim();
+  exCode = (exCode || '').toString().trim();
+  if (!token || !exCode) return false;
+  try {
+    const sheet = getApplicationsSheet();
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const tokenIdx = headers.indexOf('confirm_token');
+    const confirmedIdx = headers.indexOf('confirmed');
+    const exCodeIdx = headers.indexOf('ex_code');
+    if (tokenIdx === -1 || confirmedIdx === -1 || exCodeIdx === -1) return false;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][tokenIdx].toString().trim() === token &&
+          String(data[i][confirmedIdx]).toUpperCase().trim() === 'TRUE' &&
+          data[i][exCodeIdx].toString().trim() === exCode) {
+        return true;
+      }
+    }
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
+// 申し込みの連投を抑える簡易レートリミッタ (CacheService ベース)。key 単位で WINDOW_SEC 秒に MAX 回まで。
+// CacheService はベストエフォートだが連投スパム防止には十分。障害時は fail-open。
+function checkApplicationThrottle(key) {
+  var WINDOW_SEC = 300; // 5 分
+  var MAX = 3;
+  try {
+    var cache = CacheService.getScriptCache();
+    var cacheKey = 'app_throttle_' + key;
+    var now = Math.floor(Date.now() / 1000);
+    var raw = cache.get(cacheKey);
+    var arr = raw ? JSON.parse(raw) : [];
+    arr = arr.filter(function (t) { return (now - t) < WINDOW_SEC; });
+    if (arr.length >= MAX) return false;
+    arr.push(now);
+    cache.put(cacheKey, JSON.stringify(arr), WINDOW_SEC);
+    return true;
+  } catch (_e) {
+    return true;
   }
 }
 
@@ -470,10 +548,18 @@ function runSetup(payload) {
     };
     const rowArr = masterHeaders.map(h => newRow[h] !== undefined ? newRow[h] : '');
     masterSheet.appendRow(rowArr);
+    // ex_code の先頭ゼロ落ち防止: appendRow は数値解釈で "0612" → 612 にしてしまうため、
+    // 追加行の ex_code セルをテキスト書式 (@) で再設定して文字列のまま保つ。
+    const newMasterRow = masterSheet.getLastRow();
+    const exCodeColInMaster = masterHeaders.indexOf('ex_code');
+    if (exCodeColInMaster !== -1) {
+      masterSheet.getRange(newMasterRow, exCodeColInMaster + 1).setNumberFormat('@').setValue(exCode);
+    }
 
     // --- applications シートに ex_code と setup_at を記録 ---
+    // ex_code はテキスト書式で保存 (verifyTokenForFinalize の照合とズレないように)。
     const setupAt = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss');
-    appSheet.getRange(appRowIdx, exCodeColIdx + 1).setValue(exCode);
+    appSheet.getRange(appRowIdx, exCodeColIdx + 1).setNumberFormat('@').setValue(exCode);
     appSheet.getRange(appRowIdx, setupAtIdx + 1).setValue(setupAt);
 
     // --- 完了メール送信 ---
