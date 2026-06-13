@@ -2323,6 +2323,13 @@
       if (adoptedKey) {
         const card = document.getElementById('tpl_' + adoptedKey);
         if (card) card.classList.add('adopted');
+        document.querySelectorAll('[data-saved-card]').forEach(c => {
+          c.style.borderColor = '#eee';
+          c.style.background = 'white';
+          c.style.boxShadow = '';
+          const b = c.querySelector('.adopted-badge');
+          if (b) b.style.display = 'none';
+        });
       }
     }
 
@@ -2354,6 +2361,14 @@
       document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
       const card = document.getElementById('tpl_' + name);
       if (card) card.classList.add('selected');
+      // 公式テンプレを選んだら、保存テンプレの「✓ 採用中」ハイライトは消す (選択は排他)。
+      document.querySelectorAll('[data-saved-card]').forEach(c => {
+        c.style.borderColor = '#eee';
+        c.style.background = 'white';
+        c.style.boxShadow = '';
+        const b = c.querySelector('.adopted-badge');
+        if (b) b.style.display = 'none';
+      });
 
       // 構造プレビュー (小) は常に更新 — クリックでテンプレの中身を比較する用途
       const sourcePreview = card ? card.querySelector('.template-preview') : null;
@@ -3964,7 +3979,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     // 採用中の保存テンプレを目立たせる (✓ 採用中 バッジ + 青背景 + 青枠 + 影)。
     // 公式テンプレの選択ハイライトは外す。docId 未指定なら全解除のみ。
     function highlightSavedCard(docId) {
-      document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+      document.querySelectorAll('.template-card').forEach(c => { c.classList.remove('selected'); c.classList.remove('adopted'); });
       document.querySelectorAll('[data-saved-card]').forEach(c => {
         c.style.borderColor = '#eee';
         c.style.background = 'white';
@@ -4300,7 +4315,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           }
           normalizeInsertBars();
         }
-        switchTab('custom');
+        // テンプレ読込後はタブを変えない (テンプレートタブのまま「✓ 採用中」+ プレビューで確認)。
+        // 詳細を編集したい人だけ自分で「⚙️ 詳細編集」タブを開く。
       } catch (e) {
         alert(friendlyError(e, '読み込み'));
       }
