@@ -803,7 +803,7 @@
       var fn = firebase.app().functions('asia-northeast1').httpsCallable('setLikesExcludedFromStats');
       var res = await fn({ exCode: currentEx, sessionIds: sessionIds, excluded: excluded });
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('データの更新に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return res.data;
     }

@@ -471,10 +471,11 @@
 
   <div class="card" id="nameCard">
     <div class="card-title">作家名を入力してください</div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px; line-height:1.5;">この展覧会に出品する作品の情報を登録します。まずお名前を入力して「この名前ではじめる」を押してください。</div>
     <div class="name-row">
       <input type="text" id="artistNameInput" placeholder="作家名（日本語）"
         onkeydown="if(event.key==='Enter') searchByArtist()">
-      <button class="btn-primary" id="btnSearch" onclick="searchByArtist()">開始</button>
+      <button class="btn-primary" id="btnSearch" onclick="searchByArtist()">この名前ではじめる</button>
     </div>
     <div class="msg-ok" id="searchOk"></div>
     <div class="msg-error" id="searchError"></div>
@@ -1377,7 +1378,7 @@
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
+        throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
       const res = await _uploadArtworkImageFn({
         exCode: exCode,
@@ -1386,7 +1387,7 @@
         accessToken: accessToken,
       });
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return res.data.url;
     };
@@ -1401,7 +1402,7 @@
       // β-3: artworks の直 read 不可になったので CF 経由。
       const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
+        throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
       const res = await _listArtworksByArtistFn({
         exCode: exCode,
@@ -1409,7 +1410,7 @@
         accessToken: accessToken,
       });
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return { success: true, artworks: res.data.artworks || [] };
     };
@@ -1417,7 +1418,7 @@
       // β-3: 空きスロット検索を CF 経由に。race は依然として残る (Phase 2 課題)。
       const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('招待 URL の exp/sig が見つかりません。');
+        throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
       const findRes = await _findEmptyArtworkSlotFn({ exCode: exCode, accessToken: accessToken });
       const findData = findRes && findRes.data;
@@ -1460,7 +1461,7 @@
     window.fsSetArtwork = async (exCode, artworkId, data) => {
       const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('招待 URL の exp/sig が見つかりません。主催者から新しい招待リンクを受け取ってください。');
+        throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
       const res = await _submitArtworkFn({
         exCode: exCode,
@@ -1469,7 +1470,7 @@
         accessToken: accessToken,
       });
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return res.data;
     };
@@ -1481,7 +1482,7 @@
       // β-3: artwork doc 直 read 不可 → CF 経由で existing status を確認。
       const accessToken = _resolveAccessToken();
       if (!accessToken) {
-        throw new Error('招待 URL の exp/sig が見つかりません。');
+        throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
       let wasRegistered = false;
       try {

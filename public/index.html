@@ -1464,7 +1464,7 @@
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
       if (!accessToken) {
-        throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
+        throw new Error('このリンクが古いか、正しくありません。主催者から新しい QR コード / リンクを受け取ってください。');
       }
       const res = await _uploadArtworkImageFn({
         exCode: exCode,
@@ -1473,7 +1473,7 @@
         accessToken: accessToken,
       });
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return res.data.url;
     };
@@ -1551,13 +1551,13 @@
       let accessToken;
       if (isFanOut) {
         if (!expVal || !sigVal || opts.sourceArtworkId !== idVal) {
-          throw new Error('fan-out: URL の token と sourceArtworkId が一致しません');
+          throw new Error('作品情報の反映に失敗しました。新しいリンクを受け取ってください。');
         }
         accessToken = { kind: 'artwork', exp: Number(expVal), sig: sigVal };
       } else {
         accessToken = _resolveArtworkAccessToken(exCode, artworkId);
         if (!accessToken) {
-          throw new Error('URL の exp/sig が見つかりません。新しい QR コード / URL を主催者から再発行してもらってください。');
+          throw new Error('このリンクが古いか、正しくありません。主催者から新しい QR コード / リンクを受け取ってください。');
         }
       }
       const payload = {
@@ -1569,7 +1569,7 @@
       if (isFanOut) payload.sourceArtworkId = opts.sourceArtworkId;
       const res = await _submitArtworkFn(payload);
       if (!res || !res.data || !res.data.success) {
-        throw new Error('Cloud Function が失敗しました');
+        throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
       return res.data;
     };

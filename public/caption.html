@@ -2238,7 +2238,7 @@
       // FIELD_DEFS に未定義のフィールドがあるとラベル等が出ないので弾く
       const unknown = missing.filter(n => !FIELD_MAP[n]);
       if (unknown.length > 0) {
-        alert('テンプレが使う未定義フィールドがあります: ' + unknown.join(', ')
+        alert('このテンプレートが使う項目の一部がシステムに見つかりません: ' + unknown.join(', ')
           + '\n運営者にお問い合わせください。');
         return;
       }
@@ -4012,7 +4012,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function copyOfficialJsonSnippet(tpl, btn) {
       let settings;
       try { settings = JSON.parse(tpl.settingsJson || '{}'); }
-      catch (e) { alert('保存テンプレの JSON parse 失敗: ' + e.message); return; }
+      catch (e) { alert('保存したテンプレートの読み込みに失敗しました: ' + e.message); return; }
 
       const pageSettings = {
         paperSize:       settings.paperSize || 'A4',
