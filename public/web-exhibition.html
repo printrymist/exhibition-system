@@ -308,6 +308,7 @@
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
@@ -541,7 +542,7 @@
       } catch (e) {
         console.error('save appearance failed:', e);
         msgEl.style.color = '#d93025';
-        msgEl.innerText = '❌ 保存失敗: ' + (e && e.message ? e.message : e);
+        msgEl.innerText = '❌ ' + friendlyError(e, '保存');
       } finally {
         btn.disabled = false;
       }
@@ -571,7 +572,7 @@
         msgEl.innerText = '✅ 保存しました (' + (d.updated || 0) + ' 件の作品を同期)。';
         msgEl.style.color = '#1a73e8';
       } catch (e) {
-        msgEl.innerText = '❌ 保存失敗: ' + (e && e.message ? e.message : e);
+        msgEl.innerText = '❌ ' + friendlyError(e, '保存');
         msgEl.style.color = '#d93025';
       } finally {
         btn.disabled = false;
@@ -622,8 +623,8 @@
           </div>
         `;
       } catch (e) {
-        resultEl.innerHTML = '<div style="color:#d93025; font-size:0.88em;">発行失敗: '
-          + escapeHtml(e && e.message ? e.message : String(e)) + '</div>';
+        resultEl.innerHTML = '<div style="color:#d93025; font-size:0.88em;">'
+          + escapeHtml(friendlyError(e, 'QR の発行')) + '</div>';
       } finally {
         btn.disabled = false;
       }
@@ -632,7 +633,7 @@
     function copyQrUrl(url) {
       navigator.clipboard.writeText(url).then(() => {
         alert('URL をコピーしました。');
-      }).catch(e => alert('コピー失敗: ' + e.message));
+      }).catch(e => alert(friendlyError(e, 'コピー')));
     }
 
     function printQrPage(url) {
@@ -715,7 +716,7 @@
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
 
       window.operatorAuth.onAuthChange(function (user) {
@@ -757,7 +758,7 @@
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

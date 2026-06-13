@@ -287,6 +287,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzeGn_XAE3yeit9GOt9QKCWXi5tR_knuYZTlE_Bhwk_02AzB2ZEMu3RmW0dvGKzIpnA/exec';
     firebase.initializeApp({
@@ -359,7 +360,7 @@
         document.getElementById('newCtxEmail').innerText = newCtx.email || '(未登録)';
         document.getElementById('newArea').style.display = 'block';
       } catch (err) {
-        showError('通信エラー: ' + err.message);
+        showError(friendlyError(err, '読み込み'));
       }
     }
 
@@ -490,7 +491,7 @@
 
         document.getElementById('threadArea').style.display = 'block';
       } catch (err) {
-        showError('読み込みエラー: ' + err.message);
+        showError(friendlyError(err, '読み込み'));
       }
     }
 

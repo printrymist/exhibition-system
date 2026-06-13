@@ -273,7 +273,7 @@
           console.error('loadExhibition failed:', err);
           document.getElementById('btnLoad').disabled = false;
           document.getElementById('exName').innerText = '';
-          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
+          document.getElementById('exError').innerText = friendlyError(err, '読み込み');
         });
     }
 
@@ -334,6 +334,7 @@
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     (function () {
       function setMsg(text, color) {
@@ -349,7 +350,7 @@
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
 
       window.operatorAuth.onAuthChange(function (user) {
@@ -390,7 +391,7 @@
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

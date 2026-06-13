@@ -2030,7 +2030,7 @@
       .then(data => { Object.assign(PRESETS, data || {}); })
       .catch(err => {
         console.error('PRESETS load failed:', err);
-        alert('プリセット読み込みに失敗しました: ' + (err && err.message ? err.message : err));
+        alert(friendlyError(err, 'プリセットの読み込み'));
       });
     fetch('data/official-presets.json')
       .then(r => {
@@ -2312,7 +2312,7 @@
               : 'フォーム設定が更新されました。'));
       } catch (err) {
         console.error('adoption save failed:', err);
-        alert('保存に失敗しました: ' + (err && err.message ? err.message : err));
+        alert(friendlyError(err, '保存'));
       }
     }
 
@@ -2517,7 +2517,7 @@
           console.error('loadExhibition failed:', err);
           document.getElementById('btnLoad').disabled = false;
           document.getElementById('exName').innerText = '';
-          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
+          document.getElementById('exError').innerText = friendlyError(err, '読み込み');
         });
     }
 
@@ -4048,7 +4048,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function copyOfficialJsonSnippet(tpl, btn) {
       let settings;
       try { settings = JSON.parse(tpl.settingsJson || '{}'); }
-      catch (e) { alert('保存したテンプレートの読み込みに失敗しました: ' + e.message); return; }
+      catch (e) { alert(friendlyError(e, '保存テンプレートの読み込み')); return; }
 
       const pageSettings = {
         paperSize:       settings.paperSize || 'A4',
@@ -4302,7 +4302,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         }
         switchTab('custom');
       } catch (e) {
-        alert('読み込みエラー: ' + e.message);
+        alert(friendlyError(e, '読み込み'));
       }
     }
 
@@ -4378,7 +4378,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
           });
         })
-        .catch(err => showSaveMsg('エラー: ' + err.message, '#d93025'))
+        .catch(err => showSaveMsg(friendlyError(err, '保存'), '#d93025'))
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
@@ -4431,7 +4431,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           loadSavedTemplates();
         })
         .catch(err => {
-          alert('エラー: ' + (err && err.message ? err.message : err));
+          alert(friendlyError(err, '処理'));
           if (btnConfirm) btnConfirm.disabled = false;
           if (pending.btn) pending.btn.disabled = false;
         });
@@ -4515,7 +4515,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             msg.innerText = 'Error: ' + res.error;
           }
         })
-        .catch(err => { msg.style.color = '#d93025'; msg.innerText = '通信エラー: ' + err.message; })
+        .catch(err => { msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '送信'); })
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
@@ -4767,6 +4767,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
   <script src="js/gas-authed-call.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     // ===== Email Link 認証の起動処理 =====
     (function () {
@@ -4783,7 +4784,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
 
       window.operatorAuth.onAuthChange(function (user, isOp) {
@@ -4831,7 +4832,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

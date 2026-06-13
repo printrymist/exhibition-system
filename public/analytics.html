@@ -1032,6 +1032,7 @@
     }
   </script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     (function () {
       function setMsg(text, color) {
@@ -1046,7 +1047,7 @@
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
       window.operatorAuth.onAuthChange(function (user, isOp) {
         var authCard = document.getElementById('authCard');
@@ -1081,7 +1082,7 @@
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

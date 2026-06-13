@@ -525,6 +525,16 @@
       const s = String(url).trim();
       return /^https?:\/\//i.test(s) ? s : '';
     }
+    // エラー表示の共通ヘルパ。英語の生例外は画面に出さず日本語に統一する。
+    // CF (HttpsError) の日本語理由はそのまま見せる。
+    function friendlyError(err, actionLabel) {
+      var label = actionLabel || '処理';
+      try { console.error(label + ' failed:', err); } catch (_e) {}
+      var code = err && err.code;
+      var msg = err && err.message;
+      if (typeof code === 'string' && code.indexOf('functions/') === 0 && msg) return msg;
+      return label + 'に失敗しました。通信環境を確認して、もう一度お試しください。';
+    }
     // 解像度切替を後から差し込めるように関数化 (将来 image_url_hires などに拡張する想定)。
     // Storage download URL を Hosting CDN 経由 (/img/...) に翻訳して、
     // egress を Storage ($0.12/GB) → Hosting CDN (無料) に振り替える。
@@ -1055,7 +1065,7 @@
         // 一覧はリスナー経由で自動更新
       } catch (e) {
         console.error('comment 削除失敗:', e);
-        alert('削除に失敗しました: ' + (e && e.message ? e.message : e));
+        alert(friendlyError(e, '削除'));
       }
     }
 
@@ -1109,7 +1119,7 @@
       } catch (e) {
         console.error('comment 書き込み失敗:', e);
         msgEl.style.color = '#d93025';
-        msgEl.innerText = '送信失敗: ' + (e && e.message ? e.message : e);
+        msgEl.innerText = friendlyError(e, '送信');
       } finally {
         btn.disabled = false;
       }
@@ -1150,7 +1160,7 @@
         }
       } catch (e) {
         console.error('like toggle 失敗:', e);
-        alert('いいねの送信に失敗しました: ' + (e && e.message ? e.message : e));
+        alert(friendlyError(e, 'いいねの送信'));
       } finally {
         // 成否に関わらず、disabled 解除と楽観 UI 反映 (リスナー届くまでのチラつき防止)
         updateModalLikeUI();

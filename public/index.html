@@ -522,6 +522,7 @@
 
   <script src="offline-banner.js" data-message="⚠ オフラインです。いいねは接続復帰後に反映されます。"></script>
   <script src="sessionid.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     // =========================================================
     // 🌟 URL パラメータ取得
@@ -754,7 +755,7 @@
           regInit(exVal, idVal);
         }
       }).catch(err => {
-        alert("通信エラー: " + err.message);
+        alert(friendlyError(err, '読み込み'));
       });
     }
 
@@ -785,7 +786,7 @@
         }
       }).catch(err => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
-        alert("通信エラー: " + err.message);
+        alert(friendlyError(err, '読み込み'));
       });
     };
 
@@ -883,7 +884,7 @@
         regChangeStep(1);
       } catch (err) {
         console.error('regInit failed:', err);
-        alert('読み込みエラー: ' + (err && err.message ? err.message : err));
+        alert(friendlyError(err, '読み込み'));
       }
     }
 
@@ -979,7 +980,7 @@
         }
       } catch (e) {
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        alert('画像アップロードエラー: ' + e.message);
+        alert(friendlyError(e, '画像のアップロード'));
         return;
       }
 
@@ -1319,7 +1320,7 @@
         reloadApp();
       } catch (e) {
         console.error('submitted undo failed:', e);
-        alert('取消に失敗しました: ' + (e && e.message ? e.message : e));
+        alert(friendlyError(e, '取り消し'));
         if (btn) { btn.disabled = false; btn.textContent = '🔄 取消'; }
       }
     }
@@ -1426,7 +1427,7 @@
         if (nicknameTrim) localStorage.setItem("nickname_" + exVal, nicknameTrim);
       } catch (err) {
         console.error('submit failed:', err);
-        alert('送信エラー: ' + (err && err.message ? err.message : err));
+        alert(friendlyError(err, '送信'));
         btn.innerText = originalText;
         btn.disabled = false;
       }
@@ -1520,7 +1521,7 @@
           captionTemplateId: (e.caption_template_id || '').toString(),
         };
       } catch (err) {
-        return { success: false, msg: '取得エラー: ' + err.message };
+        return { success: false, msg: friendlyError(err, '作品の読み込み') };
       }
     };
     window.fsAddLike = async (data) => {

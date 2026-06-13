@@ -826,7 +826,7 @@
     function onSetupError(err) {
       document.getElementById('loadingView').style.display = 'none';
       document.getElementById('formView').style.display = 'block';
-      showError('エラー: ' + err.message);
+      showError(friendlyError(err, '処理'));
     }
 
     // =========================================================
@@ -902,6 +902,7 @@
     window.fsDb = firebase.firestore();
   </script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     (function () {
       function setMsg(text, color) {
@@ -918,7 +919,7 @@
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
 
       // 認証状態に応じて Submit ボタンと Firebase 認証カードの表示を切り替え
@@ -962,7 +963,7 @@
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

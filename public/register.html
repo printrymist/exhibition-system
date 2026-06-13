@@ -1283,7 +1283,7 @@
           console.error('loadExhibition failed:', err);
           document.getElementById('btnLoad').disabled = false;
           document.getElementById('exName').innerText = '';
-          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
+          document.getElementById('exError').innerText = friendlyError(err, '読み込み');
         });
     }
 
@@ -1502,7 +1502,7 @@
       document.getElementById('btnSaveCommentWindow').disabled = true;
       window.fsSaveCommentWindow(currentEx, start, end)
         .then(() => { msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。'; })
-        .catch(err => { msg.style.color = '#d93025'; msg.innerText = 'エラー: ' + err.message; })
+        .catch(err => { msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '処理'); })
         .finally(() => { document.getElementById('btnSaveCommentWindow').disabled = false; });
     }
     function clearCommentWindow() {
@@ -1713,7 +1713,7 @@
         })
         .catch(err => {
           document.getElementById('btnSaveSetup').disabled = false;
-          showMsg('saveMsgSetup', 'エラー: ' + err.message, '#d93025');
+          showMsg('saveMsgSetup', friendlyError(err, '保存'), '#d93025');
         });
     }
 
@@ -1758,7 +1758,7 @@
           if (!exp || !sig) throw new Error('Cloud Function から exp/sig が返りませんでした');
         }
       } catch (e) {
-        showMsg('sendGuideMsg', 'アクセストークン発行失敗: ' + (e && e.message ? e.message : e), '#d93025');
+        showMsg('sendGuideMsg', friendlyError(e, '招待URLの発行'), '#d93025');
         return;
       }
 
@@ -1822,7 +1822,7 @@ ${fieldsText}
         })
         .catch(err => {
           document.getElementById('btnSendGuide').disabled = false;
-          showMsg('sendGuideMsg', 'Error: ' + err.message, '#d93025');
+          showMsg('sendGuideMsg', friendlyError(err, '送信'), '#d93025');
         });
     }
 
@@ -1877,7 +1877,7 @@ ${fieldsText}
             btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
           } catch (err) {
             btn.textContent = '⚠️ 読み込み失敗';
-            alert('画像の読み込みに失敗しました: ' + err.message);
+            alert(friendlyError(err, '画像の読み込み'));
           } finally { btn.disabled = false; }
         });
         wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);
@@ -2047,7 +2047,7 @@ ${fieldsText}
         if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
       } catch (err) {
         document.getElementById('btnSaveArt').disabled = false;
-        document.getElementById('inputError').innerText = 'Error: ' + err.message;
+        document.getElementById('inputError').innerText = friendlyError(err, '読み込み');
       }
     }
 
@@ -2073,7 +2073,7 @@ ${fieldsText}
           res.artworks.forEach(art => list.appendChild(makeArtworkRow(art)));
         })
         .catch(err => {
-          document.getElementById('artworkList').innerHTML = '<div class="list-empty">Error: ' + err.message + '</div>';
+          document.getElementById('artworkList').innerHTML = '<div class="list-empty">' + friendlyError(err, '読み込み') + '</div>';
         });
     }
 
@@ -2307,7 +2307,7 @@ ${fieldsText}
         }
       } catch (e) {
         console.error('toggleArtworkLock failed:', e);
-        alert('ロック切替に失敗しました: ' + (e && e.message ? e.message : e));
+        alert(friendlyError(e, 'ロック切替'));
       } finally {
         if (lockBtn) lockBtn.disabled = false;
       }
@@ -2497,7 +2497,7 @@ ${fieldsText}
         }
       } catch (err) {
         if (btnUpdate) btnUpdate.disabled = false;
-        showEditMsg(artworkId, 'Error: ' + err.message, '#d93025');
+        showEditMsg(artworkId, friendlyError(err, '保存'), '#d93025');
         return;
       }
 
@@ -2528,7 +2528,7 @@ ${fieldsText}
         })
         .catch(err => {
           if (btnUpdate) btnUpdate.disabled = false;
-          showEditMsg(artworkId, 'Error: ' + err.message, '#d93025');
+          showEditMsg(artworkId, friendlyError(err, '保存'), '#d93025');
         });
     }
 
@@ -2591,7 +2591,7 @@ ${fieldsText}
           if (confirmBtn) confirmBtn.disabled = false;
         })
         .catch(err => {
-          if (area) area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">エラー: ' + err.message + '</span>';
+          if (area) area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">' + friendlyError(err, '処理') + '</span>';
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         });
@@ -2783,7 +2783,7 @@ ${fieldsText}
         refreshCurrentArtworkCount();
       } catch (err) {
         msg.style.color = '#d93025';
-        msg.innerText = '通信エラー: ' + (err && err.message ? err.message : err);
+        msg.innerText = friendlyError(err, '処理');
       }
     }
 
@@ -2992,6 +2992,7 @@ ${fieldsText}
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
   <script src="js/gas-authed-call.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     // ===== Email Link 認証の起動処理 =====
     (function () {
@@ -3011,7 +3012,7 @@ ${fieldsText}
         })
         .catch(function (err) {
           console.warn('completeSignInIfNeeded failed:', err);
-          setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+          setMsg(friendlyError(err, 'ログイン'), '#d93025');
         });
 
       // 認証状態の変化を監視: 主催者本人なら mainArea、それ以外は notOrganizerCard / pwCard
@@ -3057,7 +3058,7 @@ ${fieldsText}
           })
           .catch(function (err) {
             btn.disabled = false;
-            setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025');
+            setMsg(friendlyError(err, '送信'), '#d93025');
           });
       };
     })();

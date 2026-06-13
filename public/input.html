@@ -531,6 +531,7 @@
 
   <script src="offline-banner.js" data-message="⚠ オフラインです。作品の登録・更新は接続復帰後に行ってください。"></script>
   <script src="field-defs.js"></script>
+  <script src="js/friendly-error.js"></script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -874,7 +875,7 @@
         }
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
-        alert('提出に失敗しました: ' + (e && e.message ? e.message : e));
+        alert(friendlyError(e, '提出'));
         if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
       }
     }
@@ -931,7 +932,7 @@
           if (confirmBtn) confirmBtn.disabled = false;
         })
         .catch(err => {
-          alert('削除に失敗しました: ' + (err && err.message ? err.message : err));
+          alert(friendlyError(err, '削除'));
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         });
@@ -1145,7 +1146,7 @@
         const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
         if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
       } catch (e) {
-        alert('削除に失敗しました: ' + (e.message || e));
+        alert(friendlyError(e, '削除'));
         showImageUploadFailureRecovery(artworkId, dataUrl, e);
       }
     }
@@ -1246,7 +1247,7 @@
             btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
           } catch (err) {
             btn.textContent = '⚠️ 読み込み失敗';
-            alert('画像の読み込みに失敗しました: ' + err.message);
+            alert(friendlyError(err, '画像の読み込み'));
           } finally { btn.disabled = false; }
         });
         wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);
