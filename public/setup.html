@@ -533,6 +533,9 @@
       <p>詳細はメールをご確認ください。</p>
       <div class="info-box" id="infoBox"></div>
 
+      <a id="goRegisterBtn" href="#" style="display:block; margin:20px 0 6px; padding:14px; background:#1a73e8; color:#fff; text-align:center; text-decoration:none; border-radius:8px; font-weight:bold;">▶ 「作品登録/設定」画面へ進む</a>
+      <p style="color:#888; font-size:0.82em; text-align:center; margin:0 0 4px;">次に、作家へ入力してもらう項目を設定し、作家を招待します。</p>
+
       <!-- 作品追加セクション -->
       <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
         <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">
@@ -700,17 +703,24 @@
     let _exCodeCheckTimer = null;
 
     function onExCodeInput() {
-      const code = document.getElementById('exCode').value.trim();
+      const el = document.getElementById('exCode');
+      const raw = el.value;
+      // 使えない文字 (英数字・ハイフン・アンダースコア以外: 全角・スペース・記号等) は
+      // エラーで止めず、入力した時点でその場で自動的に取り除く。
+      const cleaned = raw.replace(/[^A-Za-z0-9_-]/g, '');
+      if (cleaned !== raw) {
+        el.value = cleaned;
+        try { el.setSelectionRange(cleaned.length, cleaned.length); } catch (_e) {}
+      }
+      const code = cleaned.trim();
       const statusEl = document.getElementById('exCodeStatus');
       window._exCodeTaken = false;
       clearTimeout(_exCodeCheckTimer);
 
       if (!code) { statusEl.innerText = ''; return; }
-      if (!/^[A-Za-z0-9_-]+$/.test(code)) {
-        statusEl.innerHTML = '<span style="color:#d93025;">⚠️ 英数字・ハイフン・アンダースコアのみ使用できます。</span>';
-        return;
-      }
-      statusEl.innerHTML = '<span style="color:#aaa;">確認中...</span>';
+      statusEl.innerHTML = (cleaned !== raw)
+        ? '<span style="color:#c08400;">使えない文字を取り除きました。確認中...</span>'
+        : '<span style="color:#aaa;">確認中...</span>';
       _exCodeCheckTimer = setTimeout(async () => {
         try {
           const snap = await window.fsDb.collection('exhibitions').doc(code).get();
@@ -872,6 +882,8 @@
       currentArtworkCount = (Array.isArray(result.artworks) ? result.artworks.length : 0)
         || parseInt(document.getElementById('workCount').value) || 0;
       updateCurrentCountLabel();
+      const goBtn = document.getElementById('goRegisterBtn');
+      if (goBtn) goBtn.href = '/register.html?ex=' + encodeURIComponent(result.exCode);
     }
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
