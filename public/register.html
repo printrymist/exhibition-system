@@ -876,14 +876,15 @@
       <a href="#" onclick="signOutAndRetry();return false;" style="color:#1a73e8; text-decoration:underline; flex-shrink:0;">ログアウト</a>
     </div>
     <div class="tabs">
-      <button class="tab active" id="tabSetup" onclick="switchTab('setup')">⚙️ 項目設定</button>
-      <button class="tab" id="tabInput" onclick="switchTab('input')">✏️ 作品入力</button>
-      <button class="tab" id="tabList" onclick="switchTab('list')">📋 登録済み</button>
+      <button class="tab active" id="tab_fields" onclick="switchTab('fields')">① 項目を決める</button>
+      <button class="tab" id="tab_invite" onclick="switchTab('invite')">② 作家を招待</button>
+      <button class="tab" id="tab_artworks" onclick="switchTab('artworks')">③ 作品</button>
+      <button class="tab" id="tab_manage" onclick="switchTab('manage')">④ 展覧会の設定</button>
     </div>
 
     <!-- ========== 項目設定 ========== -->
-    <div class="tab-content active" id="contentSetup">
-      <div class="card" style="border-radius:0 0 12px 12px;">
+    <div id="contentSetup">
+      <div class="card" style="border-radius:0 0 12px 12px;" data-regtab="fields">
         <div class="hint">☑ チェックで表示／非表示 &nbsp;·&nbsp; <b>⠿</b> ドラッグで並び替え &nbsp;·&nbsp; <b>必須／任意</b> で入力必須を設定</div>
         <div style="margin:0 0 10px 0;">
           <button type="button" id="btnImportToggle" onclick="toggleImportPanel()"
@@ -922,6 +923,7 @@
         <div id="sortContainer"></div>
       </div>
       <div class="card">
+        <div data-regtab="fields">
         <div class="btn-row">
           <button class="btn-sub" onclick="selectAll(true)">すべて選択</button>
           <button class="btn-sub" onclick="selectAll(false)">すべて解除</button>
@@ -930,7 +932,8 @@
         </div>
         <button class="btn-wide" id="btnSaveSetup" onclick="saveSettings()">💾 保存する</button>
         <div class="save-msg" id="saveMsgSetup"></div>
-        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+        </div>
+        <div data-regtab="invite" style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作家向け案内メール</p>
           <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">まず<b>あなた（主催者）宛に</b>、作家への案内文（入力項目の説明＋入力用URL）が届きます。届いたメールをそのまま作家へ転送してください。（作家へ直接は送られません）</p>
           <div style="margin:0 0 10px 0;">
@@ -949,7 +952,7 @@
              主催者 UI から撤去。secret rotation が必要になった時は admin 配下に専用ツールを作る。
              GAS 側の regenerateQrUrls action はそのまま残置 (将来の admin ツールから呼ぶ用)。 -->
         <!-- ロック Phase 3: 全作品の一括ロック / 解除 -->
-        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+        <div data-regtab="artworks" style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作品の一括ロック</p>
           <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">登録済の全作品の編集権限を切り替えます。会期直前に🔒、編集再開時に🔓。</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -960,7 +963,7 @@
           </div>
           <div class="save-msg" id="bulkLockMsg"></div>
         </div>
-        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+        <div data-regtab="artworks" style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">作品枠を追加 <span id="currentArtworkCountLabel" style="color:#1a73e8; font-weight:bold;"></span></p>
           <div style="display:flex; gap:10px;">
             <input type="number" id="addArtworkCount" placeholder="追加数 (例: 10)" min="1" max="100"
@@ -973,7 +976,7 @@
           <div id="addArtworkMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
         </div>
 
-        <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+        <div data-regtab="manage" style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
           <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">感想 (コメント) 受付期間</p>
           <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">指定すると期間外は来場者の感想入力欄が無効になります。空欄なら常時受付。</p>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -1016,7 +1019,7 @@
     </div>
 
     <!-- ========== 作品入力 ========== -->
-    <div class="tab-content" id="contentInput">
+    <div id="contentInput" data-regtab="artworks">
       <div class="card" style="border-radius:0 0 12px 12px;">
         <div class="save-banner" id="saveBanner"></div>
         <div class="artist-section">
@@ -1115,7 +1118,7 @@
     </div>
 
     <!-- ========== 登録済み一覧 ========== -->
-    <div class="tab-content" id="contentList">
+    <div id="contentList" data-regtab="artworks">
       <div class="card" style="border-radius:0 0 12px 12px;">
         <div class="list-header">
           <div class="list-count" id="listCount">― 件登録済み</div>
@@ -1219,13 +1222,22 @@
 
     // ── タブ切り替え ──
     function switchTab(tab) {
-      ['setup', 'input', 'list'].forEach(t => {
-        const k = t.charAt(0).toUpperCase() + t.slice(1);
-        document.getElementById('tab' + k).classList.toggle('active', t === tab);
-        document.getElementById('content' + k).classList.toggle('active', t === tab);
+      ['fields', 'invite', 'artworks', 'manage'].forEach(t => {
+        const btn = document.getElementById('tab_' + t);
+        if (btn) btn.classList.toggle('active', t === tab);
       });
-      if (tab === 'list') loadArtworkList();
-      if (tab === 'input') loadArtistList();
+      // 各セクションは data-regtab 属性でタブに振り分け、該当タブのみ表示する
+      // (機能の DOM は動かさず表示制御だけで再編、動作は不変)。
+      document.querySelectorAll('[data-regtab]').forEach(el => {
+        el.style.display = (el.getAttribute('data-regtab') === tab) ? '' : 'none';
+      });
+      // 本番切替 (graduateSection) は「④設定タブ かつ 練習モード」のときだけ表示する。
+      const grad = document.getElementById('graduateSection');
+      if (grad) {
+        const isSandbox = !!(window._currentExData && window._currentExData.is_sandbox);
+        grad.style.display = (tab === 'manage' && isSandbox) ? 'block' : 'none';
+      }
+      if (tab === 'artworks') { loadArtworkList(); loadArtistList(); }
     }
 
     // ── 展覧会ロード ──
@@ -1305,14 +1317,13 @@
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
         if (typeof loadFieldsAndUI === 'function') loadFieldsAndUI(currentEx);
-        // 展覧会切替時に現在開いているタブの内容を refresh する。
-        // 元実装は switchTab() のときだけ load*() を呼んでおり、
-        // 'list' タブを開いたまま exhibition を切替えると前の展覧会のキャッシュが
-        // 残るバグがあった。
-        if (document.getElementById('tabList').classList.contains('active')) {
+        // 初回表示時は「① 項目を決める」タブを開く (data-regtab の表示制御を初期化)。
+        if (!window._regTabInit) {
+          window._regTabInit = true;
+          switchTab('fields');
+        } else if (document.getElementById('tab_artworks').classList.contains('active')) {
+          // 「③ 作品」タブを開いたまま展覧会を切替えたら、新しい展覧会の内容に refresh する。
           loadArtworkList();
-        }
-        if (document.getElementById('tabInput').classList.contains('active')) {
           loadArtistList();
         }
         return;
@@ -1702,7 +1713,9 @@
         .then(res => {
           document.getElementById('btnSaveSetup').disabled = false;
           if (res.success) {
-            showMsg('saveMsgSetup', '✅ 保存しました。入力フォームを更新しました。', '#1a73e8');
+            showMsg('saveMsgSetup', '✅ 保存しました。入力フォームを更新しました。<br>次はどちらか選んでください：<br>'
+              + '<button type="button" onclick="switchTab(\'invite\')" style="margin:8px 6px 0 0; padding:6px 14px; background:#1a73e8; color:#fff; border:none; border-radius:6px; font-size:0.9em; font-weight:bold; cursor:pointer;">作家に登録してもらう → 「② 作家を招待」</button>'
+              + '<button type="button" onclick="switchTab(\'artworks\')" style="margin:8px 0 0 0; padding:6px 14px; background:#fff; color:#1a73e8; border:1px solid #1a73e8; border-radius:6px; font-size:0.9em; font-weight:bold; cursor:pointer;">自分で入力する → 「③ 作品」</button>', '#1a73e8');
             activeFields = result;
             sessionStorage.setItem('fields_' + currentEx, JSON.stringify(result));
             buildInputForm();
@@ -1815,7 +1828,7 @@ ${fieldsText}
         .then(res => {
           document.getElementById('btnSendGuide').disabled = false;
           if (res.success) {
-            showMsg('sendGuideMsg', `✅ ${res.to} に送信しました。メールを確認のうえ作家へ転送してください。`, '#1a73e8');
+            showMsg('sendGuideMsg', `✅ ${res.to} に送信しました。メールを確認のうえ作家へ転送してください。<br>作家が登録したら「③ 作品」で確認できます。<br><button type="button" onclick="switchTab('artworks')" style="margin-top:8px; padding:6px 14px; background:#1a73e8; color:#fff; border:none; border-radius:6px; font-size:0.9em; font-weight:bold; cursor:pointer;">「③ 作品」を見る →</button>`, '#1a73e8');
           } else {
             showMsg('sendGuideMsg', 'Error: ' + res.error, '#d93025');
           }
