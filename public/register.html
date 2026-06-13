@@ -2683,7 +2683,8 @@ ${fieldsText}
       } catch (err) {
         console.error('graduate failed:', err);
         msgEl.style.color = '#d93025';
-        msgEl.innerText = 'エラー: ' + (err && err.message ? err.message : err);
+        msgEl.innerText = 'エラー: ' + (err && err.message ? err.message : err) +
+          '（途中で失敗した場合は、もう一度「本番運用に切替」を押すと再試行できます）';
         btn.disabled = false;
       }
     }

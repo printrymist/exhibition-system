@@ -160,17 +160,21 @@ function doPost(e) {
 
     // --- 回数制限 (2026-06-12): ログイン不要なメール通知は短時間の連投を制限し、
     //     なりすまし送信・送信枠枯渇・受信箱フラッドを防ぐ。
-    var RATE_LIMITED_ACTIONS = ['sendInquiryNotification', 'sendAdminFollowupNotification'];
+    // メール通知に加え、ログイン不要な問い合わせ台帳更新 (updateInquiryInIndex /
+    // appendInquiryToIndex) も連投を制限する。これらは fire-and-forget なので、
+    // 制限に当たってもメイン処理 (Firestore 側) には影響しない。
+    var RATE_LIMITED_ACTIONS = ['sendInquiryNotification', 'sendAdminFollowupNotification',
+      'updateInquiryInIndex', 'appendInquiryToIndex'];
     if (RATE_LIMITED_ACTIONS.indexOf(action) !== -1) {
       var throttleKey;
       try {
         var pl = JSON.parse(e.parameter.payload || '{}');
-        throttleKey = String(pl.exCode || pl.inquiryId || ex || 'global');
+        throttleKey = String(pl.exCode || pl.ex_code || pl.inquiryId || pl.inquiry_id || ex || 'global');
       } catch (_e) {
         throttleKey = ex || 'global';
       }
       if (!checkInquiryMailThrottle(throttleKey)) {
-        output.setContent(JSON.stringify({ success: false, error: '短時間にメール送信が集中しています。数分待ってから再度お試しください。' }));
+        output.setContent(JSON.stringify({ success: false, error: '短時間にリクエストが集中しています。数分待ってから再度お試しください。' }));
         return output;
       }
     }

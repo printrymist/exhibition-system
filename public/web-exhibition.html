@@ -313,10 +313,15 @@
       return new URLSearchParams(window.location.search).get(name) || '';
     }
 
+    // 属性値に埋め込んでも安全なよう " ' まで含めてエスケープする
+    // (textContent→innerHTML 版は " ' を残すため、将来属性に使うと XSS になる)。
     function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str == null ? '' : String(str);
-      return div.innerHTML;
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     let currentEx = '';
