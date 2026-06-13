@@ -2581,6 +2581,14 @@
             if (data.captionTemplateId) {
               applyCaptionTemplateChoice(data.captionTemplateId);
             }
+            // (a) 保存テンプレ読込で名前が入らなかった場合 (新規・公式テンプレ利用時) は、
+            //     展覧会名を保存欄のデフォルトにして「1 展覧会 = 展覧会名の 1 テンプレ」へ収束させる。
+            //     主催者は名前を考えずそのまま保存でき、別名を入れれば別保存も可能。
+            const nameInput = document.getElementById('saveTemplateName');
+            if (nameInput && !nameInput.value && data.exName) {
+              nameInput.value = data.exName;
+              if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
+            }
           });
           document.getElementById('mainTabs').style.display = 'block';
           switchMainTab('caption');
@@ -3953,14 +3961,42 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
     const OPERATOR_EMAIL = 'rymist1@gmail.com';
 
+    // 採用中の保存テンプレを目立たせる (✓ 採用中 バッジ + 青背景 + 青枠 + 影)。
+    // 公式テンプレの選択ハイライトは外す。docId 未指定なら全解除のみ。
+    function highlightSavedCard(docId) {
+      document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+      document.querySelectorAll('[data-saved-card]').forEach(c => {
+        c.style.borderColor = '#eee';
+        c.style.background = 'white';
+        c.style.boxShadow = '';
+        const b = c.querySelector('.adopted-badge');
+        if (b) b.style.display = 'none';
+      });
+      if (!docId) return;
+      const card = document.querySelector('[data-saved-card="' + _escSel(docId) + '"]');
+      if (card) {
+        card.style.borderColor = '#1a73e8';
+        card.style.background = '#e8f0fe';
+        card.style.boxShadow = '0 0 0 2px rgba(26,115,232,0.25)';
+        const b = card.querySelector('.adopted-badge');
+        if (b) b.style.display = 'inline-block';
+      }
+    }
+
     // 1テンプレ分のカード DOM を組む。deletable=true のときだけ ✕ ボタンを付ける。
     function buildSavedTemplateCard(tpl, deletable) {
       const card = document.createElement('div');
       card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
+      card.setAttribute('data-saved-card', tpl.id || '');  // (b) 選択ハイライトの対象にする
 
       const nameDiv = document.createElement('div');
       nameDiv.style.cssText = 'font-size:0.85em;font-weight:bold;color:#1a73e8;margin-bottom:6px;padding-right:20px;';
       nameDiv.textContent = tpl.name;
+      const adoptedBadge = document.createElement('span');
+      adoptedBadge.className = 'adopted-badge';
+      adoptedBadge.textContent = '✓ 採用中';
+      adoptedBadge.style.cssText = 'display:none; background:#1a73e8; color:#fff; font-size:0.72em; padding:2px 8px; border-radius:10px; margin-left:6px; font-weight:bold;';
+      nameDiv.appendChild(adoptedBadge);
 
       const dateDiv = document.createElement('div');
       dateDiv.style.cssText = 'font-size:0.72em;color:#aaa;margin-bottom:8px;';
@@ -4153,7 +4189,17 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             id: 'saved:' + btn.dataset.tplId,
             name: btn.dataset.tplName || btn.dataset.tplId
           };
+          // (a) 読み込んだテンプレ名を保存欄に入れ、編集後そのまま上書き保存できるようにする
+          //     (別名を入れれば従来どおり別テンプレとして保存も可能)。
+          const nameInput = document.getElementById('saveTemplateName');
+          if (nameInput && btn.dataset.tplName) {
+            nameInput.value = btn.dataset.tplName;
+            if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
+          }
         }
+        // (b) 採用中の保存テンプレを目立たせ、公式テンプレの選択ハイライトは外す
+        //     (テンプレタブに戻っても「個展推奨」がハイライトされたままにならないように)。
+        if (btn.dataset.tplId) highlightSavedCard(btn.dataset.tplId);
         const settings = JSON.parse(btn.dataset.settings);
         if (settings.paperSize) document.getElementById('paperSize').value = settings.paperSize;
         if (settings.orientation) document.getElementById('orientation').value = settings.orientation;
@@ -4311,10 +4357,26 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         updatedAt: new Date().toISOString()
       }, { merge: true })
         .then(() => {
+          const savedTplId = 'saved:' + docId;
+          // (b) この展覧会の規定テンプレとして記録 → 次回起動時に自動ロード + ハイライトされる。
+          //     これが無いと、保存しても規定が変わらず次回「個展推奨」に戻ってしまう。
+          const exForSave = window._currentEx;
+          if (exForSave) {
+            fsDb.collection('exhibitions').doc(exForSave).set({
+              caption_template_id: savedTplId,
+              updatedAt: new Date().toISOString(),
+            }, { merge: true }).catch(e => console.warn('caption_template_id 更新失敗:', e));
+          }
+          _savedTemplateId = savedTplId;
+          _lastSelectedTemplate = { id: savedTplId, name: name };
           showSaveMsg(overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`, '#1a73e8');
-          document.getElementById('saveTemplateName').value = '';
           if (saveBtn) saveBtn.innerHTML = '💾 保存';  // ラベルを元に戻す
-          loadSavedTemplates();
+          // 保存欄の名前は残す (同じテンプレを続けて編集→上書きできるように)。
+          // 一覧再構築後、保存したテンプレを選択ハイライトする (公式テンプレの選択は外す)。
+          loadSavedTemplates().then(() => {
+            highlightSavedCard(docId);
+            if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
+          });
         })
         .catch(err => showSaveMsg('エラー: ' + err.message, '#d93025'))
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
