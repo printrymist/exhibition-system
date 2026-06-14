@@ -1249,7 +1249,7 @@
         🔲 QRコード印刷
       </button>
       <button class="main-tab-btn" id="mainTabForm" onclick="switchMainTab('form')">
-        📝 フォーム設定
+        📝 キャプション項目
       </button>
       <button class="main-tab-btn" id="mainTabCategorize" onclick="switchMainTab('categorize')">
         🤖 AI 分類
@@ -1502,7 +1502,7 @@
             <li>上の「🖨️ プレビュー」で仕上がりを確認</li>
             <li>印刷する項目や体裁を変えたいときは「<strong>⚙️ 詳細編集</strong>」、用紙・余白・QR サイズは「<strong>📄 ページ設定</strong>」で調整 (必要なときだけ)</li>
             <li>気に入ったら「<strong>💾 自分のテンプレに保存</strong>」で確定 — 別テンプレを試す前のセーフネット</li>
-            <li>作家に入力してもらう項目を変えるときは、上の「<strong>📝 フォーム設定</strong>」タブへ</li>
+            <li>キャプションに載せる項目を増減するときは「<strong>📝 キャプション項目</strong>」タブで (作家から集める項目そのものは「作品登録・設定」画面で)</li>
           </ol>
         </details>
         <!-- テンプレ一覧 (すべて公式テンプレ)。⭐ マーク = 運営が用意した既製テンプレ ('自分のテンプレ' と区別)。 -->
@@ -1789,9 +1789,10 @@
   <!-- フォーム設定エリア -->
   <div id="formSettingArea" style="display:none;">
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">📝 作品入力フォーム 項目設定</div>
+      <div class="card-title">📝 キャプションに載せる項目</div>
       <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
-        作家が入力画面から入力できる項目を設定します。チェックした項目が表示されます。
+        作品登録で集めた項目のうち、キャプションに載せる項目を選びます。チェックを入れた項目がキャプションに使われます。<br>
+        <span style="color:#aaa;">（作家から集める項目そのものは「作品登録・設定」画面で決めます）</span>
       </p>
       <div id="fieldSettingGrid"></div>
       <div style="margin-top:16px;">
@@ -2206,7 +2207,7 @@
       } else {
         confirmMsg += '項目設定への追加はありません (必要項目は既に設定済み)。\n\n';
       }
-      confirmMsg += 'フォーム設定 (キャプション項目) はテンプレに合わせて置き換わります。';
+      confirmMsg += 'キャプションに載せる項目はテンプレに合わせて置き換わります。';
 
       if (!confirm(confirmMsg)) return;
 
@@ -2261,7 +2262,7 @@
         alert('✅ ' + label + ' を採用しました。\n'
           + (missing.length > 0
               ? '項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
-              : 'フォーム設定が更新されました。'));
+              : 'キャプションに載せる項目が更新されました。'));
       } catch (err) {
         console.error('adoption save failed:', err);
         alert(friendlyError(err, '保存'));
