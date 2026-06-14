@@ -4023,7 +4023,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       loadBtn.dataset.settings = tpl.settingsJson;
       loadBtn.dataset.tplId = tpl.id || '';  // applyCaptionTemplateChoice('saved:<id>') から DOM 検索する用
       loadBtn.dataset.tplName = tpl.name || '';  // banner の「規定」表示用
-      loadBtn.onclick = function () { loadSavedTemplate(this); };
+      loadBtn.onclick = function () { loadSavedTemplate(this, { persist: true }); };
 
       card.appendChild(nameDiv);
       card.appendChild(dateDiv);
@@ -4196,7 +4196,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       .catch(err => { console.warn('loadSavedTemplates error:', err && err.message ? err.message : err); });
     }
 
-    function loadSavedTemplate(btn) {
+    function loadSavedTemplate(btn, opts) {
       try {
         // 選択中テンプレを記録 (現状 read 箇所はなし。将来再利用候補のためアサインのみ残す)
         if (btn && btn.dataset && btn.dataset.tplId) {
@@ -4204,6 +4204,15 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             id: 'saved:' + btn.dataset.tplId,
             name: btn.dataset.tplName || btn.dataset.tplId
           };
+          // ユーザーが「読込」ボタンで読み込んだときは、この展覧会の規定テンプレとして記録する。
+          // これが無いと、別ページから caption に戻ったとき前の規定 (既定の個展推奨等) に戻ってしまう。
+          if (opts && opts.persist && window._currentEx) {
+            _savedTemplateId = 'saved:' + btn.dataset.tplId;
+            fsDb.collection('exhibitions').doc(window._currentEx).set({
+              caption_template_id: _savedTemplateId,
+              updatedAt: new Date().toISOString(),
+            }, { merge: true }).catch(e => console.warn('caption_template_id 更新失敗:', e));
+          }
           // (a) 読み込んだテンプレ名を保存欄に入れ、編集後そのまま上書き保存できるようにする
           //     (別名を入れれば従来どおり別テンプレとして保存も可能)。
           const nameInput = document.getElementById('saveTemplateName');
@@ -4309,8 +4318,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             artworkData.headers.forEach(h => {
               if (usedFields.includes(h)) return;
               if (regFieldNames && !regFieldNames.includes(h)) return;
-              const checked = capFieldNames ? capFieldNames.includes(h) : false;
-              grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
+              // 保存テンプレの items[] に無いフィールド = 主催者が意図的に外したもの。
+              // caption_fields (フォーム設定) に残っていても末尾では未チェックで並べるだけにする。
+              // ここで capFieldNames で再チェックすると、外したはずの価格/制作年が復元時に復活する。
+              grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
             });
           }
           normalizeInsertBars();
