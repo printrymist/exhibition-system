@@ -227,6 +227,17 @@
           <option value="likes_and_comments">いいね + コメント</option>
         </select>
       </div>
+      <div class="setting-row">
+        <label for="galleryOpenAtInput">公開開始（任意）</label>
+        <input type="datetime-local" id="galleryOpenAtInput">
+      </div>
+      <div class="setting-row">
+        <label for="galleryCloseAtInput">公開終了（任意）</label>
+        <input type="datetime-local" id="galleryCloseAtInput">
+      </div>
+      <div style="font-size:0.8em; color:#888; margin:2px 0 8px;">
+        公開状態が「公開」または「QR を持つ来場者のみ」のとき、この期間内だけ閲覧できます。空欄なら制限なし（常時）。「非公開」は期間に関係なく常に非公開です。
+      </div>
       <button class="btn-primary" id="btnSaveGallerySettings" onclick="saveGallerySettings()">💾 設定を保存</button>
       <div id="gallerySettingMsg" style="font-size:0.85em; min-height:1.2em; margin-top:8px;"></div>
     </div>
@@ -324,6 +335,21 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }
+    // 公開期間の日時変換: 保存は ISO (UTC) で統一、入力欄 (datetime-local) はローカル表記。
+    function isoToLocalInput(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const pad = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+        + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    function localInputToIso(val) {
+      if (!val) return '';
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString();
+    }
 
     let currentEx = '';
     let currentExEmail = '';
@@ -363,6 +389,8 @@
           document.getElementById('qrExCodeHint').innerText = ex;
           document.getElementById('gallerySelectVisibility').value = data.gallery_visibility || 'closed';
           document.getElementById('gallerySelectInteractions').value = data.gallery_interactions || 'none';
+          document.getElementById('galleryOpenAtInput').value = isoToLocalInput(data.gallery_open_at || '');
+          document.getElementById('galleryCloseAtInput').value = isoToLocalInput(data.gallery_close_at || '');
           document.getElementById('galleryTitleInput').value = data.gallery_title || '';
           document.getElementById('gallerySubtitleInput').value = data.gallery_subtitle || '';
           document.getElementById('galleryBgColorInput').value = data.gallery_bg_color || '#fafafa';
@@ -552,6 +580,8 @@
       if (!currentEx) return;
       const visibility = document.getElementById('gallerySelectVisibility').value;
       const interactions = document.getElementById('gallerySelectInteractions').value;
+      const openAt = localInputToIso(document.getElementById('galleryOpenAtInput').value);
+      const closeAt = localInputToIso(document.getElementById('galleryCloseAtInput').value);
       const btn = document.getElementById('btnSaveGallerySettings');
       const msgEl = document.getElementById('gallerySettingMsg');
       btn.disabled = true;
@@ -564,6 +594,8 @@
           exCode: currentEx,
           gallery_visibility: visibility,
           gallery_interactions: interactions,
+          gallery_open_at: openAt,
+          gallery_close_at: closeAt,
         });
         const d = res && res.data;
         if (!d || !d.success) {

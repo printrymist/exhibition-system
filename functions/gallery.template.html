@@ -709,7 +709,14 @@
         const code = (e && e.code) || '';
         const msg = (e && e.message) || String(e);
         console.warn('issueGalleryToken failed:', code, msg);
-        if (code === 'functions/permission-denied' && /公開されていません/.test(msg)) {
+        if (/GALLERY_NOT_YET:/.test(msg)) {
+          const iso = msg.split('GALLERY_NOT_YET:')[1] || '';
+          let when = iso;
+          try { const d = new Date(iso); if (!isNaN(d.getTime())) when = d.toLocaleString('ja-JP'); } catch (_) {}
+          showInfo('🕒', 'まだ公開されていません', 'この展覧会は ' + when + ' から公開予定です。');
+        } else if (/GALLERY_ENDED/.test(msg)) {
+          showInfo('🔚', '公開は終了しました', 'この展覧会の公開期間は終了しました。ご覧いただきありがとうございました。');
+        } else if (code === 'functions/permission-denied' && /公開されていません/.test(msg)) {
           showInfo('🔒', '現在この展覧会は公開されていません', '主催者にお問い合わせください。');
         } else if (code === 'functions/permission-denied' && /署名/.test(msg)) {
           showInfo('🔒', 'QR コードが無効です', 'QR コードが破損しているか、別の展覧会のものです。');

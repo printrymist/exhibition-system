@@ -698,6 +698,25 @@ exports.issueGalleryToken = onCall(
       );
     }
 
+    // 公開期間チェック (gallery_open_at / gallery_close_at, ISO 文字列, 空可)。
+    // 公開状態が公開系でも、指定期間の外なら閲覧不可にする (会期に合わせた自動公開/終了)。
+    // message に GALLERY_NOT_YET:<iso> / GALLERY_ENDED を入れ、gallery 側で文言を出し分ける。
+    const nowMsForWindow = Date.now();
+    const openAtStr = String(exData.gallery_open_at || "").trim();
+    const closeAtStr = String(exData.gallery_close_at || "").trim();
+    if (openAtStr) {
+      const openMs = Date.parse(openAtStr);
+      if (!isNaN(openMs) && nowMsForWindow < openMs) {
+        throw new HttpsError("failed-precondition", "GALLERY_NOT_YET:" + openAtStr);
+      }
+    }
+    if (closeAtStr) {
+      const closeMs = Date.parse(closeAtStr);
+      if (!isNaN(closeMs) && nowMsForWindow > closeMs) {
+        throw new HttpsError("failed-precondition", "GALLERY_ENDED");
+      }
+    }
+
     // visitor_only のときだけ sig を検証する。public は sig 不要 (SNS シェア想定)。
     if (visibility === "visitor_only") {
       const exp = Number(data.exp);
@@ -2673,6 +2692,13 @@ exports.syncArtworkPublishedFlags = onCall(async (request) => {
   const exhibitionUpdate = { gallery_visibility: visibility };
   if (interactions) {
     exhibitionUpdate.gallery_interactions = interactions;
+  }
+  // 公開期間 (ISO 文字列, 空可)。キーが渡されたときだけ更新する (空文字 = クリア)。
+  if ("gallery_open_at" in data) {
+    exhibitionUpdate.gallery_open_at = String(data.gallery_open_at || "");
+  }
+  if ("gallery_close_at" in data) {
+    exhibitionUpdate.gallery_close_at = String(data.gallery_close_at || "");
   }
   await db.collection("exhibitions").doc(exCode).set(exhibitionUpdate, { merge: true });
 
