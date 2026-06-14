@@ -271,6 +271,7 @@
 
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 0;
       margin-bottom: 16px;
       border-bottom: 2px solid #eee;
@@ -1248,9 +1249,6 @@
       <button class="main-tab-btn" id="mainTabQr" onclick="switchMainTab('qr')">
         🔲 QRコード印刷
       </button>
-      <button class="main-tab-btn" id="mainTabForm" onclick="switchMainTab('form')">
-        📝 キャプション項目
-      </button>
       <button class="main-tab-btn" id="mainTabCategorize" onclick="switchMainTab('categorize')">
         🤖 AI 分類
       </button>
@@ -1297,6 +1295,7 @@
       <div class="card-title">キャプション設定</div>
       <div class="tabs">
         <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 テンプレート</div>
+        <div class="tab" id="tabCapFields" onclick="switchTab('capfields')">📝 載せる項目</div>
         <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ 詳細編集</div>
         <div class="tab" id="tabPage" onclick="switchTab('page')">📄 ページ設定</div>
       </div>
@@ -1725,6 +1724,21 @@
           <div id="saveMsg" style="font-size:0.82em;margin-top:6px;min-height:16px;"></div>
         </div>
       </div>
+
+      <div id="capFieldsTab" style="display:none;">
+        <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
+          作品登録で集めた項目のうち、キャプションに載せる項目を選びます。チェックを入れた項目がキャプションに使われます。<br>
+          <span style="color:#aaa;">（作家から集める項目そのものは「作品登録・設定」画面で決めます）</span>
+        </p>
+        <div id="fieldSettingGrid"></div>
+        <div style="margin-top:16px;">
+          <button id="btnSaveFormSettings" class="btn-print" onclick="saveFormSettings()"
+            style="width:100%; padding:13px;">
+            💾 設定を保存
+          </button>
+          <div id="formSettingMsg" style="font-size:0.85em; margin-top:8px; min-height:16px;"></div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -1782,25 +1796,6 @@
         <button class="btn-print" onclick="openQrPrint()" style="width:100%;padding:13px;">
           🔲 QR コードを印刷
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- フォーム設定エリア -->
-  <div id="formSettingArea" style="display:none;">
-    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">📝 キャプションに載せる項目</div>
-      <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
-        作品登録で集めた項目のうち、キャプションに載せる項目を選びます。チェックを入れた項目がキャプションに使われます。<br>
-        <span style="color:#aaa;">（作家から集める項目そのものは「作品登録・設定」画面で決めます）</span>
-      </p>
-      <div id="fieldSettingGrid"></div>
-      <div style="margin-top:16px;">
-        <button id="btnSaveFormSettings" class="btn-print" onclick="saveFormSettings()"
-          style="width:100%; padding:13px;">
-          💾 設定を保存
-        </button>
-        <div id="formSettingMsg" style="font-size:0.85em; margin-top:8px; min-height:16px;"></div>
       </div>
     </div>
   </div>
@@ -2049,11 +2044,9 @@
     function switchMainTab(tab) {
       document.getElementById('mainTabCaption').classList.toggle('active', tab === 'caption');
       document.getElementById('mainTabQr').classList.toggle('active', tab === 'qr');
-      document.getElementById('mainTabForm').classList.toggle('active', tab === 'form');
       document.getElementById('mainTabCategorize').classList.toggle('active', tab === 'categorize');
       document.getElementById('settingsArea').style.display = tab === 'caption' ? 'block' : 'none';
       document.getElementById('qrPrintArea').style.display = tab === 'qr' ? 'block' : 'none';
-      document.getElementById('formSettingArea').style.display = tab === 'form' ? 'block' : 'none';
       document.getElementById('categorizeArea').style.display = tab === 'categorize' ? 'block' : 'none';
     }
 
@@ -2288,11 +2281,17 @@
 
     function switchTab(tab) {
       document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
+      document.getElementById('tabCapFields').classList.toggle('active', tab === 'capfields');
       document.getElementById('tabCustom').classList.toggle('active', tab === 'custom');
       document.getElementById('tabPage').classList.toggle('active', tab === 'page');
       document.getElementById('templateTab').style.display = tab === 'template' ? 'block' : 'none';
+      document.getElementById('capFieldsTab').style.display = tab === 'capfields' ? 'block' : 'none';
       document.getElementById('customTab').style.display = tab === 'custom' ? 'block' : 'none';
       document.getElementById('pageTab').style.display = tab === 'page' ? 'block' : 'none';
+      // 「載せる項目」タブを開いたら最新の登録項目・載せる項目でグリッドを組み直す
+      if (tab === 'capfields' && artworkData) {
+        buildFieldSettingGrid(artworkData.captionFields, artworkData.registrationFields);
+      }
       // Custom タブに切り替え + グリッドが空なら現在のテンプレで自動構築
       if (tab === 'custom') {
         const grid = document.getElementById('fieldsGrid');
