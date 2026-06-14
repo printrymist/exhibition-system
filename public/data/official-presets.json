@@ -1,7 +1,7 @@
 {
   "templates": {
     "official_solo": {
-      "label": "🎨 個展 推奨",
+      "label": "🎨 個展",
       "tagline": "1 人の作家・ゆったり展示用",
       "size": "A7 (105×74mm) — A4 に 8 枚",
       "qrPosition": "bottom-right",
@@ -30,7 +30,7 @@
     },
 
     "official_group": {
-      "label": "🎭 グループ展 推奨",
+      "label": "🎭 グループ展",
       "tagline": "多人数展・効率印刷用",
       "size": "A7 弱 (70×59mm) — A4 に 15 枚",
       "qrPosition": "bottom-right",
@@ -58,7 +58,7 @@
     },
 
     "official_photo": {
-      "label": "📷 写真展 推奨",
+      "label": "📷 写真展",
       "tagline": "撮影地・カメラなど写真特有の情報",
       "size": "A7 (105×74mm) — A4 に 8 枚",
       "qrPosition": "bottom-right",
@@ -86,7 +86,7 @@
     },
 
     "official_intl": {
-      "label": "🌐 国際展 推奨",
+      "label": "🌐 国際展",
       "tagline": "日英併記、海外作家・観客向け",
       "size": "A7 (105×74mm) 中央寄せ — A4 に 8 枚",
       "qrPosition": "bottom-left",
@@ -122,7 +122,7 @@
     },
 
     "official_simple_center": {
-      "label": "🎏 シンプル・中央 推奨",
+      "label": "🎏 シンプル・中央",
       "tagline": "日本のギャラリーで最も多いセンタリング構成",
       "size": "A7 (105×74mm) — A4 縦に 8 枚",
       "qrPosition": "bottom-left",
@@ -153,7 +153,7 @@
     },
 
     "official_with_comment": {
-      "label": "💬 作家コメント入り 推奨",
+      "label": "💬 作家コメント入り",
       "tagline": "作品情報の下に作家コメントを添える",
       "size": "A7 (105×74mm) — A4 縦に 8 枚",
       "qrPosition": "bottom-right",
@@ -184,7 +184,7 @@
     },
 
     "official_with_header": {
-      "label": "📌 展覧会名ヘッダー 推奨",
+      "label": "📌 展覧会名ヘッダー",
       "tagline": "上に展覧会名の帯。シリーズ展示にも便利",
       "size": "A7 (105×74mm) — A4 縦に 8 枚",
       "qrPosition": "bottom-right",
@@ -226,7 +226,7 @@
     },
 
     "official_print": {
-      "label": "🎨 版画・限定版 推奨",
+      "label": "🎨 版画・限定版",
       "tagline": "エディション・額装価格表示。版画 / 写真集 / シルクスクリーン向け",
       "size": "A7 (105×74mm) — A4 縦に 8 枚",
       "qrPosition": "bottom-right",
@@ -288,6 +288,35 @@
         { "type": "field", "name": "price",       "size": 13, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 },
         { "type": "spacer", "size": "3mm" },
         { "type": "field", "name": "artist_note", "size": 10, "bold": false, "italic": true,  "align": "inherit", "maxLines": 6, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 }
+      ]
+    },
+    "official_artist_first": {
+      "label": "✍️ 作家名先",
+      "tagline": "作家名から始まる構成（海外で一般的）",
+      "size": "A7 (105×74mm) — A4 に 8 枚",
+      "qrPosition": "bottom-right",
+      "qrOffset": 0,
+      "textAlign": "left",
+      "pageSettings": {
+        "paperSize": "A4", "orientation": "portrait",
+        "cols": 2, "rows": 4,
+        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "textMarginLeft": 6, "textMarginRight": 6,
+        "fontFamily": "sans-serif"
+      },
+      "items": [
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "artist",    "size": 12, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "title",     "size": 17, "bold": true,  "italic": false, "align": "inherit", "maxLines": 2, "minSize": 8, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "divider" },
+        { "type": "spacer", "size": "2mm" },
+        { "type": "field", "name": "year",      "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "size",      "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "field", "name": "technique", "size": 11, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "",  "comma": false, "prefix": "", "suffix": "", "affixScale": 0.75 },
+        { "type": "spacer", "size": "3mm" },
+        { "type": "field", "name": "price",     "size": 13, "bold": false, "italic": false, "align": "inherit", "maxLines": 1, "minSize": 7, "currency": "¥", "comma": true,  "prefix": "", "suffix": "", "affixScale": 0.75 }
       ]
     }
   },
@@ -396,6 +425,18 @@
       "size": "455×380mm",
       "price": "120000",
       "artist_note": "波と空が出会う場所に、人の記憶が落ちて沈んでいく。沈んだものは見えなくなり、海の余白だけが残る。",
+      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+    },
+    "official_artist_first": {
+      "artwork_id": "demo_artist_first",
+      "title": "夜明けの海",
+      "title_en": "Sea at Dawn",
+      "artist": "山田 太郎",
+      "artist_en": "Taro Yamada",
+      "year": "2024",
+      "technique": "アクリル・キャンバス",
+      "size": "410×318mm",
+      "price": "60000",
       "qr_url": "https://rohei-printer-system.web.app/?demo=1"
     }
   }

@@ -1505,15 +1505,15 @@
             <li>作家に入力してもらう項目を変えるときは、上の「<strong>📝 フォーム設定</strong>」タブへ</li>
           </ol>
         </details>
-        <!-- テンプレ一覧 (公式 + ベース統合)。⭐ 推奨 マーク付きは「すぐ使える」公式テンプレ。 -->
+        <!-- テンプレ一覧 (すべて公式テンプレ)。⭐ マーク = 運営が用意した既製テンプレ ('自分のテンプレ' と区別)。 -->
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <span style="font-size:0.95em; font-weight:bold; color:#444;">📋 テンプレ一覧</span>
-          <span style="font-size:0.78em; color:#aaa;">⭐ マークは公式推奨 (項目とサイズが詰めてあり、そのまま使えます)</span>
+          <span style="font-size:0.78em; color:#aaa;">⭐ は公式テンプレ (項目とサイズが詰めてあり、そのまま使えます)</span>
         </div>
         <div class="template-grid">
           <div class="template-card official selected" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
             data-description="1 人の作家・ゆったり展示用。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。タイトル / 作家名を大きく、間隔ゆったり。">
-            <h4>🎨 個展 推奨</h4>
+            <h4>🎨 個展</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="font-size:15px;font-weight:bold;">桜咲く春の風景</div>
@@ -1529,9 +1529,26 @@
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_solo')">📥 採用</button>
           </div>
+          <div class="template-card official" id="tpl_official_artist_first" onclick="selectTemplate('official_artist_first')"
+            data-description="作家名から始まる構成。海外で一般的な並び。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。">
+            <h4>✍️ 作家名先</h4>
+            <div class="template-preview">
+              <div class="tpl-mockup" data-qr-pos="bottom-right">
+                <div style="font-size:11px;">田中花子</div>
+                <div class="tpl-spacer"></div>
+                <div style="font-size:15px;font-weight:bold;">桜咲く春の風景</div>
+                <div class="tpl-divider"></div>
+                <div style="font-size:10px;color:#777;">2024</div>
+                <div style="font-size:10px;color:#777;">油彩・キャンバス</div>
+                <div style="font-size:11.5px;">¥ 85,000</div>
+                <div class="tpl-qr-marker"></div>
+              </div>
+            </div>
+            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_artist_first')">📥 採用</button>
+          </div>
           <div class="template-card official" id="tpl_official_group" onclick="selectTemplate('official_group')"
             data-description="多人数展・効率印刷用。70×59mm で A4 縦に 15 枚 (3×5)。コンパクト・情報密度高め。">
-            <h4>🎭 グループ展 推奨</h4>
+            <h4>🎭 グループ展</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="font-size:12px;font-weight:bold;">青の交響</div>
@@ -1548,7 +1565,7 @@
           </div>
           <div class="template-card official" id="tpl_official_photo" onclick="selectTemplate('official_photo')"
             data-description="写真展・撮影情報重視。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。撮影地・撮影年・カメラの項目が必要 (項目設定に追加)。">
-            <h4>📷 写真展 推奨</h4>
+            <h4>📷 写真展</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="font-size:13px;font-weight:bold;">朝霧の山頂</div>
@@ -1565,7 +1582,7 @@
           </div>
           <div class="template-card official" id="tpl_official_intl" onclick="selectTemplate('official_intl')"
             data-description="日英併記、海外作家・観客向け。A7 (105×74mm) で A4 縦に 8 枚 (2×4)、中央寄せ。">
-            <h4>🌐 国際展 推奨</h4>
+            <h4>🌐 国際展</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-left">
                 <div style="font-size:13px;font-weight:bold;text-align:center;">月光のソナタ</div>
@@ -1581,7 +1598,7 @@
           </div>
           <div class="template-card official" id="tpl_official_simple_center" onclick="selectTemplate('official_simple_center')"
             data-description="日本のギャラリーで最も多いセンタリング構成。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。シンプルで読みやすい。">
-            <h4>🎏 シンプル・中央 推奨</h4>
+            <h4>🎏 シンプル・中央</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-left">
                 <div style="font-size:13px;font-weight:bold;text-align:center;">静かな水辺</div>
@@ -1596,7 +1613,7 @@
           </div>
           <div class="template-card official" id="tpl_official_with_comment" onclick="selectTemplate('official_with_comment')"
             data-description="作家コメント (artist_note 項目) を下段に添えるレイアウト。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。作家自身の言葉を見せたい時に。">
-            <h4>💬 作家コメント入り 推奨</h4>
+            <h4>💬 作家コメント入り</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="font-size:13px;font-weight:bold;">母の庭</div>
@@ -1613,7 +1630,7 @@
           </div>
           <div class="template-card official" id="tpl_official_with_header" onclick="selectTemplate('official_with_header')"
             data-description="上端に展覧会名の帯 (背景グレー)。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。シリーズ展示や複数会場の見せ方に。">
-            <h4>📌 展覧会名ヘッダー 推奨</h4>
+            <h4>📌 展覧会名ヘッダー</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="background:#eeeeee;text-align:center;font-size:9px;font-weight:bold;padding:2px 0;margin:-8px -10px 6px;border-radius:1px;">○○展覧会</div>
@@ -1629,7 +1646,7 @@
           </div>
           <div class="template-card official" id="tpl_official_print" onclick="selectTemplate('official_print')"
             data-description="版画 / 写真集 / シルクスクリーン向け。技法・エディション・サイズ・額装価格まで表示。A7 (105×74mm) で A4 縦に 8 枚 (2×4)。">
-            <h4>🎨 版画・限定版 推奨</h4>
+            <h4>🎨 版画・限定版</h4>
             <div class="template-preview">
               <div class="tpl-mockup" data-qr-pos="bottom-right">
                 <div style="font-size:12px;font-weight:bold;">Moonrise on the Pond</div>
@@ -1654,72 +1671,6 @@
               </div>
             </div>
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_qronly')">📥 採用</button>
-          </div>
-
-          <!-- ベース (PRESETS) — 同じ template-grid 内で続く。
-               'standard' / 'bilingual' は公式 (official_solo / official_intl) と
-               機能重複のため 2026-05-13 に削除済。
-               'print' は 2026-05-17 に official_print に昇格 (★ 公式 8 個目)。 -->
-          <div class="template-card" id="tpl_minimal" onclick="selectTemplate('minimal')"
-            data-description="タイトルと作家名のみ。最小構成。">
-            <h4>✂️ シンプル</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-right">
-                <div style="font-size:14px;font-weight:bold;">作品タイトル</div>
-                <div style="font-size:11px;">作家名</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('minimal')">📥 採用</button>
-          </div>
-          <div class="template-card" id="tpl_gallery" onclick="selectTemplate('gallery')"
-            data-description="QR が左上、その下に divider と本文。画廊風のレイアウト。">
-            <h4>🖼️ ギャラリー</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="top-left">
-                <div style="height:24px;"></div>
-                <div class="tpl-divider"></div>
-                <div style="font-size:13px;font-weight:bold;">作品タイトル</div>
-                <div style="font-size:10px;">作家名</div>
-                <div style="font-size:8.5px;color:#777;">制作年・技法</div>
-                <div style="font-size:9px;font-weight:bold;">¥ 10,000</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('gallery')">📥 採用</button>
-          </div>
-          <div class="template-card" id="tpl_jp_standard" onclick="selectTemplate('jp_standard')"
-            data-description="作品名がトップ。和風の標準的な構成。整列は Page layout の Text align で変更可。">
-            <h4>🇯🇵 作品名先</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-right">
-                <div style="font-size:14px;font-weight:bold;">作品名</div>
-                <div class="tpl-divider"></div>
-                <div style="font-size:9px;color:#777;">作家名</div>
-                <div style="font-size:9px;color:#777;">制作年</div>
-                <div style="font-size:9px;color:#777;">サイズ・技法・素材</div>
-                <div style="font-size:9px;color:#777;">価格</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('jp_standard')">📥 採用</button>
-          </div>
-          <div class="template-card" id="tpl_jp_artist_first" onclick="selectTemplate('jp_artist_first')"
-            data-description="作家名から始まる和風の構成。整列は Page layout の Text align で変更可。">
-            <h4>🇯🇵 作家名先</h4>
-            <div class="template-preview">
-              <div class="tpl-mockup" data-qr-pos="bottom-right">
-                <div style="font-size:9px;color:#777;">作家名</div>
-                <div class="tpl-spacer"></div>
-                <div style="font-size:14px;font-weight:bold;">作品名</div>
-                <div class="tpl-divider"></div>
-                <div style="font-size:9px;color:#777;">制作年</div>
-                <div style="font-size:9px;color:#777;">サイズ・技法・素材</div>
-                <div style="font-size:9px;color:#777;">価格</div>
-                <div class="tpl-qr-marker"></div>
-              </div>
-            </div>
-            <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('jp_artist_first')">📥 採用</button>
           </div>
         </div>
         <div class="selected-tpl-preview-wrap">
@@ -2477,7 +2428,7 @@
       switchTab('custom');
     }
 
-    // 内部キー (例: 'jp_artist_first_l') から Templates タブのカード見出し ('🇯🇵 作家名先・左') を取り出す
+    // 内部キー (例: 'official_artist_first') から Templates タブのカード見出し ('✍️ 作家名先') を取り出す
     function getTemplateLabel(name) {
       const card = document.getElementById('tpl_' + name);
       if (!card) return name;
