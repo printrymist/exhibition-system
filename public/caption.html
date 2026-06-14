@@ -3050,16 +3050,14 @@
         }
       });
 
-      if (artworkData) {
-        // 候補は既存作品に値があるフィールド (headers) + FORM_FIELD_DEFS の登録項目を合算する。
-        // 後者を含めることで「項目設定で有効化したがまだ未入力」のフィールドも customize に出せる。
-        const candidates = [...artworkData.headers];
-        FORM_FIELD_DEFS.forEach(def => { if (!candidates.includes(def.name)) candidates.push(def.name); });
-        candidates.forEach(h => {
+      // 詳細編集には「キャプションに載せる項目 (caption_fields)」だけを並べる。
+      // 登録だけで載せない項目は出さない (登録を増やしても詳細編集が縦に伸びないように)。
+      // プリセット未配置の caption_fields は載せる対象なので checked で追加する。
+      if (artworkData && capFieldNames) {
+        capFieldNames.forEach(h => {
           if (usedFields.includes(h)) return;
-          if (regFieldNames && !regFieldNames.includes(h)) return;
-          const checked = capFieldNames ? capFieldNames.includes(h) : false;
-          grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', checked, 2, 7, '', false, '', ''));
+          if (regFieldNames && !regFieldNames.includes(h)) return; // 念のため登録に有る項目だけ
+          grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', true, 2, 7, '', false, '', ''));
           usedFields.push(h);
         });
       }
@@ -4267,13 +4265,13 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
               if (topLevelRows(childContainer).length > 0) grid.appendChild(groupEl);
             }
           });
-          if (artworkData) {
-            artworkData.headers.forEach(h => {
+          // 案Y: 保存テンプレは保存どおりに復元。詳細編集に並べる候補は「キャプションに載せる
+          // 項目 (caption_fields)」のうち保存テンプレに無いものだけを未チェックで (手動で足せるように)。
+          // 登録だけで載せない項目は出さない (詳細編集を短く保つ)。未チェックなので出力は保存どおり。
+          if (artworkData && capFieldNames) {
+            capFieldNames.forEach(h => {
               if (usedFields.includes(h)) return;
               if (regFieldNames && !regFieldNames.includes(h)) return;
-              // 保存テンプレの items[] に無いフィールド = 主催者が意図的に外したもの。
-              // caption_fields (フォーム設定) に残っていても末尾では未チェックで並べるだけにする。
-              // ここで capFieldNames で再チェックすると、外したはずの価格/制作年が復元時に復活する。
               grid.appendChild(makeFieldEl(h, 10, false, false, 'inherit', false, 2, 7, '', false, '', ''));
             });
           }
