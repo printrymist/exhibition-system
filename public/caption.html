@@ -1686,10 +1686,18 @@
             <div id="officialTemplatesGrid" style="display:none;"></div>
           </div>
           <div id="personalTemplatesWrap" style="display:none;">
-            <div style="font-size:0.78em;color:#888;margin:14px 0 8px 0;padding-top:10px;border-top:1px solid #eee;">
-              💾 自分のテンプレ <span style="color:#aaa;font-size:0.92em;">(この主催者のみ可視)</span>
+            <div id="currentExTplWrap" style="display:none;">
+              <div style="font-size:0.78em;color:#888;margin:14px 0 8px 0;padding-top:10px;border-top:1px solid #eee;">
+                📌 この展覧会のテンプレ <span style="color:#aaa;font-size:0.92em;">(別名で複数保存できます)</span>
+              </div>
+              <div id="currentExTplGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
             </div>
-            <div id="personalTemplatesGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+            <div id="pastExTplWrap" style="display:none;">
+              <div style="font-size:0.78em;color:#888;margin:14px 0 8px 0;padding-top:10px;border-top:1px solid #eee;">
+                🗂 過去の展覧会から <span style="color:#aaa;font-size:0.92em;">(読み込んで再利用)</span>
+              </div>
+              <div id="pastExTplGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -2292,11 +2300,14 @@
       if (tab === 'capfields' && artworkData) {
         buildFieldSettingGrid(artworkData.captionFields, artworkData.registrationFields);
       }
-      // Custom タブに切り替え + グリッドが空なら現在のテンプレで自動構築
+      // Custom タブに切り替え: 空なら現在のテンプレで構築、既に組まれていれば
+      // 「載せる項目」と非破壊で突き合わせる (②の増減を③に反映、並びは温存)。
       if (tab === 'custom') {
         const grid = document.getElementById('fieldsGrid');
         if (grid && topLevelRows(grid).length === 0 && currentTemplate && PRESETS[currentTemplate]) {
           buildFieldsGridFromPreset(currentTemplate);
+        } else if (grid && artworkData) {
+          syncCustomGridWithCaptionFields();
         }
       }
     }
@@ -3060,6 +3071,45 @@
           usedFields.push(h);
         });
       }
+      normalizeInsertBars();
+    }
+
+    // ②「載せる項目」(caption_fields) と ③詳細編集グリッドを非破壊で突き合わせる。
+    // 既存の並び・大きさ・グループは温存。載せる項目に増えた分は末尾にチェック付きで追加、
+    // 外した分は削除する。詳細編集タブを開いたとき (switchTab) に呼ぶ。
+    function syncCustomGridWithCaptionFields() {
+      if (!artworkData || !Array.isArray(artworkData.captionFields)) return;
+      const grid = document.getElementById('fieldsGrid');
+      if (!grid) return;
+      const capSet = new Set(artworkData.captionFields.map(f => f && f.name).filter(Boolean));
+      const present = new Set();
+
+      topLevelRows(grid).forEach(row => {
+        if (row.dataset.type === 'field') {
+          if (capSet.has(row.dataset.field)) present.add(row.dataset.field);
+          else row.remove();
+        } else if (row.dataset.type === 'group') {
+          const childContainer = row.querySelector('.group-children');
+          if (childContainer) {
+            topLevelRows(childContainer).forEach(child => {
+              if (child.dataset.type !== 'field') return;
+              if (capSet.has(child.dataset.field)) present.add(child.dataset.field);
+              else child.remove();
+            });
+            if (topLevelRows(childContainer).length === 0) row.remove();
+          }
+        }
+        // divider / spacer はそのまま温存
+      });
+
+      // 載せる項目のうち、まだグリッドに無いものを末尾にチェック付きで追加
+      artworkData.captionFields.forEach(f => {
+        const name = f && f.name;
+        if (!name || present.has(name)) return;
+        grid.appendChild(makeFieldEl(name, 10, false, false, 'inherit', true, 2, 7, '', false, '', ''));
+        present.add(name);
+      });
+
       normalizeInsertBars();
     }
 
@@ -3949,7 +3999,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     }
 
     // 1テンプレ分のカード DOM を組む。deletable=true のときだけ ✕ ボタンを付ける。
-    function buildSavedTemplateCard(tpl, deletable) {
+    function buildSavedTemplateCard(tpl, deletable, showSource) {
       const card = document.createElement('div');
       card.style.cssText = 'border:2px solid #eee;border-radius:10px;padding:10px;background:white;position:relative;';
       card.setAttribute('data-saved-card', tpl.id || '');  // (b) 選択ハイライトの対象にする
@@ -3965,7 +4015,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
 
       const dateDiv = document.createElement('div');
       dateDiv.style.cssText = 'font-size:0.72em;color:#aaa;margin-bottom:8px;';
-      dateDiv.textContent = tpl.createdAt;
+      // 過去の展覧会セクションでは「元の展覧会名」を併記して、同名でも区別できるようにする。
+      dateDiv.textContent = (showSource && tpl.exName ? '元: ' + tpl.exName + ' · ' : '') + (tpl.createdAt || '');
 
       const loadBtn = document.createElement('button');
       loadBtn.style.cssText = 'width:100%;padding:5px;background:#f0f7ff;color:#1a73e8;border:1px solid #1a73e8;border-radius:6px;font-size:12px;cursor:pointer;';
@@ -4068,10 +4119,13 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const officialWrap = document.getElementById('officialTemplatesWrap');
       const personalWrap = document.getElementById('personalTemplatesWrap');
       const officialGrid = document.getElementById('officialTemplatesGrid');
-      const personalGrid = document.getElementById('personalTemplatesGrid');
+      const currentExTplWrap = document.getElementById('currentExTplWrap');
+      const currentExTplGrid = document.getElementById('currentExTplGrid');
+      const pastExTplWrap = document.getElementById('pastExTplWrap');
+      const pastExTplGrid = document.getElementById('pastExTplGrid');
       // 旧 savedTemplatesSection 撤去済み (official-presets.json に置換)。
       // DOM 要素が無い場合は Promise を返して呼び出し側の .then を壊さない。
-      if (!section || !officialGrid || !personalGrid) return Promise.resolve();
+      if (!section || !officialGrid || !currentExTplGrid || !pastExTplGrid) return Promise.resolve();
       const me = ((firebase.auth && firebase.auth().currentUser && firebase.auth().currentUser.email) || '').trim().toLowerCase();
       const isOp = (me === OPERATOR_EMAIL.toLowerCase());
 
@@ -4083,7 +4137,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           name: d.name || '',
           settingsJson: d.settingsJson || '',
           createdAt: d.createdAt || '',
-          createdBy: (d.createdBy || '').toLowerCase()
+          createdBy: (d.createdBy || '').toLowerCase(),
+          exCode: d.exCode || '',
+          exName: d.exName || ''
         };
       };
 
@@ -4119,8 +4175,14 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       }
 
       // 起動時の自動適用 (applyCaptionTemplateChoice('saved:...')) のために Promise を返す
+      const curEx = window._currentEx || '';
       return queryP.then(({ officials, personal }) => {
-        savedTemplateNames = new Set([...officials, ...personal].map(t => t.name));
+        // 自分のテンプレを「この展覧会」と「過去の展覧会」に分ける (exCode で判定。
+        // exCode 未記録の旧テンプレは過去側へ)。
+        const current = personal.filter(t => t.exCode && t.exCode === curEx);
+        const past = personal.filter(t => !(t.exCode && t.exCode === curEx));
+        // 上書き警告は「この展覧会の同名テンプレ」だけを対象にする (他展覧会の同名は別物)。
+        savedTemplateNames = new Set(current.map(t => t.name));
         const total = officials.length + personal.length;
         if (total === 0) {
           section.style.display = 'none';
@@ -4129,18 +4191,25 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           return;
         }
         officials.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-        personal.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        current.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        past.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
         // 公式テンプレ: 運営者ログイン時のみ削除可
         officialGrid.innerHTML = '';
         officials.forEach(t => officialGrid.appendChild(buildSavedTemplateCard(t, isOp)));
         officialWrap.style.display = officials.length > 0 ? 'block' : 'none';
 
-        // 自分のテンプレ: 本人だけ表示 (rules で他主催者のは取れない) / 削除可
-        personalGrid.innerHTML = '';
-        personal.forEach(t => personalGrid.appendChild(buildSavedTemplateCard(t, true)));
-        personalWrap.style.display = personal.length > 0 ? 'block' : 'none';
+        // この展覧会のテンプレ (別名で複数可)
+        currentExTplGrid.innerHTML = '';
+        current.forEach(t => currentExTplGrid.appendChild(buildSavedTemplateCard(t, true, false)));
+        currentExTplWrap.style.display = current.length > 0 ? 'block' : 'none';
 
+        // 過去の展覧会のテンプレ (読込で再利用。元の展覧会名を表示)
+        pastExTplGrid.innerHTML = '';
+        past.forEach(t => pastExTplGrid.appendChild(buildSavedTemplateCard(t, true, true)));
+        pastExTplWrap.style.display = past.length > 0 ? 'block' : 'none';
+
+        personalWrap.style.display = (current.length + past.length) > 0 ? 'block' : 'none';
         section.style.display = 'block';
       })
       .catch(err => { console.warn('loadSavedTemplates error:', err && err.message ? err.message : err); });
@@ -4163,11 +4232,12 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
               updatedAt: new Date().toISOString(),
             }, { merge: true }).catch(e => console.warn('caption_template_id 更新失敗:', e));
           }
-          // (a) 読み込んだテンプレ名を保存欄に入れ、編集後そのまま上書き保存できるようにする
-          //     (別名を入れれば従来どおり別テンプレとして保存も可能)。
+          // (a) 保存欄には「この展覧会の名前」を入れる (読み込んだテンプレ名ではない)。
+          //     過去・共用テンプレを別の展覧会に読み込んだとき、元テンプレを誤って上書きしないため。
+          //     「1 展覧会 = 展覧会名の 1 テンプレ」に収束。別名を入れれば任意名で保存も可能。
           const nameInput = document.getElementById('saveTemplateName');
-          if (nameInput && btn.dataset.tplName) {
-            nameInput.value = btn.dataset.tplName;
+          if (nameInput) {
+            nameInput.value = (artworkData && artworkData.exName) || '';
             if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
           }
         }
@@ -4175,6 +4245,35 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         //     (テンプレタブに戻っても「個展推奨」がハイライトされたままにならないように)。
         if (btn.dataset.tplId) highlightSavedCard(btn.dataset.tplId);
         const settings = JSON.parse(btn.dataset.settings);
+
+        // (persist) 「📥採用」と同様に、テンプレの項目で「載せる項目」(caption_fields) を設定し、
+        //   足りない項目を作品登録 (registration_fields) に追加する。これで新規展覧会に読み込んでも
+        //   登録 / 載せる項目 / 詳細編集 が一気に整い、項目が落ちたり ②③ が食い違ったりしない。
+        //   グリッド構築より前に artworkData を更新する (下の構築が新しい値を使うように)。
+        if (opts && opts.persist && window._currentEx && artworkData) {
+          const neededFields = _extractTemplateFieldNames(settings.items);
+          const currentRegFields = Array.isArray(artworkData.registrationFields) ? artworkData.registrationFields : [];
+          const currentRegNames = new Set(currentRegFields.map(f => f && f.name).filter(Boolean));
+          const missing = neededFields.filter(n =>
+            FIELD_MAP[n] && !FIELD_MAP[n].isSystem && !currentRegNames.has(n)
+          );
+          const newRegFields = [...currentRegFields, ...missing.map(n => ({ name: n, required: false }))];
+          const currentCaptionFields = Array.isArray(artworkData.captionFields) ? artworkData.captionFields : [];
+          const captionRequiredMap = Object.fromEntries(
+            currentCaptionFields.map(f => [f && f.name, !!(f && f.required)])
+          );
+          const newCaptionFields = neededFields.map(n => ({ name: n, required: !!captionRequiredMap[n] }));
+          artworkData.registrationFields = newRegFields;
+          artworkData.captionFields = newCaptionFields;
+          if (!Array.isArray(artworkData.headers)) artworkData.headers = [];
+          missing.forEach(n => { if (!artworkData.headers.includes(n)) artworkData.headers.push(n); });
+          fsDb.collection('exhibitions').doc(window._currentEx).set({
+            registration_fields: JSON.stringify(newRegFields),
+            caption_fields: JSON.stringify(newCaptionFields),
+            updatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(e => console.warn('読込時の項目設定の保存に失敗:', e));
+        }
+
         if (settings.paperSize) document.getElementById('paperSize').value = settings.paperSize;
         if (settings.orientation) document.getElementById('orientation').value = settings.orientation;
         if (settings.cols) document.getElementById('cols').value = settings.cols;
@@ -4320,7 +4419,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       showSaveMsg('保存中…', '#888');
       const saveBtn = document.getElementById('btnSaveTemplate');
       if (saveBtn) saveBtn.disabled = true;
-      const docId = sanitizeTplId(name);
+      // docId は「展覧会コード__テンプレ名」で展覧会ごとにスコープする。
+      // これで別名保存 (名前違い=別 doc) を保ちつつ、別の展覧会が同名でも衝突しない。
+      const exCodeForSave = window._currentEx || '';
+      const docId = exCodeForSave ? sanitizeTplId(exCodeForSave + '__' + name) : sanitizeTplId(name);
       const user = firebase.auth && firebase.auth().currentUser;
       // ハイブリッドルール (2026-05-08) は createdBy を case-insensitive で比較する。
       // 保存側でも小文字統一しておくと where(==) クエリが取りこぼさなくて済む。
@@ -4330,6 +4432,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         name: name,
         settingsJson: json,
         createdBy: createdBy,
+        exCode: exCodeForSave,
+        exName: (artworkData && artworkData.exName) || '',
         createdAt: now,
         updatedAt: new Date().toISOString()
       }, { merge: true })
