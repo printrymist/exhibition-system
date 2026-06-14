@@ -1164,7 +1164,7 @@
 <body>
 
   <div style="text-align:center; margin-bottom:20px;">
-    <h1 style="font-size:1.3em; color:#1a73e8;">🖨️ Exhibition Caption Manager</h1>
+    <h1 style="font-size:1.3em; color:#1a73e8;">🖨️ キャプション作成</h1>
     <p style="font-size:0.85em; color:#888; margin-top:4px;">Rohei Printer System</p>
     <a id="linkToRegister" href="#"
       style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
@@ -1243,10 +1243,10 @@
   <div class="main-tab-bar" id="mainTabs" style="display:none;">
     <div class="main-tab-bar-inner">
       <button class="main-tab-btn active" id="mainTabCaption" onclick="switchMainTab('caption')">
-        🖨️ Caption Print
+        🖨️ キャプション印刷
       </button>
       <button class="main-tab-btn" id="mainTabQr" onclick="switchMainTab('qr')">
-        🔲 QR Print
+        🔲 QRコード印刷
       </button>
       <button class="main-tab-btn" id="mainTabForm" onclick="switchMainTab('form')">
         📝 フォーム設定
@@ -1264,7 +1264,7 @@
          「強制再生成」用 (普段は押さなくて済む) -->
     <div id="previewArea" class="card" style="position:relative;">
       <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span>🖨️ Preview</span>
+        <span>🖨️ プレビュー</span>
         <span id="previewStatus" style="font-size:0.75em;color:#888;font-weight:normal;"></span>
       </div>
       <!-- Preview タブ (紙印刷 / スマホ caption の切替) -->
@@ -1498,10 +1498,11 @@
         <details id="usageHint" class="usage-hint">
           <summary>💡 おすすめの使い方</summary>
           <ol>
-            <li>まず <strong>⭐ 公式テンプレ</strong>を <strong>📥 採用</strong> — 項目設定・フォーム設定・Page タブが一気に揃う</li>
-            <li>「項目設定」「フォーム設定」タブで内容を確認・微調整 (必要なら)</li>
-            <li>「Page」タブで余白・QR サイズなど細部を調整 (必要なら)</li>
-            <li>満足したら <strong>💾 自分のテンプレに保存</strong> で凍結 — 別テンプレを試す前のセーフネット</li>
+            <li>下の「📋 テンプレ一覧」から目的に近い <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong> (カードのクリックはプレビューだけ。採用で確定します)</li>
+            <li>上の「🖨️ プレビュー」で仕上がりを確認</li>
+            <li>印刷する項目や体裁を変えたいときは「<strong>⚙️ 詳細編集</strong>」、用紙・余白・QR サイズは「<strong>📄 ページ設定</strong>」で調整 (必要なときだけ)</li>
+            <li>気に入ったら「<strong>💾 自分のテンプレに保存</strong>」で確定 — 別テンプレを試す前のセーフネット</li>
+            <li>作家に入力してもらう項目を変えるときは、上の「<strong>📝 フォーム設定</strong>」タブへ</li>
           </ol>
         </details>
         <!-- テンプレ一覧 (公式 + ベース統合)。⭐ 推奨 マーク付きは「すぐ使える」公式テンプレ。 -->
@@ -1757,7 +1758,7 @@
           📄 紙の出力モード <strong>「QR シールのみ」</strong> 中。<br>
           ここで編集する項目は <strong>スマホ画面</strong> に表示されます (来場者が QR シールをスキャンしたときの見た目)。<br>
           紙には QR シールだけが印刷されます (項目は印刷されない)。<br>
-          <span style="color:#888;">通常の紙キャプ印刷に戻すには Page タブで「キャプション + QR を印刷」に切替。</span>
+          <span style="color:#888;">通常の紙キャプション印刷に戻すには「📄 ページ設定」タブで「キャプション + QR を印刷」に切替。</span>
         </div>
         <div class="fields-list" id="fieldsGrid"></div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
@@ -1839,7 +1840,7 @@
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
       <div class="card-title">📝 作品入力フォーム 項目設定</div>
       <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
-        作家が inputUI から入力できる項目を設定します。チェックした項目が表示されます。
+        作家が入力画面から入力できる項目を設定します。チェックした項目が表示されます。
       </p>
       <div id="fieldSettingGrid"></div>
       <div style="margin-top:16px;">
