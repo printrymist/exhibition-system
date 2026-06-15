@@ -1293,6 +1293,15 @@
 
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
       <div class="card-title">キャプション設定</div>
+      <!-- 公式テンプレ使用中の控えめなナッジ: 意識的に保存して「この展覧会専用」にできる。
+           採用は非破壊なので、保存しない限り公式参照のまま (規定が preset: のとき表示)。 -->
+      <div id="presetUsageBanner" style="display:none; margin-bottom:12px; padding:10px 14px; background:#fff8e1; border:1px solid #f0d875; border-radius:8px; font-size:0.85em; color:#7a5500; line-height:1.55;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span id="presetUsageBannerText" style="flex:1; min-width:180px;">公式テンプレを使用中です。</span>
+          <button onclick="saveAsExhibitionTemplate()" style="padding:6px 12px; background:#1a73e8; color:#fff; border:none; border-radius:6px; font-size:0.95em; font-weight:bold; cursor:pointer; white-space:nowrap;">💾 この展覧会のテンプレとして保存</button>
+        </div>
+        <div style="font-size:0.92em; color:#a07a30; margin-top:4px;">保存すると、この展覧会専用になり、公式テンプレが変わっても影響を受けません。</div>
+      </div>
       <div class="tabs">
         <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 テンプレート</div>
         <div class="tab" id="tabCapFields" onclick="switchTab('capfields')">📝 載せる項目</div>
@@ -1967,6 +1976,7 @@
           selectTemplate('official_solo', { commit: true });
         }
       }
+      updatePresetUsageBanner();  // 規定が公式 (preset:) なら保存ナッジを表示
     }
 
     // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
@@ -2262,6 +2272,7 @@
 
         // 採用バッジを更新 (公式カードを採用中に)
         updateAdoptedBadges(name);
+        updatePresetUsageBanner();  // preset 採用中なので「保存してこの展覧会専用に」ナッジを出す
 
         alert('✅ ' + label + ' を採用しました。\n'
           + (missing.length > 0
@@ -2288,6 +2299,43 @@
           if (b) b.style.display = 'none';
         });
       }
+    }
+
+    // 規定 (_savedTemplateId) が公式テンプレ (preset:) のときだけ「この展覧会のテンプレとして
+    // 保存しませんか」のナッジを出す。saved: になったら隠す。採用は非破壊なので、保存しない限り
+    // 公式参照のまま = このバナーで「ずっと公式のまま」を意識的な保存に誘導する。
+    function updatePresetUsageBanner() {
+      const banner = document.getElementById('presetUsageBanner');
+      if (!banner) return;
+      const id = (typeof _savedTemplateId === 'string') ? _savedTemplateId : '';
+      if (id.indexOf('preset:') === 0) {
+        const presetName = id.slice('preset:'.length);
+        const label = (typeof getTemplateLabel === 'function') ? getTemplateLabel(presetName) : presetName;
+        const textEl = document.getElementById('presetUsageBannerText');
+        if (textEl) textEl.textContent = '公式テンプレ「' + label + '」を使用中です。';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    // バナーの「この展覧会のテンプレとして保存」ボタン: 展覧会名で保存する。
+    // 既に同名 (この展覧会の) テンプレがあるときは確認を出して無断上書きを防ぐ
+    // (別名で残したいなら詳細編集タブの保存欄で名前を変えて保存)。
+    function saveAsExhibitionTemplate() {
+      const exName = (artworkData && artworkData.exName) || '';
+      if (!exName) { saveTemplate(); return; }  // 念のためのフォールバック
+      if (savedTemplateNames.has(exName)) {
+        if (!confirm(`この展覧会のテンプレ「${exName}」を、今の内容で上書きしますか?\n\n別の内容を残したいときは、キャンセルして「⚙️ 詳細編集」タブの保存欄で別の名前を付けて保存してください。`)) {
+          return;
+        }
+      }
+      const nameInput = document.getElementById('saveTemplateName');
+      if (nameInput) {
+        nameInput.value = exName;
+        if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
+      }
+      saveTemplate();
     }
 
     function switchTab(tab) {
@@ -4054,7 +4102,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         const delBtn = document.createElement('button');
         delBtn.style.cssText = 'position:absolute;top:6px;right:6px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:2px 5px;';
         delBtn.textContent = '✕';
-        delBtn.onclick = function () { deleteSavedTemplate(tpl.name, this); };
+        delBtn.onclick = function () { deleteSavedTemplate(tpl.id, tpl.name, this); };
         card.appendChild(delBtn);
       }
       return card;
@@ -4380,6 +4428,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         }
         // テンプレ読込後はタブを変えない (テンプレートタブのまま「✓ 採用中」+ プレビューで確認)。
         // 詳細を編集したい人だけ自分で「⚙️ 詳細編集」タブを開く。
+        updatePresetUsageBanner();  // saved 読込なのでナッジは隠れる (preset のときだけ出す)
       } catch (e) {
         alert(friendlyError(e, '読み込み'));
       }
@@ -4453,6 +4502,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           }
           _savedTemplateId = savedTplId;
           _lastSelectedTemplate = { id: savedTplId, name: name };
+          updatePresetUsageBanner();  // saved になったのでナッジを隠す
           showSaveMsg(overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`, '#1a73e8');
           if (saveBtn) saveBtn.innerHTML = '💾 保存';  // ラベルを元に戻す
           // 保存欄の名前は残す (同じテンプレを続けて編集→上書きできるように)。
@@ -4471,8 +4521,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     // 確認ボタンで実 delete のフローへ。
     let _pendingDeleteTemplate = null;
 
-    function deleteSavedTemplate(name, btn) {
-      _pendingDeleteTemplate = { name: name, btn: btn || null };
+    function deleteSavedTemplate(id, name, btn) {
+      _pendingDeleteTemplate = { id: id, name: name, btn: btn || null };
       const info = document.getElementById('deleteSavedTemplateInfo');
       // 保存テンプレ一覧から該当 entry を引いて作成日時等の context を表示
       // (officials / personals 両方を見る、name 一致で取れる範囲で)
@@ -4508,7 +4558,9 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       if (btnConfirm) btnConfirm.disabled = true;
       if (pending.btn) pending.btn.disabled = true;
 
-      const docId = sanitizeTplId(pending.name);
+      // docId は複合キー (exCode__名前) なので、名前から再計算せずカードが持つ実 id を使う。
+      // 旧・名前キーのテンプレ (id == sanitizeTplId(name)) もこの id でそのまま消せる。
+      const docId = pending.id || sanitizeTplId(pending.name);
       firebase.firestore().collection('caption_templates').doc(docId).delete()
         .then(() => {
           closeDeleteSavedTemplateModal();
