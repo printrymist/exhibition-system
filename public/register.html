@@ -1569,6 +1569,16 @@
         listEl.appendChild(row);
       });
     }
+    // caption.html の saveTemplate と同じ docId サニタイズ (Firestore doc id 制約回避)。
+    function sanitizeTplId(name) {
+      let s = String(name).replace(/[/.]/g, '_');
+      if (/^__/.test(s)) s = 'x' + s;
+      if (/__$/.test(s)) s = s + 'x';
+      if (s === '.' || s === '..' || s === '') s = '_' + Date.now();
+      if (s.length > 200) s = s.slice(0, 200);
+      return s;
+    }
+
     async function importFromExhibition(exCode, exName, btn) {
       const wantRegFields = document.getElementById('imp_regFields').checked;
       const wantCaptionFields = document.getElementById('imp_captionFields').checked;
@@ -1630,7 +1640,40 @@
         if (wantCaptionFields) {
           const update = {};
           if (data.caption_fields) update.caption_fields = data.caption_fields;
-          if (data.caption_template_id) update.caption_template_id = data.caption_template_id;
+          // caption_template_id: テンプレは展覧会別キー (exCode__名前) なので、
+          // - 'saved:' は元テンプレ doc をこの展覧会用にコピーし、参照をその新 doc に向ける
+          //   (この展覧会が自分のテンプレを持つ / 元展覧会のテンプレは無傷)。
+          // - 'preset:' (公式テンプレ) は展覧会非依存なのでそのまま引き継ぐ。
+          const srcTplId = (data.caption_template_id || '') + '';
+          try {
+            if (srcTplId.indexOf('saved:') === 0) {
+              const srcDocId = srcTplId.slice('saved:'.length);
+              const tplSnap = await fsDb.collection('caption_templates').doc(srcDocId).get();
+              if (tplSnap.exists) {
+                const t = tplSnap.data() || {};
+                const user = firebase.auth().currentUser;
+                const createdBy = user ? ((user.email || '').trim().toLowerCase()) : '';
+                const newName = currentExName || currentEx;
+                const newDocId = sanitizeTplId(currentEx + '__' + newName);
+                await fsDb.collection('caption_templates').doc(newDocId).set({
+                  name: newName,
+                  settingsJson: t.settingsJson || '',
+                  createdBy: createdBy,
+                  createdAt: new Date().toLocaleString('ja-JP'),
+                  updatedAt: new Date().toISOString(),
+                  exCode: currentEx,
+                  exName: currentExName || '',
+                }, { merge: true });
+                update.caption_template_id = 'saved:' + newDocId;
+              }
+              // 元テンプレ doc が見つからないときは参照を引き継がない (壊れた参照を避ける)
+            } else if (srcTplId) {
+              update.caption_template_id = srcTplId;  // preset: 等はそのまま
+            }
+          } catch (e) {
+            console.warn('caption template copy failed:', e);
+            // テンプレコピー失敗でも caption_fields だけは保存を続行
+          }
           if (Object.keys(update).length > 0) {
             update.updatedAt = new Date().toISOString();
             try {
