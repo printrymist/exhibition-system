@@ -4606,27 +4606,40 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     function buildFieldSettingGrid(activeFields, registrationFields) {
       const grid = document.getElementById('fieldSettingGrid');
       grid.innerHTML = '';
-      const regFieldNames = registrationFields ? registrationFields.map(f => f.name) : null;
-      FORM_FIELD_DEFS.forEach(def => {
-        const inRegistration = regFieldNames ? regFieldNames.includes(def.name) : true;
+      // 表示するのは「作品登録で集める項目」だけ (登録に無いものは消し込み)。並び順も
+      // 登録項目の順に合わせる = 作品登録・設定と同じ並びで分かりやすい。登録が未設定なら
+      // カタログ順で全項目。※この並びは載せる項目チェックリストのUI順で、印刷の並び
+      // (③詳細編集) には影響しない。
+      const order = (registrationFields && registrationFields.length)
+        ? registrationFields.map(f => f && f.name).filter(Boolean)
+        : FORM_FIELD_DEFS.map(d => d.name);
+      order.forEach(name => {
+        const def = FORM_FIELD_DEFS.find(d => d.name === name);
+        if (!def) return;  // カタログに無い項目はラベル等が出せないのでスキップ
         const active = activeFields ? activeFields.find(f => f.name === def.name) : null;
         const checked = active ? true : false;
         const required = active ? active.required : def.required;
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;'
-          + (inRegistration ? '' : 'opacity:0.35; pointer-events:none;');
+        row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:0.5px solid #eee;';
         row.innerHTML = `
-      <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''} ${!inRegistration ? 'disabled' : ''}
+      <input type="checkbox" id="fcheck_${def.name}" ${checked ? 'checked' : ''}
         style="width:16px; height:16px; cursor:pointer; flex-shrink:0;">
       <span style="flex:1; font-size:0.88em; color:#333;">${def.label}</span>
       <span style="font-size:0.78em; color:#aaa; font-family:monospace;">${def.name}</span>
-      <select id="freq_${def.name}" ${!inRegistration ? 'disabled' : ''}
+      <select id="freq_${def.name}"
         style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
         <option value="false" ${!required ? 'selected' : ''}>任意</option>
         <option value="true"  ${required ? 'selected' : ''}>必須</option>
       </select>`;
         grid.appendChild(row);
       });
+      // ここに無い項目を載せたいときの導線 (集める側=作品登録・設定へ)。
+      const hint = document.createElement('div');
+      hint.style.cssText = 'font-size:0.8em; color:#888; margin-top:10px; padding-top:8px; border-top:1px dashed #eee; line-height:1.5;';
+      const ex = (typeof window !== 'undefined' && window._currentEx) ? window._currentEx : '';
+      const href = 'register.html' + (ex ? ('?ex=' + encodeURIComponent(ex)) : '');
+      hint.innerHTML = '💡 ここに無い項目を載せたいときは、先に「<a href="' + href + '" style="color:#1a73e8;">作品登録・設定</a>」画面で集める項目に追加してください。';
+      grid.appendChild(hint);
     }
 
     function saveFormSettings() {
