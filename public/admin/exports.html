@@ -229,6 +229,19 @@
     //     主催者は空き行に直接書き込んで再アップロードするフロー。
     //   - 列は caption_fields + 作家系列フィールド (ALL_ARTIST_FIELDS) で重複は dedup。
     //     作家情報は caption_fields に普段含まれないが、xlsx 編集の対象にしたいので追加。
+    // Firestore の「ルールは filter ではない」対策。artworks の read 認可は
+    //   organizer なら organizerEmail == 自分のメール、という per-doc 条件。LIST クエリは
+    //   その条件でクエリ側を絞らないと「読めない doc が混じりうる」と判断されて全体が
+    //   permission-denied になる (運営者は isOperator で常に読めるので気づきにくい)。
+    //   → organizerEmail を明示フィルタする。値は展覧会の登録メール (= 全作品の
+    //   organizerEmail) なので、運営者・主催者どちらでも同じ全件が返る。
+    function artworksOfEx(ex) {
+      var owner = String((exMap[ex] || {}).email || "").trim().toLowerCase();
+      return db.collection("artworks")
+        .where("exCode", "==", ex)
+        .where("organizerEmail", "==", owner);
+    }
+
     async function dlArtworks(ex) {
       log("Artworks 取得中...");
       var exDoc = exMap[ex] || {};
@@ -249,7 +262,7 @@
       });
       var headers = ["artwork_id"].concat(fieldNames);
 
-      var snap = await db.collection("artworks").where("exCode", "==", ex).get();
+      var snap = await artworksOfEx(ex).get();
       var rows = [];
       snap.docs.forEach(function(d){
         var x = d.data();
@@ -345,7 +358,7 @@
     async function dlSummary(ex) {
       log("Summary 集計中...");
       var [aSnap, lSnap] = await Promise.all([
-        db.collection("artworks").where("exCode", "==", ex).get(),
+        artworksOfEx(ex).get(),
         db.collection("likes").where("exCode", "==", ex).get()
       ]);
       var artworks = {};
@@ -467,7 +480,7 @@
 
     // Firestore の現状の artworks を { artwork_id -> doc } で返す。status を問わず全件。
     async function _fetchCurrentArtworks(ex) {
-      var snap = await db.collection('artworks').where('exCode', '==', ex).get();
+      var snap = await artworksOfEx(ex).get();
       var byId = {};
       snap.forEach(function(d){
         var x = d.data();
