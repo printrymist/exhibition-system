@@ -1103,6 +1103,12 @@
       }
     }
 
+    /* 詳細編集の「PCが楽」ヒントは狭い画面 (スマホ) でだけ表示する。 */
+    .mobile-edit-hint { display: none; }
+    @media (max-width: 768px) {
+      .mobile-edit-hint { display: block; }
+    }
+
     .spinner-sm {
       width: 18px;
       height: 18px;
@@ -1262,7 +1268,7 @@
          「強制再生成」用 (普段は押さなくて済む) -->
     <div id="previewArea" class="card" style="position:relative;">
       <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span>🖨️ プレビュー</span>
+        <span>🖨️ プレビュー（実際の仕上がり）</span>
         <span id="previewStatus" style="font-size:0.75em;color:#888;font-weight:normal;"></span>
       </div>
       <!-- Preview タブ (紙印刷 / スマホ caption の切替) -->
@@ -1682,7 +1688,7 @@
           </div>
         </div>
         <div class="selected-tpl-preview-wrap">
-          <div class="label">選択中のテンプレ構造 (項目設定の参考):</div>
+          <div class="label">テンプレ見本 (選ぶ参考。実データではありません):</div>
           <div id="selectedTplPreview" class="selected-tpl-preview"></div>
         </div>
 
@@ -1720,6 +1726,10 @@
         <p style="font-size:0.82em; color:#888; margin-bottom:10px;">
           ↑↓ で並び替え · チェックで表示 · ＋ で挿入
         </p>
+        <!-- 狭い画面 (スマホ) でだけ出すヒント: 詳細な並び・サイズ調整は PC が楽、と期待値を正す。 -->
+        <div class="mobile-edit-hint" style="background:#eef4ff; border:1px solid #c5d9f7; border-radius:8px; padding:8px 12px; font-size:0.82em; color:#3a5a8c; margin-bottom:10px; line-height:1.5;">
+          💡 細かい並び・サイズの調整は、PC画面の方が操作しやすいです。
+        </div>
         <!-- paperMode='qr_only' のときの補助 hint -->
         <div id="qrOnlyHint" style="display:none; background:#fff8e1; border:1px solid #f0d875; border-radius:8px; padding:10px 14px; font-size:0.85em; color:#7a5500; margin-bottom:12px; line-height:1.55;">
           📄 紙の出力モード <strong>「QR シールのみ」</strong> 中。<br>
