@@ -2228,6 +2228,9 @@
         required: !!captionRequiredMap[n],
       }));
 
+      // 採用は「試す」非破壊操作: preset 参照を規定にするだけで、保存テンプレは作らない/触らない。
+      // 公式テンプレを採用したら公式カードが採用中表示になる。中身の固定 (スナップショット) は
+      // ユーザーが意識的に「💾保存」したときだけ起きる (saveTemplate が settingsJson を焼く)。
       const templateId = 'preset:' + name;
 
       try {
@@ -2249,7 +2252,7 @@
         _savedTemplateId = templateId;
         _lastSelectedTemplate = { id: templateId, name: label };
 
-        // テンプレ反映 (preview + Custom タブの fieldsGrid + フォーム設定 を強制再構築)
+        // テンプレ反映 (preview + Custom タブの fieldsGrid + 載せる項目 を強制再構築)
         selectTemplate(name, { commit: true });
         buildFieldsGridFromPreset(name);
         if (typeof buildFieldSettingGrid === 'function') {
@@ -2257,7 +2260,7 @@
         }
         schedulePreviewUpdate();
 
-        // 採用バッジを更新
+        // 採用バッジを更新 (公式カードを採用中に)
         updateAdoptedBadges(name);
 
         alert('✅ ' + label + ' を採用しました。\n'
