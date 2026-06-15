@@ -1309,10 +1309,10 @@
         <div style="font-size:0.92em; color:#a07a30; margin-top:4px;">保存すると、この展覧会専用になり、公式テンプレが変わっても影響を受けません。</div>
       </div>
       <div class="tabs">
-        <div class="tab active" id="tabTemplate" onclick="switchTab('template')">🎨 テンプレート</div>
-        <div class="tab" id="tabCapFields" onclick="switchTab('capfields')">📝 載せる項目</div>
-        <div class="tab" id="tabCustom" onclick="switchTab('custom')">⚙️ 詳細編集</div>
-        <div class="tab" id="tabPage" onclick="switchTab('page')">📄 ページ設定</div>
+        <div class="tab active" id="tabTemplate" onclick="switchTab('template')">① テンプレート</div>
+        <div class="tab" id="tabCapFields" onclick="switchTab('capfields')">② 載せる項目</div>
+        <div class="tab" id="tabCustom" onclick="switchTab('custom')">③ 詳細編集</div>
+        <div class="tab" id="tabPage" onclick="switchTab('page')">④ ページ設定</div>
       </div>
 
       <!-- ページ設定タブ: 用紙 / レイアウト / QR / 余白 / 固定文 -->
@@ -1510,13 +1510,12 @@
              カード選択ハイライトで「いまプレビュー中」も視覚的に分かるため redundant だった。 -->
         <!-- おすすめフロー (折りたたみ可、localStorage で状態記憶) -->
         <details id="usageHint" class="usage-hint">
-          <summary>💡 おすすめの使い方</summary>
+          <summary>💡 はじめての方へ（おすすめの手順）</summary>
           <ol>
-            <li>下の「📋 テンプレ一覧」から目的に近い <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong> (カードのクリックはプレビューだけ。採用で確定します)</li>
-            <li>上の「🖨️ プレビュー」で仕上がりを確認</li>
-            <li>印刷する項目や体裁を変えたいときは「<strong>⚙️ 詳細編集</strong>」、用紙・余白・QR サイズは「<strong>📄 ページ設定</strong>」で調整 (必要なときだけ)</li>
-            <li>気に入ったら「<strong>💾 自分のテンプレに保存</strong>」で確定 — 別テンプレを試す前のセーフネット</li>
-            <li>キャプションに載せる項目を増減するときは「<strong>📝 キャプション項目</strong>」タブで (作家から集める項目そのものは「作品登録・設定」画面で)</li>
+            <li><strong>① テンプレート</strong>: 目的に近い <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong>（カードのクリックはプレビューだけ。採用で確定）</li>
+            <li><strong>② 載せる項目</strong>: キャプションに載せる項目を確認・調整</li>
+            <li>上の「<strong>🖨️ プレビュー（実際の仕上がり）</strong>」で確認 → 良ければ「<strong>💾 この展覧会のテンプレとして保存</strong>」</li>
+            <li style="color:#888;">（必要なときだけ）<strong>③ 詳細編集</strong>で並び・大きさ、<strong>④ ページ設定</strong>で用紙・余白・QR を調整。作家から集める項目は「作品登録・設定」画面で。</li>
           </ol>
         </details>
         <!-- テンプレ一覧 (すべて公式テンプレ)。⭐ マーク = 運営が用意した既製テンプレ ('自分のテンプレ' と区別)。 -->
@@ -1735,7 +1734,7 @@
           📄 紙の出力モード <strong>「QR シールのみ」</strong> 中。<br>
           ここで編集する項目は <strong>スマホ画面</strong> に表示されます (来場者が QR シールをスキャンしたときの見た目)。<br>
           紙には QR シールだけが印刷されます (項目は印刷されない)。<br>
-          <span style="color:#888;">通常の紙キャプション印刷に戻すには「📄 ページ設定」タブで「キャプション + QR を印刷」に切替。</span>
+          <span style="color:#888;">通常の紙キャプション印刷に戻すには「④ ページ設定」タブで「キャプション + QR を印刷」に切替。</span>
         </div>
         <div class="fields-list" id="fieldsGrid"></div>
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;">
@@ -2284,10 +2283,11 @@
         updateAdoptedBadges(name);
         updatePresetUsageBanner();  // preset 採用中なので「保存してこの展覧会専用に」ナッジを出す
 
-        alert('✅ ' + label + ' を採用しました。\n'
+        alert('✅ ' + label + ' を採用しました。'
           + (missing.length > 0
-              ? '項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
-              : 'キャプションに載せる項目が更新されました。'));
+              ? '\n項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
+              : '')
+          + '\n\n→ 上の「🖨️ プレビュー」で仕上がりを確認し、良ければ「💾 この展覧会のテンプレとして保存」してください。');
       } catch (err) {
         console.error('adoption save failed:', err);
         alert(friendlyError(err, '保存'));
@@ -2336,7 +2336,7 @@
       const exName = (artworkData && artworkData.exName) || '';
       if (!exName) { saveTemplate(); return; }  // 念のためのフォールバック
       if (savedTemplateNames.has(exName)) {
-        if (!confirm(`この展覧会のテンプレ「${exName}」を、今の内容で上書きしますか?\n\n別の内容を残したいときは、キャンセルして「⚙️ 詳細編集」タブの保存欄で別の名前を付けて保存してください。`)) {
+        if (!confirm(`この展覧会のテンプレ「${exName}」を、今の内容で上書きしますか?\n\n別の内容を残したいときは、キャンセルして「③ 詳細編集」タブの保存欄で別の名前を付けて保存してください。`)) {
           return;
         }
       }
@@ -4513,7 +4513,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           _savedTemplateId = savedTplId;
           _lastSelectedTemplate = { id: savedTplId, name: name };
           updatePresetUsageBanner();  // saved になったのでナッジを隠す
-          showSaveMsg(overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`, '#1a73e8');
+          showSaveMsg((overwriting ? `✓ 「${name}」を上書きしました。` : `✓ 「${name}」を保存しました。`) + ' この展覧会のキャプション設定が整いました。', '#1a73e8');
           if (saveBtn) saveBtn.innerHTML = '💾 保存';  // ラベルを元に戻す
           // 保存欄の名前は残す (同じテンプレを続けて編集→上書きできるように)。
           // 一覧再構築後、保存したテンプレを選択ハイライトする (公式テンプレの選択は外す)。
