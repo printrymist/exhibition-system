@@ -567,6 +567,73 @@ exports.adminRecoverExhibitionDoc = onCall(
   },
 );
 
+// 全 artworks の organizerEmail を「その展覧会の email」に揃えるバックフィル (運営者専用)。
+// β-3 (2026-05-26) 前に作られた作品はこのタグが無く、主催者の直 read (一括DL等) が
+// permission-denied になる。冪等 (何度実行しても結果は同じ) なのでメンテツールとして常設。
+// artworks の書き込みは Rules で CF 専用なので、ここで admin SDK で実施する。
+exports.backfillArtworkOrganizerEmail = onCall(async (request) => {
+  const authEmail = String(
+    (request.auth && request.auth.token && request.auth.token.email) || "",
+  ).trim().toLowerCase();
+  if (!authEmail || OPERATOR_EMAILS.indexOf(authEmail) === -1) {
+    throw new HttpsError(
+      "permission-denied",
+      "運営者管理者の Firebase Auth が必要です",
+    );
+  }
+
+  const db = admin.firestore();
+  const exSnap = await db.collection("exhibitions").get();
+  let exScanned = 0;
+  let fixed = 0;
+  let alreadyOk = 0;
+  let skippedNoEmail = 0;
+  const perEx = [];
+
+  for (const exDoc of exSnap.docs) {
+    const exCode = exDoc.id;
+    const email = String((exDoc.data() || {}).email || "")
+      .trim().toLowerCase();
+    if (!email) {
+      skippedNoEmail++;
+      perEx.push({ exCode, skipped: "展覧会に email 無し" });
+      continue;
+    }
+    exScanned++;
+    const aSnap = await db.collection("artworks")
+      .where("exCode", "==", exCode).get();
+    let batch = db.batch();
+    let inBatch = 0;
+    let exFixed = 0;
+    for (const aDoc of aSnap.docs) {
+      const cur = String((aDoc.data() || {}).organizerEmail || "")
+        .trim().toLowerCase();
+      if (cur === email) {
+        alreadyOk++;
+        continue;
+      }
+      batch.set(aDoc.ref, { organizerEmail: email }, { merge: true });
+      inBatch++;
+      exFixed++;
+      fixed++;
+      if (inBatch >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        inBatch = 0;
+      }
+    }
+    if (inBatch > 0) await batch.commit();
+    perEx.push({ exCode, email, artworks: aSnap.size, fixed: exFixed });
+  }
+
+  logger.info("backfillArtworkOrganizerEmail done", {
+    operator: authEmail, exScanned, fixed, alreadyOk, skippedNoEmail,
+  });
+  return {
+    success: true, exScanned, fixed, alreadyOk, skippedNoEmail, perEx,
+  };
+});
+
 // =========================================================
 // Gallery (web 展覧会) 関連
 //
