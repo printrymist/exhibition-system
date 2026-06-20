@@ -1488,39 +1488,45 @@ exports.graduateExhibition = onCall(async (request) => {
     throw new HttpsError("permission-denied", "この展覧会の主催者ではありません");
   }
 
+  // keepData=true: 練習データ (作品/いいね/画像) を消さずに本番化する (削除をスキップ)。
+  // 省略時 (false) は従来どおり全削除してクリーンな本番にする。
+  const keepData = !!((request.data || {}).keepData);
+
   const bucket = admin.storage().bucket();
   const stats = { artworks: 0, likes: 0, artworkImages: 0, galleryImages: 0 };
 
-  // artworks 全削除
-  const aSnap = await db.collection("artworks").where("exCode", "==", exCode).get();
-  await Promise.all(aSnap.docs.map((d) => d.ref.delete()));
-  stats.artworks = aSnap.size;
+  if (!keepData) {
+    // artworks 全削除
+    const aSnap = await db.collection("artworks").where("exCode", "==", exCode).get();
+    await Promise.all(aSnap.docs.map((d) => d.ref.delete()));
+    stats.artworks = aSnap.size;
 
-  // likes 全削除
-  const lSnap = await db.collection("likes").where("exCode", "==", exCode).get();
-  await Promise.all(lSnap.docs.map((d) => d.ref.delete()));
-  stats.likes = lSnap.size;
+    // likes 全削除
+    const lSnap = await db.collection("likes").where("exCode", "==", exCode).get();
+    await Promise.all(lSnap.docs.map((d) => d.ref.delete()));
+    stats.likes = lSnap.size;
 
-  // Storage artworks/{ex}_*
-  try {
-    const [files] = await bucket.getFiles({ prefix: "artworks/" + exCode + "_" });
-    await Promise.all(files.map((f) => f.delete()));
-    stats.artworkImages = files.length;
-  } catch (e) {
-    logger.warn("graduateExhibition: artwork storage delete failed", {
-      exCode, error: e.message,
-    });
-  }
+    // Storage artworks/{ex}_*
+    try {
+      const [files] = await bucket.getFiles({ prefix: "artworks/" + exCode + "_" });
+      await Promise.all(files.map((f) => f.delete()));
+      stats.artworkImages = files.length;
+    } catch (e) {
+      logger.warn("graduateExhibition: artwork storage delete failed", {
+        exCode, error: e.message,
+      });
+    }
 
-  // Storage gallery/{ex}_*
-  try {
-    const [files] = await bucket.getFiles({ prefix: "gallery/" + exCode + "_" });
-    await Promise.all(files.map((f) => f.delete()));
-    stats.galleryImages = files.length;
-  } catch (e) {
-    logger.warn("graduateExhibition: gallery storage delete failed", {
-      exCode, error: e.message,
-    });
+    // Storage gallery/{ex}_*
+    try {
+      const [files] = await bucket.getFiles({ prefix: "gallery/" + exCode + "_" });
+      await Promise.all(files.map((f) => f.delete()));
+      stats.galleryImages = files.length;
+    } catch (e) {
+      logger.warn("graduateExhibition: gallery storage delete failed", {
+        exCode, error: e.message,
+      });
+    }
   }
 
   // is_sandbox = false にして自動削除予定をクリア
@@ -1544,13 +1550,14 @@ exports.graduateExhibition = onCall(async (request) => {
       action: "graduateExhibition",
       changedFields: ["卒業時統計"],
       before: {
-        "卒業時統計":
+        "卒業時統計": keepData ?
+          "練習データを保持して本番化 (削除なし)" :
           "artworks " + stats.artworks + " 件 / " +
-          "likes " + stats.likes + " 件 / " +
-          "作品画像 " + stats.artworkImages + " 枚 / " +
-          "ギャラリー画像 " + stats.galleryImages + " 枚",
+            "likes " + stats.likes + " 件 / " +
+            "作品画像 " + stats.artworkImages + " 枚 / " +
+            "ギャラリー画像 " + stats.galleryImages + " 枚",
       },
-      after: { "卒業時統計": "全削除" },
+      after: { "卒業時統計": keepData ? "データ保持" : "全削除" },
       isNew: false,
     });
   } catch (auditErr) {

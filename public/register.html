@@ -1005,13 +1005,20 @@
         <div id="graduateSection" style="margin-top:24px; padding:16px; border:1px solid #ffd54f; background:#fff8e1; border-radius:8px; display:none;">
           <p style="color:#7a5500; font-size:0.95em; font-weight:bold; margin:0 0 6px 0;">🎓 練習モードを終了して本番運用に切替</p>
           <p style="color:#666; font-size:0.85em; margin:0 0 12px 0; line-height:1.6;">
-            設定 (項目・テンプレート等) はそのまま残し、テストで作成した <strong>作品データ・コメント・いいね・画像ファイル</strong> を一括削除して本番運用を開始します。<br>
-            自動削除予定 (14 日後) は解除されます。
+            設定 (項目・テンプレート等) はそのまま残します。練習で作成した <strong>作品データ・コメント・いいね・画像</strong> を、
+            <strong>そのまま本番として使う</strong>か、<strong>消してまっさらにする</strong>かを選べます。<br>
+            どちらも自動削除予定 (14 日後) は解除されます。
           </p>
-          <button id="btnGraduate" onclick="openGraduateModal()"
-            style="padding:10px 18px; background:#1a73e8; color:white; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
-            🎓 本番運用に切替 (テストデータをクリア)
-          </button>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btnGraduateKeep" onclick="graduateKeepData()"
+              style="padding:10px 18px; background:#1a73e8; color:white; border:none; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+              🎓 練習データを残して本番化
+            </button>
+            <button id="btnGraduate" onclick="openGraduateModal()"
+              style="padding:10px 18px; background:white; color:#d93025; border:1px solid #d93025; border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
+              🗑️ データを消して本番化
+            </button>
+          </div>
           <div id="graduateMsg" style="margin-top:8px; font-size:0.85em; min-height:18px;"></div>
         </div>
 
@@ -2696,7 +2703,18 @@ ${fieldsText}
       document.getElementById('btnGraduateConfirm').disabled = !chk.checked;
     }
 
-    async function executeGraduate() {
+    // 練習データを残して本番化 (非破壊)。削除しないので ack モーダルは使わず確認だけ。
+    function graduateKeepData() {
+      if (!currentEx) return;
+      const user = firebase.auth().currentUser;
+      if (!user || !user.email) { alert('ログインが必要です。'); return; }
+      if (!confirm('練習モードを終了し、いま入力した練習データ（作品・コメント・いいね・画像）を' +
+        'そのまま本番として使います。\n\nよろしいですか?')) return;
+      executeGraduate(true);
+    }
+
+    async function executeGraduate(keepData) {
+      keepData = !!keepData;
       const ex = currentEx;
       if (!ex) return;
 
@@ -2707,9 +2725,12 @@ ${fieldsText}
       }
 
       closeGraduateModal();
-      const btn = document.getElementById('btnGraduate');
+      // 卒業ボタンは「残す」「消す」の 2 つ。処理中はどちらも二度押しできないよう両方無効化する。
+      const gradBtns = ['btnGraduate', 'btnGraduateKeep']
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
       const msgEl = document.getElementById('graduateMsg');
-      btn.disabled = true;
+      gradBtns.forEach((b) => { b.disabled = true; });
       msgEl.style.color = '#888';
       msgEl.innerText = '処理中...';
 
@@ -2726,22 +2747,25 @@ ${fieldsText}
         // 2. Firestore + Storage cleanup と is_sandbox flag 更新を CF に任せる
         //    (rules で artworks / likes の delete は operator 限定のため、
         //     organizer 本人で叩くと permission-denied になる)
+        //    keepData=true のときは CF が削除をスキップ (練習データをそのまま本番化)。
         const fn = firebase.app().functions('asia-northeast1').httpsCallable('graduateExhibition');
-        const cfRes = await fn({ exCode: ex });
+        const cfRes = await fn({ exCode: ex, keepData: keepData });
         if (!cfRes || !cfRes.data || !cfRes.data.success) {
           throw new Error('Cloud Function 失敗');
         }
 
         msgEl.style.color = '#1a73e8';
         const s = cfRes.data;
-        msgEl.innerText = `✅ 本番運用に切替えました (artwork ${s.artworks}件 / likes ${s.likes}件 / 画像 ${s.artworkImages + s.galleryImages}件 削除)。ページを再読み込みします…`;
+        msgEl.innerText = keepData
+          ? '✅ 練習データを残して本番運用に切替えました。ページを再読み込みします…'
+          : `✅ 本番運用に切替えました (artwork ${s.artworks}件 / likes ${s.likes}件 / 画像 ${s.artworkImages + s.galleryImages}件 削除)。ページを再読み込みします…`;
         setTimeout(() => location.reload(), 1500);
       } catch (err) {
         console.error('graduate failed:', err);
         msgEl.style.color = '#d93025';
         msgEl.innerText = 'エラー: ' + (err && err.message ? err.message : err) +
-          '（途中で失敗した場合は、もう一度「本番運用に切替」を押すと再試行できます）';
-        btn.disabled = false;
+          '（途中で失敗した場合は、もう一度操作すると再試行できます）';
+        gradBtns.forEach((b) => { b.disabled = false; });
       }
     }
 
