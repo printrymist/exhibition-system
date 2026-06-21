@@ -5,49 +5,12 @@
  * - Sends completion email to organizer
  */
 
-// QRlikes_tot のデプロイURL（来場者が作品QRを読んだときに開く感想入力画面のURL）
-const VISITOR_QR_URL = "https://rohei-printer-system.web.app/";
-
-// 作品 QR トークン発行用の Cloud Function URL (Plan 5-A セッション 3)
-const QR_TOKEN_CF_URL = "https://asia-northeast1-rohei-printer-system.cloudfunctions.net/mintArtworkQrTokenFromGas";
-
-// 新規 QR URL のデフォルト有効期限 (日)
-const QR_TOKEN_DEFAULT_DAYS = 365;
+// 作品 QR 関連の const (VISITOR_QR_URL / QR_TOKEN_CF_URL / QR_TOKEN_DEFAULT_DAYS) と
+// buildArtworkQrUrl は addArtworks / regenerateQrUrls の撤去に伴い削除 (2026-06-22)。
+// 採番・QR 発行は Cloud Function (addArtworkSlots / finalizeExhibitionSetup) が Firestore 上で行う。
 
 // マスタースプレッドシートのID
 const MASTER_SS_ID = "1h0uSnoUBuQnEqWmFXIOUIRK2CvigmkOmucsWOnaS6xQ";
-
-// =========================================================
-// 🌟 作品単位の HMAC QR URL を Cloud Function 経由で生成
-//   security_key を URL に乗せない方針 (Plan 5-A 完成形)
-// =========================================================
-function buildArtworkQrUrl(exCode, artworkId, expDays) {
-  const adminSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
-  if (!adminSecret) {
-    throw new Error('Script Property ADMIN_SECRET が未設定です');
-  }
-  const days = expDays || QR_TOKEN_DEFAULT_DAYS;
-  const res = UrlFetchApp.fetch(QR_TOKEN_CF_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      adminSecret: adminSecret,
-      exCode: exCode,
-      artworkId: artworkId,
-      expDays: days,
-    }),
-    muteHttpExceptions: true,
-  });
-  const code = res.getResponseCode();
-  const body = JSON.parse(res.getContentText());
-  if (code !== 200 || !body.success) {
-    throw new Error('QR トークン発行失敗: ' + (body && body.error ? body.error : 'HTTP ' + code));
-  }
-  return VISITOR_QR_URL + '?ex=' + encodeURIComponent(exCode)
-    + '&id=' + encodeURIComponent(artworkId)
-    + '&exp=' + body.exp
-    + '&sig=' + body.sig;
-}
 
 // =========================================================
 // 🌟 ユーティリティ
@@ -182,23 +145,14 @@ function doPost(e) {
       return output;
     }
 
-    // --- 施錠 (2026-06-12): graduateExhibition / regenerateQrUrls は正規の呼び出し元が無く、
-    //     無認証で叩くと sandbox 自動削除の停止 / 印刷済 QR の無効化 を招く。ADMIN_SECRET 必須化。
-    var PROTECTED_ACTIONS = ['graduateExhibition', 'regenerateQrUrls'];
+    // --- 施錠 (2026-06-12): graduateExhibition は正規の呼び出し元が無く、無認証で叩くと
+    //     sandbox 自動削除の停止を招く。ADMIN_SECRET 必須化。(regenerateQrUrls は 2026-06-22 撤去)
+    var PROTECTED_ACTIONS = ['graduateExhibition'];
     if (PROTECTED_ACTIONS.indexOf(action) !== -1) {
       var expectedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
       var gotSecret = e.parameter.adminSecret || '';
       if (!expectedSecret || gotSecret !== expectedSecret) {
         output.setContent(JSON.stringify({ success: false, error: '権限がありません' }));
-        return output;
-      }
-    }
-
-    // --- 作品追加 (addArtworks) は setup フロー (ログイン前) で使うため、確認トークンで本人確認。
-    //     applications シートで confirmed=TRUE かつ ex_code 一致のトークンのみ通す。
-    if (action === 'addArtworks') {
-      if (!verifyConfirmTokenForEx(e.parameter.token, e.parameter.exCode)) {
-        output.setContent(JSON.stringify({ success: false, error: '認証が確認できません。メールの確認リンクから操作してください。' }));
         return output;
       }
     }
@@ -265,19 +219,8 @@ function doPost(e) {
       return output;
     }
 
-    if (action === 'addArtworks') {
-      const payload = {
-        exCode: e.parameter.exCode,
-        addCount: parseInt(e.parameter.addCount || '0')
-      };
-      output.setContent(JSON.stringify(addArtworks(payload)));
-      return output;
-    }
-
-    if (action === 'regenerateQrUrls') {
-      output.setContent(JSON.stringify(regenerateQrUrls(e.parameter.ex)));
-      return output;
-    }
+    // addArtworks / regenerateQrUrls は撤去 (2026-06-22)。作品枠の採番・スロット生成は
+    // Cloud Function (addArtworkSlots / finalizeExhibitionSetup) が Firestore 上で行う。
 
     output.setContent(JSON.stringify({ success: false, error: '不明なアクション: ' + action }));
     return output;
@@ -288,32 +231,7 @@ function doPost(e) {
   }
 }
 
-// setup フローの確認トークン検証。applications シートで confirmed=TRUE かつ
-// ex_code 一致のトークンが存在すれば true。addArtworks (ログイン前) の本人確認に使う。
-function verifyConfirmTokenForEx(token, exCode) {
-  token = (token || '').toString().trim();
-  exCode = (exCode || '').toString().trim();
-  if (!token || !exCode) return false;
-  try {
-    const sheet = getApplicationsSheet();
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const tokenIdx = headers.indexOf('confirm_token');
-    const confirmedIdx = headers.indexOf('confirmed');
-    const exCodeIdx = headers.indexOf('ex_code');
-    if (tokenIdx === -1 || confirmedIdx === -1 || exCodeIdx === -1) return false;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][tokenIdx].toString().trim() === token &&
-          String(data[i][confirmedIdx]).toUpperCase().trim() === 'TRUE' &&
-          data[i][exCodeIdx].toString().trim() === exCode) {
-        return true;
-      }
-    }
-  } catch (e) {
-    return false;
-  }
-  return false;
-}
+// verifyConfirmTokenForEx は addArtworks (撤去済) 専用だったため削除 (2026-06-22)。
 
 // 申し込みの連投を抑える簡易レートリミッタ (CacheService ベース)。key 単位で WINDOW_SEC 秒に MAX 回まで。
 // CacheService はベストエフォートだが連投スパム防止には十分。障害時は fail-open。
@@ -777,105 +695,9 @@ function graduateExhibition(exCode, requesterEmail) {
   }
 }
 
-// =========================================================
-// 🌟 作品を追加する（後から作品数を増やしたい場合）
-// =========================================================
-function addArtworks(payload) {
-  try {
-    const { exCode, addCount } = payload;
-    const master = getMasterData(exCode);
-    if (!master) return { success: false, error: "Exhibition not found." };
-
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(exCode + "_artworks");
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    // 現在の最終作品IDを取得
-    const artworkIdCol = headers.indexOf("artwork_id");
-    const lastRow = data[data.length - 1];
-    const lastId = lastRow[artworkIdCol].toString();
-    const lastNum = parseInt(lastId.replace("w", "")) || 0;
-
-    const qrUrlCol = headers.indexOf("qr_url");
-    const statusCol = headers.indexOf("status");
-    const totalCols = headers.length;
-
-    let newRows = [];
-    const artworkSeeds = [];
-    for (let i = 1; i <= addCount; i++) {
-      const wId = "w" + ("00" + (lastNum + i)).slice(-3);
-      const sKey = Math.random().toString(36).substring(2, 10);
-      const url = buildArtworkQrUrl(exCode, wId);
-      const row = new Array(totalCols).fill("");
-      row[artworkIdCol] = wId;
-      row[headers.indexOf("security_key")] = sKey;
-      row[qrUrlCol] = url;
-      row[statusCol] = "0";
-      newRows.push(row);
-      const seed = { exCode: exCode };
-      headers.forEach((h, idx) => { seed[h] = row[idx]; });
-      artworkSeeds.push(seed);
-    }
-
-    sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
-
-    bumpArtworkCount(exCode, addCount, 0);
-
-    return { success: true, artworks: artworkSeeds };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// =========================================================
-// 🌟 既存展覧会の qr_url を HMAC 形式に再生成
-//   旧 ?ex=&id=&key= 形式を新 ?ex=&id=&exp=&sig= 形式に置き換える。
-//   呼び出し: register.html / 主催者が「QR URL 再発行」ボタンで実行。
-//   security_key は doc に残るが、URL からは消える。
-// =========================================================
-function regenerateQrUrls(exCode) {
-  try {
-    if (!exCode) return { success: false, error: 'exCode が指定されていません' };
-    const master = getMasterData(exCode);
-    if (!master) return { success: false, error: 'Exhibition not found' };
-
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(exCode + '_artworks');
-    if (!sheet) return { success: false, error: 'artworks シートが見つかりません' };
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const idCol = headers.indexOf('artwork_id');
-    const qrCol = headers.indexOf('qr_url');
-    if (idCol === -1 || qrCol === -1) {
-      return { success: false, error: 'artwork_id / qr_url 列が見つかりません' };
-    }
-
-    let updated = 0;
-    let failed = 0;
-    const errors = [];
-    for (let r = 1; r < data.length; r++) {
-      const wId = (data[r][idCol] || '').toString().trim();
-      if (!wId) continue;
-      try {
-        const url = buildArtworkQrUrl(exCode, wId);
-        sheet.getRange(r + 1, qrCol + 1).setValue(url);
-        updated++;
-      } catch (e) {
-        failed++;
-        errors.push(wId + ': ' + e.message);
-      }
-    }
-    return {
-      success: failed === 0,
-      updated: updated,
-      failed: failed,
-      errors: errors.slice(0, 10),
-    };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// addArtworks / regenerateQrUrls は撤去 (2026-06-22)。作品枠の採番・スロット生成・QR 発行は
+// Cloud Function (addArtworkSlots / finalizeExhibitionSetup) が Firestore 上で行い、
+// {ex}_artworks SS への依存を断った。
 
 // =========================================================
 // 🌟 applications シートを取得（なければ作成）

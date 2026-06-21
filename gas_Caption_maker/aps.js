@@ -6,41 +6,10 @@
 
 const MASTER_SS_ID = "1h0uSnoUBuQnEqWmFXIOUIRK2CvigmkOmucsWOnaS6xQ";
 
-// QRlikes_tot のデプロイURL（来場者が作品QRを読んだときに開く感想入力画面のURL）
-const VISITOR_QR_URL = "https://rohei-printer-system.web.app/";
-
-// 作品 QR トークン発行用 Cloud Function (Plan 5-A セッション 3)
-const QR_TOKEN_CF_URL = "https://asia-northeast1-rohei-printer-system.cloudfunctions.net/mintArtworkQrTokenFromGas";
-const QR_TOKEN_DEFAULT_DAYS = 365;
-
-// HMAC ベースの作品 QR URL を Cloud Function 経由で生成
-function buildArtworkQrUrl(exCode, artworkId, expDays) {
-  const adminSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
-  if (!adminSecret) {
-    throw new Error('Script Property ADMIN_SECRET が未設定です');
-  }
-  const days = expDays || QR_TOKEN_DEFAULT_DAYS;
-  const res = UrlFetchApp.fetch(QR_TOKEN_CF_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      adminSecret: adminSecret,
-      exCode: exCode,
-      artworkId: artworkId,
-      expDays: days,
-    }),
-    muteHttpExceptions: true,
-  });
-  const code = res.getResponseCode();
-  const body = JSON.parse(res.getContentText());
-  if (code !== 200 || !body.success) {
-    throw new Error('QR トークン発行失敗: ' + (body && body.error ? body.error : 'HTTP ' + code));
-  }
-  return VISITOR_QR_URL + '?ex=' + encodeURIComponent(exCode)
-    + '&id=' + encodeURIComponent(artworkId)
-    + '&exp=' + body.exp
-    + '&sig=' + body.sig;
-}
+// 作品 QR URL 生成 (buildArtworkQrUrl) + 関連 const (VISITOR_QR_URL /
+// QR_TOKEN_CF_URL / QR_TOKEN_DEFAULT_DAYS) は addArtworks / regenerateQrUrls の
+// 撤去に伴い削除 (2026-06-22)。作品枠の採番・QR 発行は Cloud Function
+// (addArtworkSlots / finalizeExhibitionSetup) が Firestore 上で行う。
 
 // exhibitions シートのスキーマ版数。ヘッダーや返り値の構造を変えたら必ず上げる。
 // バンプすると既存キャッシュが自動的に無視される。
@@ -147,7 +116,7 @@ function doPost(e) {
     //     第2回でデータ改変系 (updateExName / addArtworks / regenerateQrUrls /
     //     saveRegistrationFields / setArtworkCount / bumpArtworkCount / graduateExhibition) を追加予定。
     var PROTECTED_ACTIONS = ['sendArtistGuide', 'sendInquiryReply',
-      'updateExName', 'addArtworks', 'saveRegistrationFields',
+      'updateExName', 'saveRegistrationFields',
       'bumpArtworkCount', 'graduateExhibition'];
     if (PROTECTED_ACTIONS.indexOf(action) !== -1) {
       var expectedSecret = PropertiesService.getScriptProperties().getProperty('ADMIN_SECRET');
@@ -231,17 +200,8 @@ function doPost(e) {
       return output;
     }
 
-    if (action === 'addArtworks') {
-      output.setContent(JSON.stringify(
-        addArtworks(ex, parseInt(e.parameter.addCount || '0'))
-      ));
-      return output;
-    }
-
-    if (action === 'regenerateQrUrls') {
-      output.setContent(JSON.stringify(regenerateQrUrls(ex)));
-      return output;
-    }
+    // addArtworks / regenerateQrUrls は撤去 (2026-06-22)。作品枠の採番は Cloud Function
+    // addArtworkSlots に移行 (register.html)、qr 再生成 UI も 2026-05-16 撤去済。
 
     // categorizeArtwork は Cloud Function に移行済 (2026-05-06)。
     // CLAUDE_API_KEY も Script Properties から CF Secret Manager に移したので、
@@ -378,103 +338,9 @@ function updateExName(ex, newName) {
 
 // Phase 6e: loadAllData は撤去 (caption.html の fsLoadAllData が Firestore 直読みで代替)。
 
-// =========================================================
-// 🌟 作品枠を追加
-// =========================================================
-function addArtworks(exCode, addCount) {
-  try {
-    const master = getMasterData(exCode);
-    if (!master) return { success: false, error: "Exhibition not found." };
-
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(exCode + "_artworks");
-    if (!sheet) return { success: false, error: "Sheet not found." };
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    const artworkIdCol = headers.indexOf("artwork_id");
-    const lastRow = data[data.length - 1];
-    const lastId = lastRow[artworkIdCol].toString();
-    const lastNum = parseInt(lastId.replace("w", "")) || 0;
-
-    const qrUrlCol = headers.indexOf("qr_url");
-    const statusCol = headers.indexOf("status");
-    const secKeyCol = headers.indexOf("security_key");
-    const totalCols = headers.length;
-
-    const newRows = [];
-    const artworkSeeds = [];
-    for (let i = 1; i <= addCount; i++) {
-      const wId = "w" + ("00" + (lastNum + i)).slice(-3);
-      const sKey = Math.random().toString(36).substring(2, 10);
-      const url = buildArtworkQrUrl(exCode, wId);
-      const row = new Array(totalCols).fill("");
-      row[artworkIdCol] = wId;
-      row[secKeyCol] = sKey;
-      row[qrUrlCol] = url;
-      row[statusCol] = "0";
-      newRows.push(row);
-      const seed = { exCode: exCode };
-      headers.forEach((h, idx) => { seed[h] = row[idx]; });
-      artworkSeeds.push(seed);
-    }
-
-    sheet.getRange(data.length + 1, 1, newRows.length, totalCols).setValues(newRows);
-    clearAllCache(exCode);
-    bumpArtworkCount(exCode, addCount, 0);
-    return { success: true, addedCount: addCount, artworks: artworkSeeds };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// =========================================================
-// 既存展覧会の qr_url を HMAC 形式に再生成 (Plan 5-A セッション 3)
-// =========================================================
-function regenerateQrUrls(exCode) {
-  try {
-    if (!exCode) return { success: false, error: 'exCode が指定されていません' };
-    const master = getMasterData(exCode);
-    if (!master) return { success: false, error: 'Exhibition not found' };
-
-    const ss = SpreadsheetApp.openById(master.artwork_sheet_id);
-    const sheet = ss.getSheetByName(exCode + '_artworks');
-    if (!sheet) return { success: false, error: 'artworks シートが見つかりません' };
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const idCol = headers.indexOf('artwork_id');
-    const qrCol = headers.indexOf('qr_url');
-    if (idCol === -1 || qrCol === -1) {
-      return { success: false, error: 'artwork_id / qr_url 列が見つかりません' };
-    }
-
-    let updated = 0;
-    let failed = 0;
-    const errors = [];
-    for (let r = 1; r < data.length; r++) {
-      const wId = (data[r][idCol] || '').toString().trim();
-      if (!wId) continue;
-      try {
-        const url = buildArtworkQrUrl(exCode, wId);
-        sheet.getRange(r + 1, qrCol + 1).setValue(url);
-        updated++;
-      } catch (e) {
-        failed++;
-        errors.push(wId + ': ' + e.message);
-      }
-    }
-    clearAllCache(exCode);
-    return {
-      success: failed === 0,
-      updated: updated,
-      failed: failed,
-      errors: errors.slice(0, 10),
-    };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
+// addArtworks / regenerateQrUrls は撤去 (2026-06-22)。作品枠の採番・スロット生成は
+// Cloud Function addArtworkSlots / finalizeExhibitionSetup が Firestore 上で行い、
+// {ex}_artworks SS への依存を断った。qr 再生成 UI も 2026-05-16 に撤去済。
 
 // URLパラメータ取得（GAS用）
 function getParam(url, param) {

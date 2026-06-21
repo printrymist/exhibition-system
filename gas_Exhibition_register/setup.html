@@ -153,21 +153,6 @@
       <h2>Setup complete!</h2>
       <p>Check your email for details.</p>
       <div class="info-box" id="infoBox"></div>
-
-      <!-- 作品追加セクション -->
-      <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
-        <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">Need more artworks?</p>
-        <div style="display:flex; gap:10px;">
-          <input type="number" id="addCount" placeholder="e.g. 10" min="1" max="100"
-            style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
-          <button onclick="submitAdd()"
-            style="padding:10px 16px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8;
-            border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
-            Add
-          </button>
-        </div>
-        <div id="addMsg" style="display:none; margin-top:8px; font-size:0.85em; color:#1a73e8;"></div>
-      </div>
     </div>
   </div>
 
@@ -304,26 +289,6 @@
       document.getElementById('loadingView').style.display = 'none';
       document.getElementById('formView').style.display   = 'block';
       showError('Error: ' + err.message);
-    }
-
-    // =========================================================
-    // 作品追加処理（1枚ずつ生成・保存）
-    // =========================================================
-    function submitAdd() {
-      const addCount = parseInt(document.getElementById('addCount').value);
-      if (!addCount || addCount < 1) return;
-      const exCode = document.getElementById('exCode').value.trim();
-      const addMsg = document.getElementById('addMsg');
-      addMsg.innerText     = 'Adding artworks...';
-      addMsg.style.display = 'block';
-      google.script.run
-        .withSuccessHandler(res => {
-          if (!res.success) { addMsg.innerText = 'Error: ' + res.error; return; }
-          addMsg.innerText = `✅ ${addCount} artworks added successfully.`;
-          document.getElementById('addCount').value = '';
-        })
-        .withFailureHandler(err => { addMsg.innerText = 'Error: ' + err.message; })
-        .addArtworks({ exCode: exCode, addCount: addCount });
     }
 
     // =========================================================
