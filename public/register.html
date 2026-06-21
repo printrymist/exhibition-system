@@ -2040,24 +2040,42 @@ ${fieldsText}
     async function saveArtwork() {
       document.querySelectorAll('#contentInput .input-field input, #contentInput .input-field textarea')
         .forEach(el => el.classList.remove('error'));
+      const _artistSel = document.getElementById('artistSelect');
+      if (_artistSel) _artistSel.classList.remove('error');
       document.getElementById('inputError').innerText = '';
 
       let hasError = false;
+      const missing = [];
       const artistEl = document.getElementById('art_artist');
-      if (!artistEl.value.trim()) { artistEl.classList.add('error'); hasError = true; }
+      if (!artistEl.value.trim()) {
+        artistEl.classList.add('error'); hasError = true; missing.push('作家名');
+        // 作家名の入力欄はドロップダウンで作家を選ぶまで display:none で隠れている。
+        // 未入力のときは開いて見せ、ドロップダウンも強調して気づけるようにする。
+        const af = document.getElementById('artistFields'); if (af) af.classList.add('open');
+        const sel = document.getElementById('artistSelect'); if (sel) sel.classList.add('error');
+      }
       activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
         const def = FIELD_MAP[f.name]; if (!def) return;
         if (def.type === 'image') {
           if (!f.required) return;
           const preview = document.getElementById('art_' + f.name + '_preview');
           const pending = preview && preview.dataset ? preview.dataset.pending : '';
-          if (!pending) hasError = true;
+          if (!pending) { hasError = true; missing.push(def.label); }
           return;
         }
         const el = document.getElementById('art_' + f.name); if (!el) return;
-        if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; }
+        if (f.required && !el.value.trim()) { el.classList.add('error'); hasError = true; missing.push(def.label); }
       });
-      if (hasError) { document.getElementById('inputError').innerText = '⚠️ 必須項目を入力してください（画像必須の場合は写真も）。'; return; }
+      if (hasError) {
+        document.getElementById('inputError').innerText =
+          '⚠️ 未入力の必須項目があります: ' + missing.join('、');
+        // 未入力箇所（作家名なら作家欄）まで自動スクロールして気づけるように。
+        const target = missing.includes('作家名')
+          ? document.getElementById('artistSelect')
+          : document.querySelector('#contentInput .input-field .error');
+        if (target && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
 
       const data = {};
       ARTIST_FIELDS.forEach(f => { const el = document.getElementById('art_' + f); if (el) data[f] = el.value.trim(); });
@@ -2112,6 +2130,9 @@ ${fieldsText}
         // 入力欄にフォーカスを戻す（必要なら手で書き換えやすいよう全選択）
         const titleEl = document.getElementById('art_title');
         if (titleEl) { titleEl.focus(); titleEl.select && titleEl.select(); }
+        // 登録済み一覧と件数を即時更新（リロード不要にする）。
+        loadArtworkList();
+        refreshCurrentArtworkCount();
       } catch (err) {
         document.getElementById('btnSaveArt').disabled = false;
         document.getElementById('inputError').innerText = friendlyError(err, '読み込み');
