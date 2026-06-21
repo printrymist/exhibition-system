@@ -1972,16 +1972,21 @@ ${fieldsText}
         input.inputMode = 'numeric';
         input.setAttribute('pattern', '\\d*');
         input.addEventListener('input', e => {
+          // IME 変換中 (composition) に value を書き換えると桁が二重挿入される (38500→338500)。
+          // 変換確定後にも input が再発火するのでそこで整形する。
+          if (e.isComposing) return;
           e.target.value = e.target.value.replace(/[^\d]/g, '');
         });
       } else if (NUMERIC_PRICE_FIELDS.indexOf(name) !== -1) {
         input.inputMode = 'numeric';
         input.addEventListener('input', e => {
+          if (e.isComposing) return;
           const digits = e.target.value.replace(/[^\d]/g, '');
           e.target.value = digits ? Number(digits).toLocaleString('en-US') : '';
         });
       } else if (FLEXIBLE_PRICE_FIELDS.indexOf(name) !== -1) {
         input.addEventListener('input', e => {
+          if (e.isComposing) return;
           const v = e.target.value;
           if (/^[\d,]*$/.test(v)) {
             const digits = v.replace(/,/g, '');
