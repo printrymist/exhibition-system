@@ -383,11 +383,12 @@ function runSetup(payload) {
     const parentFolder = masterFile.getParents().next();
 
     // --- フォルダ構築 ---
+    // {ex}_WorkSpace は現役の作品台帳 SS ({ex}_artworks) のコンテナとして残す。
+    // images サブフォルダの生成は廃止: 画像は Firebase Storage (artworks/{ex}_*) 管理で、
+    // Drive には一切保存しない。以前は ANYONE_WITH_LINK の空フォルダを毎回作っていた。
     const wsFolder = withDriveRetry('createFolder(WorkSpace)', () => parentFolder.createFolder(exCode + "_WorkSpace"));
-    const imagesFolder = withDriveRetry('createFolder(images)', () => wsFolder.createFolder("images"));
     const shareWarnings = [];
-    safeSetSharing(imagesFolder, DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW, 'images フォルダ', shareWarnings);
-    const imagesFolderId = imagesFolder.getId();
+    const imagesFolderId = '';
 
     // --- 作品台帳SS構築 ---
     const artworkSS = withDriveRetry('create(artworks)', () => SpreadsheetApp.create(exCode + "_artworks"));
@@ -462,23 +463,10 @@ function runSetup(payload) {
     protection.setDescription('artwork_id - 編集禁止');
     protection.removeEditors(protection.getEditors());
 
-    // --- 感想SS構築 ---
-    const commentSS = withDriveRetry('create(comments)', () => SpreadsheetApp.create(exCode + "_comments"));
-    const commentId = commentSS.getId();
-    const commentFile = withDriveRetry('getFileById(comment)', () => DriveApp.getFileById(commentId));
-    withDriveRetry('addFile(comment)', () => wsFolder.addFile(commentFile));
-    withDriveRetry('removeFile(comment)', () => DriveApp.getRootFolder().removeFile(commentFile));
-    // 感想シート：リンクを知っている全員が閲覧可能
-    safeSetSharing(commentFile, DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW, '感想シートSS', shareWarnings);
-
-    const cSheet = commentSS.getSheets()[0];
-    cSheet.setName(exCode + "_comments");
-    const cHeader = ["timestamp", "ex_code", "ex_name", "artwork_id", "title", "artist", "nickname", "like", "comment", "session_id"];
-    cSheet.getRange(1, 1, 1, 10).setValues([cHeader]);
-    const cHeaderRange = cSheet.getRange(1, 1, 1, 10);
-    cHeaderRange.setBackground('#1a73e8');
-    cHeaderRange.setFontColor('#ffffff');
-    cHeaderRange.setFontWeight('bold');
+    // --- 感想SS構築は廃止 ---
+    // 感想・いいねは Firestore likes に移行済で、この SS には誰も書き込まない空き家だった。
+    // comment_sheet_id は後方互換のため空文字で持つ (掃除系は空 ID を skip する)。
+    const commentId = '';
 
     // --- exhibitions マスターに記録 ---
     const timestamp = Utilities.formatDate(new Date(), "JST", "yyyy/MM/dd, HH:mm:ss");
