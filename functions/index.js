@@ -1384,6 +1384,109 @@ exports.mintArtworkQrTokenFromGas = onRequest(
 );
 
 // =========================================================
+// addArtworkSlots:
+//   作品枠 (空きスロット) を N 個追加する callable。旧 GAS addArtworks
+//   ({ex}_artworks SS の末尾行で採番) を置換し、採番を Firestore に一本化する。
+//   exhibitions doc の last_artwork_seq を transaction で単調インクリメントして
+//   wNNN を採番 → SS に依存しない。各 slot は submitArtwork の空きスロットと
+//   同形状で artworks/{ex}_{wNNN} に書く (server-managed フィールドを CF が直書き)。
+// =========================================================
+const VISITOR_QR_BASE_URL = "https://rohei-printer-system.web.app/";
+const ARTWORK_QR_DEFAULT_DAYS = 365;
+
+exports.addArtworkSlots = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const count = Math.floor(Number(data.count));
+    if (!exCode || !/^[A-Za-z0-9_-]+$/.test(exCode)) {
+      throw new HttpsError("invalid-argument", "exCode が不正です");
+    }
+    if (!Number.isFinite(count) || count < 1 || count > 100) {
+      throw new HttpsError("invalid-argument", "count は 1〜100 で指定してください");
+    }
+
+    const authEmail = String(
+      (request.auth && request.auth.token && request.auth.token.email) || "",
+    ).trim().toLowerCase();
+    if (!authEmail) {
+      throw new HttpsError("unauthenticated", "ログインが必要です");
+    }
+    const isOperator = OPERATOR_EMAILS.indexOf(authEmail) !== -1;
+
+    const db = admin.firestore();
+    const exRef = db.collection("exhibitions").doc(exCode);
+    const exSnap = await exRef.get();
+    if (!exSnap.exists) {
+      throw new HttpsError("not-found", "exhibition not found");
+    }
+    const organizerEmail = String((exSnap.data() || {}).email || "")
+      .trim().toLowerCase();
+    if (!isOperator && authEmail !== organizerEmail) {
+      throw new HttpsError("permission-denied", "この展覧会の主催者ではありません");
+    }
+
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+
+    const exp = Math.floor(Date.now() / 1000) + ARTWORK_QR_DEFAULT_DAYS * 86400;
+    const nowIso = new Date().toISOString();
+
+    // transaction: last_artwork_seq を読んで count 個採番し、slot doc を set。
+    // Firestore の制約上、read (exRef / self-heal query) は write より前に行う。
+    const seeds = await db.runTransaction(async (tx) => {
+      const exDoc = await tx.get(exRef);
+      const exData = exDoc.exists ? (exDoc.data() || {}) : {};
+      let base = Number(exData.last_artwork_seq);
+      if (!Number.isFinite(base)) {
+        // self-heal: last_artwork_seq 未設定の既存展覧会は、現存 artworks の
+        // 最大 wNNN を base にする (高水位の引き継ぎ。番号の使い回しを防ぐ)。
+        const aSnap = await tx.get(
+          db.collection("artworks").where("exCode", "==", exCode),
+        );
+        base = 0;
+        aSnap.forEach((d) => {
+          const m = /^w(\d+)$/.exec(String((d.data() || {}).artwork_id || ""));
+          if (m) base = Math.max(base, parseInt(m[1], 10));
+        });
+      }
+
+      const created = [];
+      for (let i = 1; i <= count; i++) {
+        const wId = "w" + String(base + i).padStart(3, "0");
+        const sig = computeArtworkSig(secret, exCode, wId, exp);
+        const qrUrl = VISITOR_QR_BASE_URL + "?ex=" + encodeURIComponent(exCode) +
+          "&id=" + encodeURIComponent(wId) + "&exp=" + exp + "&sig=" + sig;
+        const securityKey = crypto.randomBytes(6).toString("hex");
+        tx.set(db.collection("artworks").doc(exCode + "_" + wId), {
+          exCode: exCode,
+          artworkId: wId,
+          artwork_id: wId,
+          status: "0",
+          qr_url: qrUrl,
+          security_key: securityKey,
+          _published: false,
+          organizerEmail: organizerEmail,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        });
+        created.push({ artwork_id: wId, qr_url: qrUrl, security_key: securityKey });
+      }
+
+      tx.set(exRef, { last_artwork_seq: base + count, updatedAt: nowIso },
+        { merge: true });
+      return created;
+    });
+
+    logger.info("addArtworkSlots success", { exCode, count, caller: authEmail });
+    return { success: true, exCode, added: seeds.length, seeds };
+  },
+);
+
+// =========================================================
 // purgeExhibition / scheduledSandboxCleanup
 //
 // 展覧会単位で Firestore + Storage を完全削除する Cloud Function。

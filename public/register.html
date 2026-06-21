@@ -1323,6 +1323,10 @@
         document.getElementById('mainArea').style.display = 'block';
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
+        // 認証が解決したこのタイミングで現在の作品枠数を取得し、ラベルを埋める。
+        // (読み込み直後は未認証で artworksBaseQuery が失敗するため、ここで再取得しないと
+        //  「作品枠を追加」する前は件数が空欄のままになる)
+        refreshCurrentArtworkCount();
         if (typeof loadFieldsAndUI === 'function') loadFieldsAndUI(currentEx);
         // 初回表示時は「① 項目を決める」タブを開く (data-regtab の表示制御を初期化)。
         if (!window._regTabInit) {
@@ -2788,57 +2792,6 @@ ${fieldsText}
       }
     }
 
-    // A-2: 同期失敗した seeds を保持して Retry できるように
-    let _addArtworksFailedSeeds = [];
-
-    async function _syncSeedsToFirestore(seeds, msgEl) {
-      const failed = [];
-      let synced = 0;
-      msgEl.style.color = '#888';
-      msgEl.innerHTML = `Firestore に同期中… (0/${seeds.length})`;
-      for (const seed of seeds) {
-        try {
-          await _submitArtworkFn({
-            exCode: currentEx,
-            artworkId: seed.artwork_id,
-            fields: {
-              status: '0',
-              qr_url: seed.qr_url || '',
-            },
-          });
-          synced++;
-        } catch (e) {
-          console.error('artwork seed sync failed:', seed.artwork_id, e);
-          failed.push(seed);
-        }
-        msgEl.innerHTML = `Firestore に同期中… (${synced + failed.length}/${seeds.length})`;
-      }
-      return failed;
-    }
-
-    function _renderAddArtworksResult(addedCount, failed, msgEl) {
-      _addArtworksFailedSeeds = failed;
-      if (failed.length === 0) {
-        msgEl.style.color = '#1a73e8';
-        msgEl.innerText = `✅ ${addedCount}件の作品枠を追加しました。`;
-      } else {
-        const list = failed.map(s => s.artwork_id).join(', ');
-        msgEl.style.color = '#c08400';
-        msgEl.innerHTML = `⚠️ GAS には ${addedCount}件追加されましたが、Firestore 同期に <strong>${failed.length}件失敗</strong> しました: <code>${list}</code><br>` +
-          `<button onclick="retryFailedSeeds()" style="margin-top:6px;padding:5px 12px;background:#1a73e8;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;">⟳ 失敗分を再同期</button>`;
-      }
-    }
-
-    async function retryFailedSeeds() {
-      const seeds = _addArtworksFailedSeeds.slice();
-      if (seeds.length === 0) return;
-      const msg = document.getElementById('addArtworkMsg');
-      _addArtworksFailedSeeds = [];
-      const failed = await _syncSeedsToFirestore(seeds, msg);
-      _renderAddArtworksResult(seeds.length, failed, msg);
-      refreshCurrentArtworkCount();
-    }
-
     async function addArtworks() {
       const addCount = parseInt(document.getElementById('addArtworkCount').value);
       if (!addCount || addCount < 1) return;
@@ -2847,23 +2800,25 @@ ${fieldsText}
       msg.innerText = '追加中…';
 
       try {
-        const res = await gasCallAuthed('addArtworks', { ex: currentEx, addCount: addCount });
-        if (!res.success) {
-          msg.style.color = '#d93025';
-          msg.innerText = 'エラー: ' + res.error;
-          return;
-        }
-        // Firestore にも空きスロットを書く (organizer auth で submitArtwork)。
-        // GAS Master Sheet と Firestore の整合を取らないと register.html の現在件数や
-        // input.html の空き枠検索 (fsSaveArtwork) で齟齬が出る。
-        const seeds = Array.isArray(res.artworks) ? res.artworks : [];
-        const failed = seeds.length > 0 ? await _syncSeedsToFirestore(seeds, msg) : [];
-        _renderAddArtworksResult(addCount, failed, msg);
+        // 採番・QR・空きスロット作成を CF (addArtworkSlots) に一本化。
+        // 旧: GAS addArtworks ({ex}_artworks SS で採番) → submitArtwork で個別ミラー、の 2 段。
+        // CF は transaction で原子的に採番・書き込みするので「GAS 成功/Firestore 失敗」の
+        // 中途半端な状態が起きない。
+        const res = await _addArtworkSlotsFn({ exCode: currentEx, count: addCount });
+        const d = (res && res.data) || {};
+        if (!d.success) throw new Error('作品枠の追加に失敗しました');
+
+        // Master SS の人間台帳カウンタ (artworks_total) を同期 (fire-and-forget)。
+        gasCallAuthed('bumpArtworkCount', { ex: currentEx, dT: d.added, dR: 0 })
+          .catch(e => console.warn('bumpArtworkCount sync failed:', e));
+
+        msg.style.color = '#1a73e8';
+        msg.innerText = `✅ ${d.added}件の作品枠を追加しました。`;
         document.getElementById('addArtworkCount').value = '';
         refreshCurrentArtworkCount();
       } catch (err) {
         msg.style.color = '#d93025';
-        msg.innerText = friendlyError(err, '処理');
+        msg.innerText = friendlyError(err, '作品枠の追加');
       }
     }
 
@@ -2884,6 +2839,7 @@ ${fieldsText}
     });
     const fsDb = firebase.firestore();
     const _submitArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
+    const _addArtworkSlotsFn = firebase.app().functions('asia-northeast1').httpsCallable('addArtworkSlots');
     const _uploadArtworkImageFn = firebase.app().functions('asia-northeast1').httpsCallable('uploadArtworkImage');
     window.fsUploadArtworkImage = async (exCode, artworkId, dataUrl) => {
       // operator / organizer (Firebase Auth) で uploadArtworkImage CF を呼ぶ。
