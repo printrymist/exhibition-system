@@ -536,21 +536,7 @@
       <a id="goRegisterBtn" href="#" style="display:block; margin:20px 0 6px; padding:14px; background:#1a73e8; color:#fff; text-align:center; text-decoration:none; border-radius:8px; font-weight:bold;">▶ 「作品登録/設定」画面へ進む</a>
       <p style="color:#888; font-size:0.82em; text-align:center; margin:0 0 4px;">次に、作家へ入力してもらう項目を設定し、作家を招待します。</p>
 
-      <!-- 作品追加セクション -->
-      <div style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
-        <p style="color:#888; font-size:0.85em; margin:0 0 12px 0;">
-          作品枠を追加しますか？ <span id="currentCountLabel" style="color:#1a73e8; font-weight:bold;"></span>
-        </p>
-        <div style="display:flex; gap:10px;">
-          <input type="number" id="addCount" placeholder="例: 10" min="1" max="100"
-            style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;">
-          <button onclick="submitAdd()" style="padding:10px 16px; background:#f0f7ff; color:#1a73e8; border:1px solid #1a73e8;
-            border-radius:8px; font-size:14px; font-weight:bold; cursor:pointer;">
-            追加
-          </button>
-        </div>
-        <div id="addMsg" style="display:none; margin-top:8px; font-size:0.85em; color:#1a73e8;"></div>
-      </div>
+      <p style="color:#888; font-size:0.82em; text-align:center; margin:14px 0 0;">作品枠の追加・調整は「作品登録/設定」画面でいつでも行えます。</p>
     </div>
   </div>
 
@@ -797,7 +783,8 @@
           .httpsCallable('finalizeExhibitionSetup')({
             token: window._confirmedToken || '',
             exCode: result.exCode,
-            artworks: Array.isArray(result.artworks) ? result.artworks : [],
+            // 初期作品枠は CF 側で initialCount から採番生成する (SS seeding 廃止)。
+            initialCount: parseInt(document.getElementById('workCount').value) || 0,
           })
           .then(() => null)
           .catch(err => {
@@ -830,46 +817,6 @@
     }
 
     // =========================================================
-    // 作品追加処理
-    // =========================================================
-    let currentArtworkCount = 0;
-
-    function updateCurrentCountLabel() {
-      const el = document.getElementById('currentCountLabel');
-      if (el) el.innerText = '(現在: ' + currentArtworkCount + ' 件)';
-    }
-
-    function submitAdd() {
-      const addCount = parseInt(document.getElementById('addCount').value);
-      if (!addCount || addCount < 1) return;
-      const exCode = document.getElementById('exCode').value.trim();
-      const addMsg = document.getElementById('addMsg');
-      addMsg.innerText = '作品枠を追加しています…';
-      addMsg.style.display = 'block';
-
-      gasCall({ action: 'addArtworks', exCode, addCount, token: window._confirmedToken || '' })
-        .then(res => {
-          if (!res.success) { addMsg.innerText = 'エラー: ' + res.error; return; }
-          addMsg.innerText = `✅ ${addCount} 件の作品枠を追加しました。`;
-          document.getElementById('addCount').value = '';
-          currentArtworkCount += addCount;
-          updateCurrentCountLabel();
-          if (window.fsDb && Array.isArray(res.artworks) && res.artworks.length > 0) {
-            // 追加スロットの Firestore 書き込みも Cloud Function 経由 (admin SDK)。
-            // skipExhibitionWrite=true で exhibition doc を上書きしないようにする。
-            firebase.app().functions('asia-northeast1')
-              .httpsCallable('finalizeExhibitionSetup')({
-                token: window._confirmedToken || '',
-                exCode: exCode,
-                artworks: res.artworks,
-                skipExhibitionWrite: true,
-              })
-              .catch(e => console.error('Cloud Function artwork write failed:', e));
-          }
-        });
-    }
-
-    // =========================================================
     // 完了画面表示
     // =========================================================
     function showDone(result) {
@@ -879,9 +826,6 @@
       <div class="row"><span class="key">展覧会コード</span><span class="val">${result.exCode}</span></div>
       <div class="row"><span class="key">展覧会名</span><span class="val">${result.exName}</span></div>
     `;
-      currentArtworkCount = (Array.isArray(result.artworks) ? result.artworks.length : 0)
-        || parseInt(document.getElementById('workCount').value) || 0;
-      updateCurrentCountLabel();
       const goBtn = document.getElementById('goRegisterBtn');
       if (goBtn) goBtn.href = '/register.html?ex=' + encodeURIComponent(result.exCode);
     }

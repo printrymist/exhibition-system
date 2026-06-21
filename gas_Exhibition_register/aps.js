@@ -379,93 +379,16 @@ function runSetup(payload) {
       return { success: false, error: `Exhibition code "${exCode}" is already in use. Please choose a different code.` };
     }
 
-    const masterFile = DriveApp.getFileById(MASTER_SS_ID);
-    const parentFolder = masterFile.getParents().next();
-
-    // --- フォルダ構築 ---
-    // {ex}_WorkSpace は現役の作品台帳 SS ({ex}_artworks) のコンテナとして残す。
-    // images サブフォルダの生成は廃止: 画像は Firebase Storage (artworks/{ex}_*) 管理で、
-    // Drive には一切保存しない。以前は ANYONE_WITH_LINK の空フォルダを毎回作っていた。
-    const wsFolder = withDriveRetry('createFolder(WorkSpace)', () => parentFolder.createFolder(exCode + "_WorkSpace"));
+    // --- per-exhibition の Drive 生成物は全廃 ---
+    // 作品台帳 SS ({ex}_artworks) / WorkSpace フォルダ / images フォルダ / 感想 SS は
+    // すべて Firestore (artworks / likes) と Storage に移行済。作品枠の採番・QR・
+    // スロット生成は Cloud Function (finalizeExhibitionSetup が初期 seeding、
+    // addArtworkSlots が増分追加) が Firestore 上で行う。runSetup は Master 行の作成と
+    // トークン処理だけを担い、Drive 操作は一切しない。
+    // *_sheet_id / *_folder_id は後方互換のため空文字で持つ (掃除系は空 ID を skip する)。
     const shareWarnings = [];
     const imagesFolderId = '';
-
-    // --- 作品台帳SS構築 ---
-    const artworkSS = withDriveRetry('create(artworks)', () => SpreadsheetApp.create(exCode + "_artworks"));
-    const artworkId = artworkSS.getId();
-    const artworkFile = withDriveRetry('getFileById(artwork)', () => DriveApp.getFileById(artworkId));
-    withDriveRetry('addFile(artwork)', () => wsFolder.addFile(artworkFile));
-    withDriveRetry('removeFile(artwork)', () => DriveApp.getRootFolder().removeFile(artworkFile));
-    // 作品台帳：PRIVATE
-    safeSetSharing(artworkFile, DriveApp.Access.PRIVATE, DriveApp.Permission.NONE, '作品台帳SS', shareWarnings);
-
-    const aSheet = artworkSS.getSheets()[0];
-    aSheet.setName(exCode + "_artworks");
-
-    // 列構成
-    const aHeader = [
-      "artwork_id", "security_key", "title", "title_en", "artist", "artist_en",
-      "birth_year", "death_year", "birthplace", "year", "series", "technique", "material",
-      "size", "sheet_size", "image_size", "edition", "price", "price_framed", "certificate", "collection",
-      "courtesy", "note", "artist_note", "image_url", "qr_url", "status",
-      "insta", "x", "facebook", "web"
-    ];
-
-    const totalCols = aHeader.length;
-    aSheet.getRange(1, 1, 1, totalCols).setValues([aHeader]);
-
-    // ヘッダー行のスタイル設定
-    const headerRange = aSheet.getRange(1, 1, 1, totalCols);
-    headerRange.setBackground('#1a73e8');
-    headerRange.setFontColor('#ffffff');
-    headerRange.setFontWeight('bold');
-
-    // 作品情報列（title〜artist_note）を水色に
-    const artStartCol = aHeader.indexOf('title') + 1;
-    const artEndCol = aHeader.indexOf('artist_note') + 1;
-    aSheet.getRange(1, artStartCol, 1, artEndCol - artStartCol + 1).setBackground('#4a90d9');
-
-    // システム列（image_url, qr_url, status）をグレーに
-    const sysColNames = ['image_url', 'qr_url', 'status'];
-    sysColNames.forEach(colName => {
-      const colIdx = aHeader.indexOf(colName) + 1;
-      if (colIdx > 0) aSheet.getRange(1, colIdx, 1, 1).setBackground('#888888');
-    });
-
-    let rows = [];
-    const artworkSeeds = [];
-    for (let i = 1; i <= workCount; i++) {
-      const wId = "w" + ("00" + i).slice(-3);
-      const sKey = Math.random().toString(36).substring(2, 10);
-      const url = buildArtworkQrUrl(exCode, wId);
-      const row = new Array(totalCols).fill("");
-      row[0] = wId;
-      row[1] = sKey;
-      row[aHeader.indexOf("qr_url")] = url;
-      row[aHeader.indexOf("status")] = "0";
-      rows.push(row);
-      const seed = { exCode: exCode };
-      aHeader.forEach((h, idx) => { seed[h] = row[idx]; });
-      artworkSeeds.push(seed);
-    }
-    aSheet.getRange(2, 1, rows.length, totalCols).setValues(rows);
-
-    // 非表示列
-    const hideColNames = ['security_key', 'image_url', 'qr_url', 'status'];
-    hideColNames.forEach(colName => {
-      const colIdx = aHeader.indexOf(colName) + 1;
-      if (colIdx > 0) aSheet.hideColumns(colIdx);
-    });
-
-    // artwork_id列を保護（閲覧可・編集不可）
-    const artworkIdCol = aHeader.indexOf('artwork_id') + 1;
-    const protection = aSheet.getRange(1, artworkIdCol, aSheet.getMaxRows(), 1).protect();
-    protection.setDescription('artwork_id - 編集禁止');
-    protection.removeEditors(protection.getEditors());
-
-    // --- 感想SS構築は廃止 ---
-    // 感想・いいねは Firestore likes に移行済で、この SS には誰も書き込まない空き家だった。
-    // comment_sheet_id は後方互換のため空文字で持つ (掃除系は空 ID を skip する)。
+    const artworkId = '';
     const commentId = '';
 
     // --- exhibitions マスターに記録 ---
@@ -557,7 +480,9 @@ function runSetup(payload) {
       success: true,
       exCode: exCode,
       exName: exName,
-      artworks: artworkSeeds,
+      // 初期スロットの生成は finalizeExhibitionSetup CF が initialCount から行う。
+      // runSetup は SS seeding をしないので空配列を返す (後方互換)。
+      artworks: [],
       exhibitionDoc: {
         ex_code: exCode,
         ex_name: exName,

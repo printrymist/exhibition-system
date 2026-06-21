@@ -345,7 +345,7 @@ async function verifyTokenWithGas(token, exCode) {
   return res.json();
 }
 
-exports.finalizeExhibitionSetup = onCall(async (request) => {
+async function finalizeExhibitionSetupImpl(request) {
   const data = request.data || {};
   const token = String(data.token || "").trim();
   const exCode = String(data.exCode || "").trim();
@@ -395,47 +395,47 @@ exports.finalizeExhibitionSetup = onCall(async (request) => {
   const db = admin.firestore();
   const exRef = db.collection("exhibitions").doc(exCode);
   const ts = new Date().toISOString();
-  if (!data.skipExhibitionWrite) {
-    const exDoc = Object.assign({}, canonicalDoc, {
-      ex_code: exCode,
-      email: verifiedEmail,
-      createdAt: ts,
-    });
-    try {
-      await exRef.set(exDoc, { merge: true });
-    } catch (err) {
-      logger.error("exhibitions write failed", { exCode, error: err.message });
-      throw new HttpsError(
-        "internal",
-        "Firestore 書き込みに失敗しました: " + err.message,
-      );
-    }
+  // 初期作品枠数 (案「う」: セットアップで入力した作品数を CF 側で採番生成する。
+  //   {ex}_artworks SS は使わない)。0〜100 にクランプ。
+  const initialCount = Math.max(
+    0, Math.min(100, Math.floor(Number(data.initialCount) || 0)),
+  );
+
+  // exhibition doc を書き込む。last_artwork_seq = 初期枠数 (以後 addArtworkSlots が
+  // この続きから採番する)。
+  const exDoc = Object.assign({}, canonicalDoc, {
+    ex_code: exCode,
+    email: verifiedEmail,
+    createdAt: ts,
+    last_artwork_seq: initialCount,
+  });
+  try {
+    await exRef.set(exDoc, { merge: true });
+  } catch (err) {
+    logger.error("exhibitions write failed", { exCode, error: err.message });
+    throw new HttpsError(
+      "internal",
+      "Firestore 書き込みに失敗しました: " + err.message,
+    );
   }
-  // 空き artwork スロットも一緒に書き込む。クライアントから受け取った配列だが、
-  // 同じ setup フロー内で GAS から生成されたものが渡ってくる前提で、exCode 一致と
-  // artwork_id / security_key の非空だけ簡易検証する。
+
+  // 初期作品スロット (w001..wN) を CF 側で生成して書き込む (addArtworkSlots と
+  // 同じ buildArtworkSlot を共用)。旧来は GAS が {ex}_artworks SS に seeding して
+  // いたが、SS を廃止し Firestore に一本化した。
   let artworkCount = 0;
-  if (Array.isArray(data.artworks) && data.artworks.length > 0) {
+  if (initialCount > 0) {
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+    const exp = Math.floor(Date.now() / 1000) +
+      ARTWORK_QR_DEFAULT_DAYS * 86400;
     const writes = [];
-    for (const a of data.artworks) {
-      if (!a || typeof a !== "object") continue;
-      const aId = String(a.artwork_id || "").trim();
-      const aEx = String(a.exCode || "").trim();
-      const aSk = String(a.security_key || "").trim();
-      if (!aId || !aEx || aEx !== exCode || !aSk) continue;
-      if (!/^[A-Za-z0-9_-]+$/.test(aId)) continue;
-      const docId = exCode + "_" + aId;
-      const docData = Object.assign({}, a, {
-        artworkId: aId,
-        exCode: exCode,
-        createdAt: ts,
-        // β-3 server-managed: empty slot は初期 _published=false。
-        // organizerEmail は denormalize (Rules で organizer 直 read 用)。
-        _published: false,
-        organizerEmail: verifiedEmail,
-      });
+    for (let i = 1; i <= initialCount; i++) {
+      const slot = buildArtworkSlot(secret, exCode, i, exp, verifiedEmail, ts);
       writes.push(
-        db.collection("artworks").doc(docId).set(docData, { merge: true }),
+        db.collection("artworks").doc(slot.docId)
+          .set(slot.data, { merge: true }),
       );
     }
     try {
@@ -455,7 +455,11 @@ exports.finalizeExhibitionSetup = onCall(async (request) => {
     artworkCount,
   });
   return { success: true, exCode, artworkCount };
-});
+}
+exports.finalizeExhibitionSetup = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET] },
+  finalizeExhibitionSetupImpl,
+);
 
 // =========================================================
 // adminRecoverExhibitionDoc
@@ -1394,6 +1398,32 @@ exports.mintArtworkQrTokenFromGas = onRequest(
 const VISITOR_QR_BASE_URL = "https://rohei-printer-system.web.app/";
 const ARTWORK_QR_DEFAULT_DAYS = 365;
 
+// 作品スロット 1 件分の Firestore doc data + seed を生成する純粋ヘルパ。
+// addArtworkSlots (主催者の増分追加) と finalizeExhibitionSetup (セットアップ時の
+// 初期 seeding) で共用し、UI/経路で能力差が出ないようにする。
+function buildArtworkSlot(secret, exCode, seq, exp, organizerEmail, nowIso) {
+  const wId = "w" + String(seq).padStart(3, "0");
+  const sig = computeArtworkSig(secret, exCode, wId, exp);
+  const qrUrl = VISITOR_QR_BASE_URL + "?ex=" + encodeURIComponent(exCode) +
+    "&id=" + encodeURIComponent(wId) + "&exp=" + exp + "&sig=" + sig;
+  return {
+    wId: wId,
+    docId: exCode + "_" + wId,
+    data: {
+      exCode: exCode,
+      artworkId: wId,
+      artwork_id: wId,
+      status: "0",
+      qr_url: qrUrl,
+      security_key: crypto.randomBytes(6).toString("hex"),
+      _published: false,
+      organizerEmail: organizerEmail,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    },
+  };
+}
+
 exports.addArtworkSlots = onCall(
   { secrets: [ARTIST_TOKEN_SECRET] },
   async (request) => {
@@ -1456,28 +1486,27 @@ exports.addArtworkSlots = onCall(
 
       const created = [];
       for (let i = 1; i <= count; i++) {
-        const wId = "w" + String(base + i).padStart(3, "0");
-        const sig = computeArtworkSig(secret, exCode, wId, exp);
-        const qrUrl = VISITOR_QR_BASE_URL + "?ex=" + encodeURIComponent(exCode) +
-          "&id=" + encodeURIComponent(wId) + "&exp=" + exp + "&sig=" + sig;
-        const securityKey = crypto.randomBytes(6).toString("hex");
-        tx.set(db.collection("artworks").doc(exCode + "_" + wId), {
-          exCode: exCode,
-          artworkId: wId,
-          artwork_id: wId,
-          status: "0",
-          qr_url: qrUrl,
-          security_key: securityKey,
-          _published: false,
-          organizerEmail: organizerEmail,
-          createdAt: nowIso,
-          updatedAt: nowIso,
+        const slot = buildArtworkSlot(
+          secret, exCode, base + i, exp, organizerEmail, nowIso,
+        );
+        tx.set(db.collection("artworks").doc(slot.docId), slot.data);
+        created.push({
+          artwork_id: slot.wId,
+          qr_url: slot.data.qr_url,
+          security_key: slot.data.security_key,
         });
-        created.push({ artwork_id: wId, qr_url: qrUrl, security_key: securityKey });
       }
 
-      tx.set(exRef, { last_artwork_seq: base + count, updatedAt: nowIso },
-        { merge: true });
+      // last_artwork_seq (採番カウンタ) と artworks_total (denormalize キャッシュ) を
+      // スロット作成と同じ transaction で原子的に更新する。artworks_total は
+      // artworks コレクションの件数のキャッシュで、真実はコレクション側 (recount で修復可)。
+      // 手で set せず増減発生と同一原子操作で維持するのが理想形。
+      const curTotal = Number(exData.artworks_total) || 0;
+      tx.set(exRef, {
+        last_artwork_seq: base + count,
+        artworks_total: curTotal + count,
+        updatedAt: nowIso,
+      }, { merge: true });
       return created;
     });
 
