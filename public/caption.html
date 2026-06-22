@@ -3364,7 +3364,17 @@
       const settings = getSettings();
 
       if (!settings.items.some(i => i.type === 'field' || i.type === 'group')) {
-        alert('表示する項目を1つ以上選択してください。');
+        // 載せる項目が 0 件のときは、ブロッキング alert を出さずプレビュー欄に静かに案内する。
+        // (項目選択などの変更ごとに generatePreview が走るため、alert だと連発して操作を妨げる)
+        const frame = document.getElementById('previewFrame');
+        const placeholder = document.getElementById('previewPlaceholder');
+        if (frame) frame.style.display = 'none';
+        if (placeholder) {
+          placeholder.innerText = '載せる項目を 1 つ以上選ぶと、ここにプレビューが表示されます。';
+          placeholder.style.display = '';
+        }
+        const status = document.getElementById('previewStatus');
+        if (status) status.innerText = '';
         artworkData = tempData;
         return;
       }
@@ -3579,15 +3589,13 @@
     // この作品にはまだ未入力」のとき、何が出るかを実感できる。
     // 戻り値: { value: string, isSample: boolean }
     function _resolveFieldValue(art, fieldName) {
+      // 実データのみを返す。空欄は空のまま (buildContent 側で skip される)。
+      // 以前は official テンプレ選択時に OFFICIAL_SAMPLES のサンプル値をグレーで補完して
+      // いたが、それが印刷にもそのまま出てしまうため廃止 (実作品の未入力欄は印刷に出さない)。
+      // 公式テンプレの見本は generatePreview がダミー作品にサンプルをマージして見せるので
+      // ここで補完しなくても見本プレビューは出る。
       const real = (art[fieldName] || '').toString().trim();
-      if (real) return { value: real, isSample: false };
-      const tplKey = currentTemplate || '';
-      if (tplKey.indexOf('official_') === 0 && OFFICIAL_SAMPLES && OFFICIAL_SAMPLES[tplKey]) {
-        const sample = OFFICIAL_SAMPLES[tplKey];
-        const sampleVal = (sample[fieldName] || '').toString().trim();
-        if (sampleVal) return { value: sampleVal, isSample: true };
-      }
-      return { value: '', isSample: false };
+      return { value: real, isSample: false };
     }
 
     // 1作品分の本文 (s.items を field / group / divider / spacer 別に HTML 化)
