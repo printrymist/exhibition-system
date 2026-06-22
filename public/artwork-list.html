@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📋 作品リスト</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f7f9fc;
+      color: #1a2a4a;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card-title {
+      font-size: 0.95em;
+      font-weight: bold;
+      color: #1a73e8;
+      margin-bottom: 12px;
+    }
+    .ex-row, .pw-row { display: flex; gap: 8px; }
+    .ex-row input, .pw-row input, #listTitle {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    #listTitle { width: 100%; box-sizing: border-box; }
+    .btn-primary {
+      padding: 10px 20px; background: #1a73e8; color: white; border: none;
+      border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer;
+    }
+    .btn-primary:hover:not(:disabled) { background: #1557b0; }
+    .btn-primary:disabled { opacity: 0.5; cursor: wait; }
+    .msg-ok { color: #1a73e8; font-size: 0.9em; margin-top: 8px; min-height: 1.2em; }
+    .msg-error { color: #d93025; font-size: 0.9em; margin-top: 8px; min-height: 1.2em; }
+    .spinner-sm {
+      display: inline-block; width: 12px; height: 12px; border: 2px solid #c5d9f7;
+      border-top-color: #1a73e8; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    code { background: #f4f4f9; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+
+    /* 列の選択・並べ替え */
+    .col-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+      border: 1px solid #eef1f6; border-radius: 8px; margin-bottom: 6px; background: #fafbfe;
+    }
+    .col-row.off { opacity: 0.5; }
+    .col-row label { flex: 1; font-size: 0.92em; cursor: pointer; }
+    .col-row .field-hint { color: #aaa; font-size: 0.78em; }
+    .col-move { display: flex; flex-direction: column; gap: 2px; }
+    .col-move button {
+      width: 26px; height: 18px; line-height: 1; padding: 0; border: 1px solid #ccd;
+      background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px; color: #1a73e8;
+    }
+    .col-move button:disabled { opacity: 0.3; cursor: default; }
+
+    /* プレビュー / 印刷テーブル */
+    #printArea { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    #printTitle { font-size: 1.4em; margin: 0 0 4px 0; color: #1a2a4a; }
+    #printSub { font-size: 0.85em; color: #666; margin-bottom: 14px; }
+    /* table-layout: fixed で表を必ずコンテナ幅 (=印刷ページ幅) に収め、右側が切れないようにする。
+       列幅は均等配分され、内容はセル内で折り返す。 */
+    table.list { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    table.list th, table.list td {
+      border: 1px solid #c9d2e0; padding: 5px 8px; font-size: 12px; text-align: left;
+      vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+    }
+    table.list th { background: #eef3fb; font-weight: bold; }
+    table.list td.num { text-align: right; }
+    .empty-note { color: #999; font-size: 0.9em; }
+
+    /* 印刷ページに必ず余白を持たせ、表の右端が用紙端 (印字不可領域) に入って切れるのを防ぐ。 */
+    @page { size: A4; margin: 10mm; }
+    @media print {
+      body { background: white; max-width: none; margin: 0; padding: 0; color: #000; }
+      .no-print { display: none !important; }
+      /* @page 余白が「なし」に設定されても切れないよう、印刷領域自体にも左右の内側余白を持たせる。
+         box-sizing: border-box で table の width:100% がこの内側に収まる。 */
+      #printArea { box-shadow: none; border-radius: 0; padding: 0 8mm; box-sizing: border-box; }
+      #printTitle { font-size: 18pt; }
+      table.list th, table.list td { font-size: 10pt; padding: 3px 5px; }
+      table.list th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="no-print" style="text-align:center; margin-bottom:20px;">
+    <h1 style="font-size:1.3em; color:#1a73e8;">📋 作品リスト</h1>
+    <p style="font-size:0.85em; color:#888; margin-top:4px;">出品作品の一覧表を作って紙 / PDF に印刷します</p>
+    <a id="linkToRegister" href="#"
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      ⚙️ 作品登録・設定へ
+    </a>
+    <a id="linkToReports" href="#"
+      style="display:inline-block;margin:8px 4px 0;padding:6px 14px;background:white;color:#1a73e8;border:1px solid #1a73e8;border-radius:8px;font-size:12px;text-decoration:none;">
+      📊 出力・レポートへ
+    </a>
+  </div>
+
+  <div id="sandboxBadge" class="no-print" style="display:none;"></div>
+
+  <div class="card no-print">
+    <div class="card-title">展覧会</div>
+    <div class="ex-row">
+      <input type="text" id="exCodeInput" placeholder="展覧会コードを入力 (例: IT26)" value=""
+        onkeydown="if(event.key==='Enter') loadExhibition()">
+      <button class="btn-primary" id="btnLoad" onclick="loadExhibition()">読み込み</button>
+    </div>
+    <div class="msg-ok" id="exName"></div>
+    <div class="msg-error" id="exError"></div>
+  </div>
+
+  <div class="card no-print" id="pwCard" style="display:none;">
+    <div class="card-title">主催者ログイン</div>
+    <div id="operatorAuthStatus" style="display:none; padding:8px 12px; background:#e8f5e9; color:#2e7d32; border-radius:6px; font-size:0.9em; margin-bottom:10px;"></div>
+    <div style="font-size:0.85em; color:#666; margin-bottom:10px;">この展覧会の主催者として登録されたメールアドレスを入力してください。</div>
+    <div class="pw-row" id="emailLinkRow">
+      <input type="email" id="operatorEmailInput" placeholder="主催者メールアドレス" autocomplete="email">
+      <button class="btn-primary" id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" style="font-size:0.85em; margin-top:6px; min-height:1.2em;"></div>
+    <div style="font-size:0.78em; color:#888; margin-top:4px;">入力したメールアドレスにログインリンクが届きます。クリックすると自動でログインします。</div>
+  </div>
+
+  <div class="card no-print" id="notOrganizerCard" style="display:none;">
+    <div class="card-title" style="color:#d93025;">⚠ アクセス権限がありません</div>
+    <div style="font-size:0.9em; line-height:1.6;">
+      <code id="notOrganizerEmail"></code> はこの展覧会の主催者として登録されていません。
+    </div>
+    <div style="margin-top:12px;">
+      <button onclick="signOutAndRetry()" class="btn-primary">別のアカウントでログインし直す</button>
+    </div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 14px; background:#e8f0fe; border-radius:8px; font-size:0.85em; margin-bottom:12px;">
+      <span style="color:#1565c0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔓 <span id="loggedInEmailLabel"></span> でログイン中</span>
+      <a href="#" onclick="signOutAndRetry();return false;" style="color:#1a73e8; text-decoration:underline; flex-shrink:0;">ログアウト</a>
+    </div>
+
+    <div class="card no-print">
+      <div class="card-title">リスト設定</div>
+      <div style="font-size:0.85em; color:#555; margin-bottom:6px;">リストのタイトル（印刷時の見出し）</div>
+      <input type="text" id="listTitle" placeholder="例：出品作品一覧" oninput="onTitleInput()">
+      <div style="font-size:0.85em; color:#555; margin:8px 0 0;">
+        見出しの配置：
+        <label style="margin-left:8px;"><input type="radio" name="headerAlign" value="left" onchange="onAlignChange('left')"> 左寄せ</label>
+        <label style="margin-left:12px;"><input type="radio" name="headerAlign" value="center" onchange="onAlignChange('center')"> 中央</label>
+      </div>
+      <div style="font-size:0.85em; color:#555; margin:16px 0 8px;">表示する項目と並び順（チェックで表示 / ↑↓で列の左右順を調整）</div>
+      <div id="columnList"></div>
+      <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
+        <button class="btn-primary" id="btnSaveConfig" onclick="saveConfig()">💾 設定を保存</button>
+        <span class="msg-ok" id="configMsg" style="margin-top:0;"></span>
+      </div>
+    </div>
+
+    <div class="card no-print">
+      <div class="card-title">印刷</div>
+      <p style="font-size:0.85em; color:#666; margin:0 0 12px;">下のプレビューがそのまま印刷されます。登録済みの作品を<strong>作品 ID 順</strong>に表示します。</p>
+      <button class="btn-primary" onclick="window.print()">🖨 印刷 / PDF にする</button>
+      <span id="countLabel" style="margin-left:10px; font-size:0.85em; color:#888;"></span>
+    </div>
+
+    <div id="printArea">
+      <h1 id="printTitle"></h1>
+      <div id="printSub"></div>
+      <div id="printTableWrap"></div>
+    </div>
+  </div>
+
+  <script src="field-defs.js"></script>
+  <script>
+    function getUrlParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    let currentEx = '';
+    let currentExEmail = '';
+    let currentExName = '';
+    let currentExData = null;
+    let artworks = [];          // status=1 のみ、作品ID順
+    let listConfig = null;      // { title, columns: [{ name, on }] }
+    let _loadedForEx = '';      // 二重ロード防止
+
+    // 列候補: 画像と pure SNS を除いた全項目 (artwork_id 含む)
+    const COLUMN_CANDIDATES = FIELD_DEFS
+      .filter(d => d.type !== 'image' && !d.isPureSns)
+      .map(d => d.name);
+    const DEFAULT_ON = ['artwork_id', 'title', 'artist', 'year', 'technique', 'size', 'price'];
+    const NUM_COLS = ['price', 'price_framed'];
+
+    function labelOf(name) {
+      return (FIELD_MAP[name] && FIELD_MAP[name].label) || name;
+    }
+
+    function defaultConfig() {
+      // ON 列を DEFAULT_ON の順に並べ、残り候補を OFF で後ろに付ける。
+      const on = DEFAULT_ON.filter(n => COLUMN_CANDIDATES.indexOf(n) !== -1);
+      const rest = COLUMN_CANDIDATES.filter(n => on.indexOf(n) === -1);
+      const columns = on.map(n => ({ name: n, on: true }))
+        .concat(rest.map(n => ({ name: n, on: false })));
+      return { title: currentExName || '出品作品一覧', align: 'left', columns: columns };
+    }
+
+    function normalizeConfig(saved) {
+      // 保存済み config に、その後追加された候補列を OFF で末尾補完。未知の列は除去。
+      const cols = [];
+      const seen = {};
+      (saved.columns || []).forEach(c => {
+        if (c && c.name && COLUMN_CANDIDATES.indexOf(c.name) !== -1 && !seen[c.name]) {
+          cols.push({ name: c.name, on: !!c.on }); seen[c.name] = true;
+        }
+      });
+      COLUMN_CANDIDATES.forEach(n => { if (!seen[n]) cols.push({ name: n, on: false }); });
+      return {
+        title: typeof saved.title === 'string' ? saved.title : (currentExName || '出品作品一覧'),
+        align: saved.align === 'center' ? 'center' : 'left',
+        columns: cols
+      };
+    }
+
+    // ── 展覧会読み込み ──
+    function loadExhibition() {
+      const ex = document.getElementById('exCodeInput').value.trim();
+      if (!ex) return;
+      currentEx = ex;
+      currentExEmail = '';
+      _loadedForEx = '';
+      document.getElementById('exName').innerHTML = '<span class="spinner-sm"></span> 読み込み中...';
+      document.getElementById('exError').innerText = '';
+      document.getElementById('btnLoad').disabled = true;
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'none';
+      document.getElementById('mainArea').style.display = 'none';
+
+      firebase.firestore().collection('exhibitions').doc(ex).get()
+        .then(exSnap => {
+          document.getElementById('btnLoad').disabled = false;
+          if (!exSnap.exists) {
+            document.getElementById('exName').innerText = '';
+            document.getElementById('exError').innerText = '展覧会が見つかりません: ' + ex;
+            return;
+          }
+          currentExData = exSnap.data() || {};
+          currentExName = currentExData.ex_name || ex;
+          currentExEmail = (currentExData.email || '').trim().toLowerCase();
+          document.getElementById('exName').innerText = '✅ ' + currentExName;
+          if (window.sandboxBadge) window.sandboxBadge.render('sandboxBadge', currentExData, 'operator');
+          document.getElementById('linkToRegister').href = 'register.html?ex=' + ex;
+          document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
+          try {
+            const u = new URL(window.location.href);
+            if (u.searchParams.get('ex') !== ex) { u.searchParams.set('ex', ex); window.history.replaceState({}, '', u.toString()); }
+          } catch (_e) { /* ignore */ }
+          applyAuthorizationUI();
+        })
+        .catch(err => {
+          document.getElementById('btnLoad').disabled = false;
+          document.getElementById('exName').innerText = '';
+          document.getElementById('exError').innerText = friendlyError(err, '読み込み');
+        });
+    }
+
+    function applyAuthorizationUI() {
+      const user = firebase.auth().currentUser;
+      const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
+      if (!user) {
+        document.getElementById('pwCard').style.display = 'block';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'none';
+        setTimeout(() => { const el = document.getElementById('operatorEmailInput'); if (el) el.focus(); }, 100);
+        return;
+      }
+      if (currentExEmail && userEmail === currentExEmail) {
+        document.getElementById('pwCard').style.display = 'none';
+        document.getElementById('notOrganizerCard').style.display = 'none';
+        document.getElementById('mainArea').style.display = 'block';
+        const emailLabel = document.getElementById('loggedInEmailLabel');
+        if (emailLabel) emailLabel.innerText = user.email;
+        onOrganizerReady();
+        return;
+      }
+      document.getElementById('pwCard').style.display = 'none';
+      document.getElementById('mainArea').style.display = 'none';
+      document.getElementById('notOrganizerCard').style.display = 'block';
+      document.getElementById('notOrganizerEmail').innerText = user.email;
+    }
+
+    // 認証済み (主催者本人) になったら作品 + 設定を読み込む。
+    async function onOrganizerReady() {
+      if (_loadedForEx === currentEx) return; // 二重ロード防止
+      _loadedForEx = currentEx;
+      document.getElementById('countLabel').innerText = '読み込み中...';
+      try {
+        const [arts, cfg] = await Promise.all([fetchArtworks(currentEx), fetchSavedConfig(currentEx)]);
+        artworks = arts;
+        listConfig = cfg ? normalizeConfig(cfg) : defaultConfig();
+        document.getElementById('listTitle').value = listConfig.title;
+        const _a = listConfig.align === 'center' ? 'center' : 'left';
+        const _radio = document.querySelector('input[name="headerAlign"][value="' + _a + '"]');
+        if (_radio) _radio.checked = true;
+        buildColumnList();
+        renderPreview();
+      } catch (err) {
+        document.getElementById('countLabel').innerText = '';
+        document.getElementById('printTableWrap').innerHTML =
+          '<p class="empty-note">読み込みに失敗しました: ' + escapeHtml(friendlyError(err, '読み込み')) + '</p>';
+        _loadedForEx = ''; // 再試行できるように
+      }
+    }
+
+    async function fetchArtworks(ex) {
+      const user = firebase.auth().currentUser;
+      const email = ((user || {}).email || '').trim().toLowerCase();
+      const isOp = email === 'rymist1@gmail.com';
+      let q = firebase.firestore().collection('artworks').where('exCode', '==', ex);
+      if (!isOp) q = q.where('organizerEmail', '==', email);
+      const snap = await q.get();
+      const list = [];
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (!d.artwork_id) return;
+        if (String(d.status || '') !== '1') return; // 登録済みのみ
+        list.push(d);
+      });
+      // 作品 ID (w001…) 順。w 以降を数値として比較し w1000 でも崩れないように。
+      const num = id => parseInt(String(id || '').replace(/[^\d]/g, ''), 10) || 0;
+      list.sort((a, b) => num(a.artwork_id) - num(b.artwork_id));
+      return list;
+    }
+
+    async function fetchSavedConfig(ex) {
+      // exhibitions doc の artwork_list_config (JSON 文字列) を読む。
+      const v = currentExData && currentExData.artwork_list_config;
+      if (!v) return null;
+      try { return typeof v === 'string' ? JSON.parse(v) : v; }
+      catch (e) { console.warn('artwork_list_config parse failed:', e); return null; }
+    }
+
+    // ── 列の選択 / 並べ替え UI ──
+    function buildColumnList() {
+      const wrap = document.getElementById('columnList');
+      wrap.innerHTML = '';
+      listConfig.columns.forEach((col, idx) => {
+        const row = document.createElement('div');
+        row.className = 'col-row' + (col.on ? '' : ' off');
+        const move = document.createElement('div'); move.className = 'col-move';
+        const up = document.createElement('button'); up.textContent = '▲'; up.disabled = idx === 0;
+        up.onclick = () => moveColumn(idx, -1);
+        const down = document.createElement('button'); down.textContent = '▼'; down.disabled = idx === listConfig.columns.length - 1;
+        down.onclick = () => moveColumn(idx, 1);
+        move.appendChild(up); move.appendChild(down);
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = col.on;
+        cb.id = 'col_' + col.name;
+        cb.onchange = () => { col.on = cb.checked; row.classList.toggle('off', !col.on); renderPreview(); };
+        const label = document.createElement('label'); label.setAttribute('for', cb.id);
+        label.innerHTML = escapeHtml(labelOf(col.name)) + ' <span class="field-hint">' + escapeHtml(col.name) + '</span>';
+        row.appendChild(move); row.appendChild(cb); row.appendChild(label);
+        wrap.appendChild(row);
+      });
+    }
+
+    function moveColumn(idx, dir) {
+      const j = idx + dir;
+      if (j < 0 || j >= listConfig.columns.length) return;
+      const tmp = listConfig.columns[idx];
+      listConfig.columns[idx] = listConfig.columns[j];
+      listConfig.columns[j] = tmp;
+      buildColumnList();
+      renderPreview();
+    }
+
+    function onTitleInput() {
+      if (listConfig) listConfig.title = document.getElementById('listTitle').value;
+      renderPreview();
+    }
+
+    function onAlignChange(a) {
+      if (listConfig) listConfig.align = (a === 'center' ? 'center' : 'left');
+      renderPreview();
+    }
+
+    // ── プレビュー / 印刷テーブル生成 ──
+    function formatCell(name, val) {
+      const s = val == null ? '' : String(val);
+      if (NUM_COLS.indexOf(name) !== -1 && /^\d+$/.test(s)) {
+        return { html: Number(s).toLocaleString('en-US'), num: true };
+      }
+      return { html: escapeHtml(s).replace(/\n/g, '<br>'), num: false };
+    }
+
+    function renderPreview() {
+      if (!listConfig) return;
+      document.getElementById('printTitle').innerText = listConfig.title || '';
+      const subBits = [];
+      if (currentExData) {
+        if (currentExData.venue) subBits.push(currentExData.venue);
+        if (currentExData.start_date) subBits.push(currentExData.start_date);
+      }
+      document.getElementById('printSub').innerText = subBits.join('　/　');
+      const _align = listConfig.align === 'center' ? 'center' : 'left';
+      document.getElementById('printTitle').style.textAlign = _align;
+      document.getElementById('printSub').style.textAlign = _align;
+
+      const cols = listConfig.columns.filter(c => c.on).map(c => c.name);
+      const wrap = document.getElementById('printTableWrap');
+      if (cols.length === 0) {
+        wrap.innerHTML = '<p class="empty-note">表示する項目を 1 つ以上選んでください。</p>';
+        document.getElementById('countLabel').innerText = artworks.length + ' 件';
+        return;
+      }
+      if (artworks.length === 0) {
+        wrap.innerHTML = '<p class="empty-note">登録済みの作品がありません。</p>';
+        document.getElementById('countLabel').innerText = '0 件';
+        return;
+      }
+      let html = '<table class="list"><thead><tr>';
+      cols.forEach(n => { html += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
+      html += '</tr></thead><tbody>';
+      artworks.forEach(a => {
+        html += '<tr>';
+        cols.forEach(n => {
+          const cell = formatCell(n, a[n]);
+          html += '<td' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      wrap.innerHTML = html;
+      document.getElementById('countLabel').innerText = artworks.length + ' 件';
+    }
+
+    // ── 設定の保存 (exhibitions doc に紐づけ) ──
+    async function saveConfig() {
+      if (!listConfig) return;
+      const btn = document.getElementById('btnSaveConfig');
+      const msg = document.getElementById('configMsg');
+      listConfig.title = document.getElementById('listTitle').value;
+      btn.disabled = true; msg.style.color = '#888'; msg.innerText = '保存中...';
+      try {
+        await firebase.firestore().collection('exhibitions').doc(currentEx).set({
+          artwork_list_config: JSON.stringify(listConfig),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        if (currentExData) currentExData.artwork_list_config = JSON.stringify(listConfig);
+        msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。';
+        setTimeout(() => { msg.innerText = ''; }, 3000);
+      } catch (err) {
+        msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '保存');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const ex = getUrlParam('ex');
+      const exCodeInput = document.getElementById('exCodeInput');
+      if (ex && /[^A-Za-z0-9_-]/.test(ex)) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('ex');
+        window.history.replaceState({}, '', url.toString());
+        return;
+      }
+      if (ex && exCodeInput) { exCodeInput.value = ex; loadExhibition(); }
+    });
+  </script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+  </script>
+  <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/operator-auth.js"></script>
+  <script src="js/friendly-error.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) { if (user) setMsg('✅ ' + user.email + ' でログインしました。', '#1a73e8'); })
+        .catch(function (err) { setMsg(friendlyError(err, 'ログイン'), '#d93025'); });
+
+      window.operatorAuth.onAuthChange(function (user) {
+        var statusEl = document.getElementById('operatorAuthStatus');
+        if (user && statusEl) { statusEl.innerText = '🔓 ' + user.email + ' でログイン中'; statusEl.style.display = 'block'; }
+        else if (statusEl) { statusEl.style.display = 'none'; }
+        if (currentEx && typeof applyAuthorizationUI === 'function') applyAuthorizationUI();
+      });
+
+      window.signOutAndRetry = function () {
+        window.operatorAuth.signOut().then(function () {
+          _loadedForEx = '';
+          if (typeof applyAuthorizationUI === 'function') applyAuthorizationUI();
+        });
+      };
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        var normalized = email.toLowerCase();
+        if (currentExEmail && normalized !== currentExEmail) {
+          setMsg('このメールアドレスはこの展覧会の主催者として登録されていません。', '#d93025');
+          return;
+        }
+        btn.disabled = true; setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () { btn.disabled = false; setMsg('✉️ ' + email + ' にログイン用リンクを送信しました。メールを確認してリンクを開いてください。', '#1a73e8'); })
+          .catch(function (err) { btn.disabled = false; setMsg(friendlyError(err, '送信'), '#d93025'); });
+      };
+    })();
+  </script>
+  <div class="no-print" id="inquiryLink"></div>
+  <div class="no-print" id="versionFooter"></div>
+  <script src="version.js"></script>
+  <script>renderInquiryLink();renderVersionFooter();</script>
+</body>
+
+</html>

@@ -202,6 +202,12 @@
     </div>
 
     <div class="hub-card">
+      <h2>📋 作品リスト</h2>
+      <p>出品作品の一覧表を作って紙 / PDF に印刷。リストのタイトル・表示する項目・列の順番を選べます (作品は作品 ID 順)。価格表・作品目録・受付台帳などに。</p>
+      <a id="linkArtworkList" href="#" class="hub-button">→ 開く</a>
+    </div>
+
+    <div class="hub-card">
       <h2>🌐 Web 展覧会</h2>
       <p>来場者向けバーチャル展覧会 (gallery.html) の公開状態 / 来場者操作の設定と、会場 QR コードの発行。</p>
       <a id="linkWebExhibition" href="#" class="hub-button">→ 開く</a>
@@ -257,6 +263,7 @@
           document.getElementById('linkDashboard').href = 'dashboard.html?ex=' + ex;
           document.getElementById('linkAnalytics').href = 'analytics.html?ex=' + ex;
           document.getElementById('linkExports').href = 'admin/exports.html?ex=' + ex;
+          document.getElementById('linkArtworkList').href = 'artwork-list.html?ex=' + ex;
           document.getElementById('linkWebExhibition').href = 'web-exhibition.html?ex=' + ex;
           document.getElementById('linkAudit').href = 'admin/audit.html?ex=' + ex;
           // アドレスバーの ?ex= を最新に揃える (主催者ログインメールが正しい ex_code を持つように)
