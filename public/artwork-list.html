@@ -65,6 +65,18 @@
     }
     .col-move button:disabled { opacity: 0.3; cursor: default; }
 
+    /* 作品の並び順 (ドラッグ) */
+    #orderList { max-height: 360px; overflow-y: auto; }
+    .order-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border: 1px solid #e6ebf3; border-radius: 8px; margin-bottom: 6px; background: #fff;
+    }
+    .order-row .drag-handle { cursor: grab; color: #9aa7bd; font-size: 1.1em; user-select: none; flex-shrink: 0; }
+    .order-row .order-id { font-size: 0.8em; color: #1a73e8; font-weight: bold; min-width: 44px; flex-shrink: 0; }
+    .order-row .order-label { font-size: 0.9em; color: #1a2a4a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sortable-ghost { opacity: 0.4; }
+    .sortable-chosen { background: #eef3fb; }
+
     /* プレビュー / 印刷テーブル */
     #printArea { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     #printTitle { font-size: 1.4em; margin: 0 0 4px 0; color: #1a2a4a; }
@@ -171,8 +183,18 @@
     </div>
 
     <div class="card no-print">
+      <div class="card-title">作品の並び順</div>
+      <p style="font-size:0.85em; color:#666; margin:0 0 10px;">⋮⋮ をつかんでドラッグで並べ替えてください。この順番は<strong>この作品リストの印刷</strong>に使われます（作品 ID は変わりません）。</p>
+      <div id="orderList"></div>
+      <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
+        <button class="btn-primary" id="btnSaveOrder" onclick="saveOrder()">💾 並び順を保存</button>
+        <span class="msg-ok" id="orderMsg" style="margin-top:0;"></span>
+      </div>
+    </div>
+
+    <div class="card no-print">
       <div class="card-title">印刷</div>
-      <p style="font-size:0.85em; color:#666; margin:0 0 12px;">下のプレビューがそのまま印刷されます。登録済みの作品を<strong>作品 ID 順</strong>に表示します。</p>
+      <p style="font-size:0.85em; color:#666; margin:0 0 12px;">下のプレビューがそのまま印刷されます。登録済みの作品を<strong>上で設定した並び順</strong>で表示します。</p>
       <button class="btn-primary" onclick="window.print()">🖨 印刷 / PDF にする</button>
       <span id="countLabel" style="margin-left:10px; font-size:0.85em; color:#888;"></span>
     </div>
@@ -184,6 +206,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="field-defs.js"></script>
   <script>
     function getUrlParam(name) {
@@ -199,8 +222,10 @@
     let currentExEmail = '';
     let currentExName = '';
     let currentExData = null;
-    let artworks = [];          // status=1 のみ、作品ID順
-    let listConfig = null;      // { title, columns: [{ name, on }] }
+    let artworks = [];          // status=1 のみ (取得順)
+    let listConfig = null;      // { title, align, columns: [{ name, on }] }
+    let orderIds = [];          // 作品の表示順 (artwork_id の配列、展覧会で 1 本)
+    let _sortable = null;       // SortableJS インスタンス
     let _loadedForEx = '';      // 二重ロード防止
 
     // 列候補: 画像と pure SNS を除いた全項目 (artwork_id 含む)
@@ -212,6 +237,25 @@
 
     function labelOf(name) {
       return (FIELD_MAP[name] && FIELD_MAP[name].label) || name;
+    }
+
+    // 作品配列を表示順 (orderIds = artwork_id の並び) でソート。
+    // order に無い作品 (新規等) は末尾に、作品 ID (w00*) の数値順で並べる。
+    function applyArtworkOrder(arr, ids) {
+      const pos = {};
+      (ids || []).forEach((id, i) => { pos[String(id)] = i; });
+      const num = id => parseInt(String(id || '').replace(/[^\d]/g, ''), 10) || 0;
+      return arr.slice().sort((a, b) => {
+        const pa = pos[a.artwork_id], pb = pos[b.artwork_id];
+        const ha = pa !== undefined, hb = pb !== undefined;
+        if (ha && hb) return pa - pb;
+        if (ha) return -1;
+        if (hb) return 1;
+        return num(a.artwork_id) - num(b.artwork_id);
+      });
+    }
+    function orderedArtworks() {
+      return applyArtworkOrder(artworks, orderIds);
     }
 
     function defaultConfig() {
@@ -315,12 +359,17 @@
       try {
         const [arts, cfg] = await Promise.all([fetchArtworks(currentEx), fetchSavedConfig(currentEx)]);
         artworks = arts;
+        // 保存済みの表示順 (展覧会 1 本) を反映。新規作品は末尾に補完して全件を正規化。
+        const savedOrder = currentExData && Array.isArray(currentExData.artwork_order)
+          ? currentExData.artwork_order : null;
+        orderIds = applyArtworkOrder(artworks, savedOrder).map(a => a.artwork_id);
         listConfig = cfg ? normalizeConfig(cfg) : defaultConfig();
         document.getElementById('listTitle').value = listConfig.title;
         const _a = listConfig.align === 'center' ? 'center' : 'left';
         const _radio = document.querySelector('input[name="headerAlign"][value="' + _a + '"]');
         if (_radio) _radio.checked = true;
         buildColumnList();
+        buildOrderList();
         renderPreview();
       } catch (err) {
         document.getElementById('countLabel').innerText = '';
@@ -401,6 +450,53 @@
       renderPreview();
     }
 
+    // ── 作品の並び順 (ドラッグ) ──
+    function buildOrderList() {
+      const wrap = document.getElementById('orderList');
+      wrap.innerHTML = '';
+      orderedArtworks().forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'order-row';
+        row.dataset.id = a.artwork_id;
+        const labelText = (a.title || '（無題）') + (a.artist ? ' / ' + a.artist : '');
+        row.innerHTML =
+          '<span class="drag-handle">⋮⋮</span>' +
+          '<span class="order-id">' + escapeHtml(a.artwork_id) + '</span>' +
+          '<span class="order-label">' + escapeHtml(labelText) + '</span>';
+        wrap.appendChild(row);
+      });
+      if (window.Sortable) {
+        if (_sortable) { _sortable.destroy(); _sortable = null; }
+        _sortable = window.Sortable.create(wrap, {
+          animation: 150,
+          handle: '.drag-handle',
+          onEnd: () => {
+            orderIds = Array.from(wrap.children).map(el => el.dataset.id);
+            renderPreview();
+          }
+        });
+      }
+    }
+
+    async function saveOrder() {
+      const btn = document.getElementById('btnSaveOrder');
+      const msg = document.getElementById('orderMsg');
+      btn.disabled = true; msg.style.color = '#888'; msg.innerText = '保存中...';
+      try {
+        await firebase.firestore().collection('exhibitions').doc(currentEx).set({
+          artwork_order: orderIds,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        if (currentExData) currentExData.artwork_order = orderIds.slice();
+        msg.style.color = '#1a73e8'; msg.innerText = '✅ 並び順を保存しました。';
+        setTimeout(() => { msg.innerText = ''; }, 3000);
+      } catch (err) {
+        msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '保存');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     // ── プレビュー / 印刷テーブル生成 ──
     function formatCell(name, val) {
       const s = val == null ? '' : String(val);
@@ -438,7 +534,7 @@
       let html = '<table class="list"><thead><tr>';
       cols.forEach(n => { html += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
       html += '</tr></thead><tbody>';
-      artworks.forEach(a => {
+      orderedArtworks().forEach(a => {
         html += '<tr>';
         cols.forEach(n => {
           const cell = formatCell(n, a[n]);
