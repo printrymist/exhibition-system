@@ -1534,6 +1534,11 @@
             <span>mm</span>
           </div>
         </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid #eee;">
+          <button onclick="saveAsExhibitionTemplate()" style="padding:8px 16px; background:#1a73e8; color:#fff; border:none; border-radius:6px; font-size:0.92em; font-weight:bold; cursor:pointer;">💾 この展覧会のテンプレとして保存</button>
+          <div style="font-size:0.8em; color:#888; margin-top:6px;">※ 用紙・カードシート等のページ設定は、保存しないと次回開いたときに戻ります。③詳細編集タブに移動しなくても、ここで保存できます。</div>
+        </div>
       </div>
 
       <div id="templateTab">
@@ -3660,8 +3665,12 @@
           let val = resolved.value;
           if (!val) return;
           val = formatValue(val, item.currency || '', item.comma || false);
-          // 作家入力値は必ずエスケープしてから prefix/suffix と連結 (XSS 防御)
-          val = buildAffix(item.prefix, item.affixScale) + escapeHtmlAttr(val) + buildAffix(item.suffix, item.affixScale);
+          // 作家入力値は必ずエスケープしてから prefix/suffix と連結 (XSS 防御)。
+          // エスケープ後に改行 (\n) を <br> へ変換し、複数行入力 (作家コメント等) が
+          // 1 行に繋がって長くなり QR と重なるのを防ぐ (改行は入れたとおりに印字)。
+          val = buildAffix(item.prefix, item.affixScale)
+            + escapeHtmlAttr(val).replace(/\r?\n/g, '<br>')
+            + buildAffix(item.suffix, item.affixScale);
           const align = item.align !== 'inherit' ? item.align : s.textAlign;
           const weight = item.bold ? 'bold' : 'normal';
           const fstyle = item.italic ? 'italic' : 'normal';
