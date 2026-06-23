@@ -1462,6 +1462,38 @@
         </div>
 
         <div class="sub-section">
+          <div class="sub-section-title">カードシート印刷（エーワン等の型抜きカード用／使うときだけ ON）</div>
+          <label style="display:block; font-size:0.85em; margin-bottom:8px;">
+            <input type="checkbox" id="cardSheet" onchange="schedulePreviewUpdate()"> カードシートに印刷する（ON のときだけ下の寸法で配置。OFF は従来どおり）
+          </label>
+          <div class="margin-row">
+            <label>カード幅</label>
+            <input type="number" id="cardW" min="10" max="300" step="0.1" value="91" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+            <label style="margin-left:10px;">高さ</label>
+            <input type="number" id="cardH" min="10" max="300" step="0.1" value="55" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+          </div>
+          <div class="margin-row" style="margin-top:6px;">
+            <label>上余白</label>
+            <input type="number" id="cardTop" min="0" max="100" step="0.1" value="11" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+            <label style="margin-left:10px;">左余白</label>
+            <input type="number" id="cardLeft" min="0" max="100" step="0.1" value="14" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+          </div>
+          <div class="margin-row" style="margin-top:6px;">
+            <label>カード間隔 横</label>
+            <input type="number" id="cardGapH" min="0" max="50" step="0.1" value="0" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+            <label style="margin-left:10px;">縦</label>
+            <input type="number" id="cardGapV" min="0" max="50" step="0.1" value="0" style="width:60px;" onchange="schedulePreviewUpdate()">
+            <span>mm</span>
+          </div>
+          <div style="font-size:0.78em; color:#888; margin-top:6px;">A4 の名刺10面なら：幅 91×高さ 55mm／面付けは上の「列数 2・行数 5」／上余白≈11・左余白≈14・間隔 0 が目安（初期値）。テスト印刷してズレたら、上余白・左余白・間隔を 0.5mm 単位で微調整してください。</div>
+        </div>
+
+        <div class="sub-section">
           <div class="sub-section-title">固定文 (絶対配置)</div>
           <div class="fixed-text-row">
             <input type="text" id="fixedTextValue" placeholder="例: ギャラリー名">
@@ -2454,6 +2486,16 @@
       set('textMarginRight',  ps.textMarginRight);
       set('fontFamily',       ps.fontFamily);
       set('textColor',        ps.textColor);
+      // カードシート印刷の寸法・余白・間隔。未設定の古いテンプレは set() が skip する。
+      set('cardW',     ps.cardW);
+      set('cardH',     ps.cardH);
+      set('cardTop',   ps.cardTop);
+      set('cardLeft',  ps.cardLeft);
+      set('cardGapH',  ps.cardGapH);
+      set('cardGapV',  ps.cardGapV);
+      // ON/OFF は checkbox。未設定 (古いテンプレ) は false = 従来挙動に明示リセット。
+      const _csEl = document.getElementById('cardSheet');
+      if (_csEl) _csEl.checked = !!ps.cardSheet;
 
       // 固定文 (fixedText) ブロック対応。
       // 「📌 展覧会名ヘッダー」テンプレのように、ヘッダー帯のスタイルとデフォルト値を
@@ -3287,6 +3329,14 @@
         fontFamily: document.getElementById('fontFamily').value,
         paperMode: (paperModeEl && paperModeEl.value) || 'full',
         qrStickerLabel: (qrStickerLabelEl && qrStickerLabelEl.value) || 'artist_id',
+        // カードシート印刷 (オプトイン)。OFF のときは buildPrintHtml が従来 CSS を出す。
+        cardSheet: !!(document.getElementById('cardSheet') && document.getElementById('cardSheet').checked),
+        cardW: parseFloat((document.getElementById('cardW') || {}).value),
+        cardH: parseFloat((document.getElementById('cardH') || {}).value),
+        cardTop: parseFloat((document.getElementById('cardTop') || {}).value),
+        cardLeft: parseFloat((document.getElementById('cardLeft') || {}).value),
+        cardGapH: parseFloat((document.getElementById('cardGapH') || {}).value),
+        cardGapV: parseFloat((document.getElementById('cardGapV') || {}).value),
         items: items
       };
     }
@@ -3747,6 +3797,8 @@
     function buildCard(s, dims, art) {
       let pos = s.qrPosition;
       const offset = s.qrOffset;
+      // カードシート印刷では物理カードの縁があるので枠線を消す。通常は従来どおり薄い枠。
+      const cardBorder = s.cardSheet ? 'none' : '1px solid #ccc';
       // paperMode='qr_only' なら、紙には sticker label preset (5 択) を render。
       // items[] は **スマホ caption の本体** なので紙印刷側では使わない。
       // paperMode='full' なら従来通り items[] を紙に render。
@@ -3771,7 +3823,7 @@
         const floatDir = pos === 'wrap-left' ? 'left' : 'right';
         const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
         const textDiv = `<div style="padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
-        return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
+        return `<div class="cap-card" data-artwork-id="${cardId}" style="border:${cardBorder};padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
   <div style="float:${floatDir};margin:${mTop} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
   ${textDiv}
@@ -3806,7 +3858,7 @@
           break;
       }
       const textDiv = `<div style="${textPadTop}padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
-      return `<div class="cap-card" data-artwork-id="${cardId}" style="border:1px solid #ccc;padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
+      return `<div class="cap-card" data-artwork-id="${cardId}" style="border:${cardBorder};padding:5px 7px;position:relative;overflow:hidden;break-inside:avoid;height:100%;min-height:0;">
   ${ftHtml}
   <div style="${qrStyle}">${qrImg}</div>
   ${textDiv}
@@ -3920,19 +3972,20 @@ body {
       const pages = [];
       for (let i = 0; i < cards.length; i += dims.perPage) pages.push(cards.slice(i, i + dims.perPage));
 
+      // .page グリッドの分岐 (オプトイン)。カードシート印刷 (s.cardSheet=true) のときだけ
+      // カード寸法・余白・間隔を mm 直接指定して固定配置する。OFF (既定 / 既存テンプレ) の
+      // ときは従来とまったく同じ CSS が出る (= 使わない人・既存展覧会に影響なし)。
+      const _cn = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+      const pageRule = s.cardSheet
+        ? `width:${dims.pageW}; height:${dims.pageH}; padding:${_cn(s.cardTop, 0)}mm 0 0 ${_cn(s.cardLeft, 0)}mm; display:grid; grid-template-columns:repeat(${s.cols}, ${_cn(s.cardW, 50)}mm); grid-auto-rows:${_cn(s.cardH, 30)}mm; column-gap:${_cn(s.cardGapH, 0)}mm; row-gap:${_cn(s.cardGapV, 0)}mm; justify-content:start; align-content:start; overflow:hidden; page-break-after:always; break-after:page;`
+        : `width:${dims.pageW}; height:${dims.pageH}; padding:8mm; display:grid; grid-template-columns:repeat(${s.cols}, 1fr); grid-template-rows:repeat(${s.rows}, 1fr); gap:3mm; overflow:hidden; page-break-after:always; break-after:page;`;
+
       return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:${s.fontFamily}; background:white; }
-.page {
-  width:${dims.pageW}; height:${dims.pageH}; padding:8mm;
-  display:grid;
-  grid-template-columns:repeat(${s.cols}, 1fr);
-  grid-template-rows:repeat(${s.rows}, 1fr);
-  gap:3mm; overflow:hidden;
-  page-break-after:always; break-after:page;
-}
+.page { ${pageRule} }
 .page > div { min-height:0; min-width:0; }
 
 /* D-6: 入りきらないフィールドはプレビューで強調 (印刷物には出さない) */
@@ -4145,7 +4198,14 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         qrMarginV:       settings.qrMarginV,
         textMarginLeft:  settings.textMarginLeft,
         textMarginRight: settings.textMarginRight,
-        fontFamily:      settings.fontFamily || 'sans-serif'
+        fontFamily:      settings.fontFamily || 'sans-serif',
+        cardSheet:       !!settings.cardSheet,
+        cardW:           settings.cardW,
+        cardH:           settings.cardH,
+        cardTop:         settings.cardTop,
+        cardLeft:        settings.cardLeft,
+        cardGapH:        settings.cardGapH,
+        cardGapV:        settings.cardGapV
       };
       if (settings.fixedText) pageSettings.fixedText = settings.fixedText;
 
