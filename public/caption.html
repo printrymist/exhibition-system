@@ -1389,8 +1389,10 @@
                 <option value="bottom-center">下中央</option>
               </optgroup>
               <optgroup label="文字を QR で折り返し">
-                <option value="wrap-left">左に折り返し</option>
-                <option value="wrap-right">右に折り返し</option>
+                <option value="wrap-left">左上に折り返し</option>
+                <option value="wrap-right">右上に折り返し</option>
+                <option value="wrap-bottom-left">左下に折り返し</option>
+                <option value="wrap-bottom-right">右下に折り返し</option>
               </optgroup>
             </select>
           </div>
@@ -2195,8 +2197,9 @@
 
     function onQrPositionChange() {
       const pos = document.getElementById('qrPosition').value;
+      // QR 縦オフセットは top-* と上部 wrap でのみ有効 (下部 wrap は下端固定で未使用)。
       document.getElementById('qrOffsetItem').style.display =
-        (pos.startsWith('top') || pos.startsWith('wrap')) ? 'flex' : 'none';
+        (pos.startsWith('top') || pos === 'wrap-left' || pos === 'wrap-right') ? 'flex' : 'none';
     }
 
     // ─────────────────────────────────────────────────────────
@@ -3828,10 +3831,23 @@
       const cardId = (art.artwork_id || '').toString();
 
       const textColor = s.textColor || '#000000';
-      if (pos === 'wrap-left' || pos === 'wrap-right') {
-        const floatDir = pos === 'wrap-left' ? 'left' : 'right';
-        const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
+      if (pos === 'wrap-left' || pos === 'wrap-right' ||
+          pos === 'wrap-bottom-left' || pos === 'wrap-bottom-right') {
+        const isBottom = pos.indexOf('bottom') !== -1;
+        const floatDir = (pos === 'wrap-left' || pos === 'wrap-bottom-left') ? 'left' : 'right';
         const textDiv = `<div style="padding-left:${dims.tML};padding-right:${dims.tMR};color:${textColor};">${content}</div>`;
+        if (isBottom) {
+          // float を下端に落とすハック: .cap-wrap-bottom-* の ::before (高さ100%・幅0 の
+          // float) で柱を立て、QR を clear して柱の下=カード下端へ落とす。テキストは下隅の
+          // QR をよけて回り込む (= 上部 wrap の下部版)。
+          return `<div class="cap-card cap-wrap-bottom-${floatDir}" data-artwork-id="${cardId}" style="border:${cardBorder};padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
+  ${ftHtml}
+  <div style="float:${floatDir};clear:${floatDir};margin:${dims.qrMV} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
+  ${textDiv}
+  <div style="clear:both;"></div>
+</div>`;
+        }
+        const mTop = offset > 0 ? `calc(${offset}mm + ${dims.qrMV})` : dims.qrMV;
         return `<div class="cap-card" data-artwork-id="${cardId}" style="border:${cardBorder};padding:5px 7px;overflow:hidden;break-inside:avoid;height:100%;min-height:0;position:relative;">
   ${ftHtml}
   <div style="float:${floatDir};margin:${mTop} ${dims.qrMH} ${dims.qrMV} ${dims.qrMH};line-height:0;">${qrImg}</div>
@@ -3996,6 +4012,12 @@ body {
 body { font-family:${s.fontFamily}; background:white; }
 .page { ${pageRule} }
 .page > div { min-height:0; min-width:0; }
+/* QR を下端に落として文字を回り込ませる float-bottom ハック (右下/左下に折り返し)。
+   幅0 の透明な float の柱を立て、QR を clear して柱の下へ落とす。柱の高さは
+   「カード高さ − QR の高さ(画像+上下余白)」にする。100% にすると QR が枠の下に
+   はみ出して overflow:hidden で消えるため。 */
+.cap-wrap-bottom-left::before { content:""; float:left; width:0; height:calc(100% - ${dims.qrSizeMm} - ${dims.qrMV} - ${dims.qrMV}); }
+.cap-wrap-bottom-right::before { content:""; float:right; width:0; height:calc(100% - ${dims.qrSizeMm} - ${dims.qrMV} - ${dims.qrMV}); }
 
 /* D-6: 入りきらないフィールドはプレビューで強調 (印刷物には出さない) */
 @media screen {
