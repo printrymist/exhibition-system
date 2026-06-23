@@ -92,8 +92,12 @@
     table.list td.num { text-align: right; }
     .empty-note { color: #999; font-size: 0.9em; }
 
-    /* 印刷ページに必ず余白を持たせ、表の右端が用紙端 (印字不可領域) に入って切れるのを防ぐ。 */
-    @page { size: A4; margin: 10mm; }
+    /* 段組 (N 列) の作品リスト。grid-template-columns は段数に応じて inline で指定。 */
+    .list-sections { display: grid; gap: 6mm; align-items: start; }
+    .list-sections > div { min-width: 0; }
+
+    /* @page は用紙・向きの選択に応じて別 <style id="pageStyle"> で動的に設定する。
+       余白を必ず持たせ、表の右端が用紙端 (印字不可領域) に入って切れるのを防ぐ。 */
     @media print {
       body { background: white; max-width: none; margin: 0; padding: 0; color: #000; }
       .no-print { display: none !important; }
@@ -107,6 +111,7 @@
       tr { page-break-inside: avoid; }
     }
   </style>
+  <style id="pageStyle">@page { size: A4 portrait; margin: 10mm; }</style>
 </head>
 
 <body>
@@ -173,6 +178,20 @@
         見出しの配置：
         <label style="margin-left:8px;"><input type="radio" name="headerAlign" value="left" onchange="onAlignChange('left')"> 左寄せ</label>
         <label style="margin-left:12px;"><input type="radio" name="headerAlign" value="center" onchange="onAlignChange('center')"> 中央</label>
+      </div>
+      <div style="font-size:0.85em; color:#555; margin:14px 0 0;">
+        用紙：
+        <label style="margin-left:8px;"><input type="radio" name="paper" value="A4" onchange="onPaperChange('A4')"> A4</label>
+        <label style="margin-left:12px;"><input type="radio" name="paper" value="Letter" onchange="onPaperChange('Letter')"> Letter</label>
+      </div>
+      <div style="font-size:0.85em; color:#555; margin:8px 0 0;">
+        向き：
+        <label style="margin-left:8px;"><input type="radio" name="orientation" value="portrait" onchange="onOrientationChange('portrait')"> 縦</label>
+        <label style="margin-left:12px;"><input type="radio" name="orientation" value="landscape" onchange="onOrientationChange('landscape')"> 横</label>
+      </div>
+      <div style="font-size:0.85em; color:#555; margin:8px 0 0;">
+        段組：<select id="sectionCount" onchange="onSectionChange()" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px;"></select>
+        <span style="color:#aaa; font-size:0.92em;">（縦は最大2段、横は最大3段。作品を順に分けて横に並べます）</span>
       </div>
       <div style="font-size:0.85em; color:#555; margin:16px 0 8px;">表示する項目と並び順（チェックで表示 / ↑↓で列の左右順を調整）</div>
       <div id="columnList"></div>
@@ -264,7 +283,11 @@
       const rest = COLUMN_CANDIDATES.filter(n => on.indexOf(n) === -1);
       const columns = on.map(n => ({ name: n, on: true }))
         .concat(rest.map(n => ({ name: n, on: false })));
-      return { title: currentExName || '出品作品一覧', align: 'left', columns: columns };
+      return {
+        title: currentExName || '出品作品一覧', align: 'left',
+        paper: 'A4', orientation: 'portrait', sectionCount: 1,
+        columns: columns
+      };
     }
 
     function normalizeConfig(saved) {
@@ -277,9 +300,15 @@
         }
       });
       COLUMN_CANDIDATES.forEach(n => { if (!seen[n]) cols.push({ name: n, on: false }); });
+      const maxSec = saved.orientation === 'landscape' ? 3 : 2;
+      let sc = parseInt(saved.sectionCount, 10) || 1;
+      sc = Math.min(Math.max(sc, 1), maxSec);
       return {
         title: typeof saved.title === 'string' ? saved.title : (currentExName || '出品作品一覧'),
         align: saved.align === 'center' ? 'center' : 'left',
+        paper: saved.paper === 'Letter' ? 'Letter' : 'A4',
+        orientation: saved.orientation === 'landscape' ? 'landscape' : 'portrait',
+        sectionCount: sc,
         columns: cols
       };
     }
@@ -368,6 +397,13 @@
         const _a = listConfig.align === 'center' ? 'center' : 'left';
         const _radio = document.querySelector('input[name="headerAlign"][value="' + _a + '"]');
         if (_radio) _radio.checked = true;
+        const _paper = listConfig.paper === 'Letter' ? 'Letter' : 'A4';
+        const _pr = document.querySelector('input[name="paper"][value="' + _paper + '"]');
+        if (_pr) _pr.checked = true;
+        const _or = listConfig.orientation === 'landscape' ? 'landscape' : 'portrait';
+        const _orr = document.querySelector('input[name="orientation"][value="' + _or + '"]');
+        if (_orr) _orr.checked = true;
+        updateSectionOptions();
         buildColumnList();
         buildOrderList();
         renderPreview();
@@ -448,6 +484,79 @@
     function onAlignChange(a) {
       if (listConfig) listConfig.align = (a === 'center' ? 'center' : 'left');
       renderPreview();
+    }
+
+    // ── 用紙・向き・段組 ──
+    function onPaperChange(p) {
+      if (listConfig) listConfig.paper = (p === 'Letter' ? 'Letter' : 'A4');
+      renderPreview();
+    }
+    function onOrientationChange(o) {
+      if (!listConfig) return;
+      listConfig.orientation = (o === 'landscape' ? 'landscape' : 'portrait');
+      updateSectionOptions();  // 向きで段数の上限が変わる (縦=2 / 横=3)
+      renderPreview();
+    }
+    function onSectionChange() {
+      if (!listConfig) return;
+      const sel = document.getElementById('sectionCount');
+      listConfig.sectionCount = parseInt(sel.value, 10) || 1;
+      renderPreview();
+    }
+    // 向きに応じて段数の選択肢 (縦=1,2 / 横=1,2,3) を作り直し、現在値をクランプ。
+    function updateSectionOptions() {
+      const max = (listConfig.orientation === 'landscape') ? 3 : 2;
+      let sc = parseInt(listConfig.sectionCount, 10) || 1;
+      sc = Math.min(Math.max(sc, 1), max);
+      listConfig.sectionCount = sc;
+      const sel = document.getElementById('sectionCount');
+      if (!sel) return;
+      sel.innerHTML = '';
+      for (let i = 1; i <= max; i++) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i + '段';
+        if (i === sc) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+    function sectionCountValue() {
+      const max = (listConfig.orientation === 'landscape') ? 3 : 2;
+      const sc = parseInt(listConfig.sectionCount, 10) || 1;
+      return Math.min(Math.max(sc, 1), max);
+    }
+    // 用紙・向きを @page に反映 (印刷時のページサイズ)。
+    function applyPageStyle() {
+      const paper = listConfig.paper === 'Letter' ? 'Letter' : 'A4';
+      const orient = listConfig.orientation === 'landscape' ? 'landscape' : 'portrait';
+      const el = document.getElementById('pageStyle');
+      if (el) el.textContent = '@page { size: ' + paper + ' ' + orient + '; margin: 10mm; }';
+    }
+    // 作品を順番に n 等分 (サイズ差は最大 1)。段組で横に並べる用。
+    function chunkSequential(arr, n) {
+      n = Math.max(1, n);
+      const out = []; const total = arr.length;
+      const base = Math.floor(total / n); let rem = total % n; let idx = 0;
+      for (let i = 0; i < n; i++) {
+        const size = base + (rem > 0 ? 1 : 0); if (rem > 0) rem--;
+        out.push(arr.slice(idx, idx + size)); idx += size;
+      }
+      return out;
+    }
+    // 選択列 cols の作品 rows を 1 つの表 HTML にする (見出し付き)。
+    function buildListTableHtml(cols, rows) {
+      let h = '<table class="list"><thead><tr>';
+      cols.forEach(n => { h += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
+      h += '</tr></thead><tbody>';
+      rows.forEach(a => {
+        h += '<tr>';
+        cols.forEach(n => {
+          const cell = formatCell(n, a[n]);
+          h += '<td' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</td>';
+        });
+        h += '</tr>';
+      });
+      h += '</tbody></table>';
+      return h;
     }
 
     // ── 作品の並び順 (ドラッグ) ──
@@ -531,19 +640,12 @@
         document.getElementById('countLabel').innerText = '0 件';
         return;
       }
-      let html = '<table class="list"><thead><tr>';
-      cols.forEach(n => { html += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
-      html += '</tr></thead><tbody>';
-      orderedArtworks().forEach(a => {
-        html += '<tr>';
-        cols.forEach(n => {
-          const cell = formatCell(n, a[n]);
-          html += '<td' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</td>';
-        });
-        html += '</tr>';
-      });
-      html += '</tbody></table>';
-      wrap.innerHTML = html;
+      applyPageStyle();
+      const n = sectionCountValue();
+      const groups = chunkSequential(orderedArtworks(), n);
+      const inner = groups.map(g => '<div>' + buildListTableHtml(cols, g) + '</div>').join('');
+      wrap.innerHTML = '<div class="list-sections" style="grid-template-columns:repeat(' +
+        n + ',1fr);">' + inner + '</div>';
       document.getElementById('countLabel').innerText = artworks.length + ' 件';
     }
 
