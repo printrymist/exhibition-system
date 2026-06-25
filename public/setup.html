@@ -574,7 +574,7 @@
         gasCall({ action: 'confirmToken', token: token })
           .then(res => {
             if (!res.success) {
-              document.getElementById('confirmErrorMsg').innerText = res.error;
+              document.getElementById('confirmErrorMsg').innerText = res.error || 'リンクの確認に失敗しました。お手数ですが、もう一度お試しください。';
               document.getElementById('confirmErrorView').style.display = 'block';
               return;
             }
@@ -638,7 +638,7 @@
       gasCall({ action: 'submitApplication', exName, venue, startDate, organizer, email, sandbox })
         .then(res => {
           if (!res.success) {
-            errEl.innerText = 'エラー: ' + res.error;
+            errEl.innerText = res.error || 'セットアップに失敗しました。通信環境を確認して、もう一度お試しください。';
             errEl.style.display = 'block';
             btn.disabled = false;
             btn.innerText = '申請する';

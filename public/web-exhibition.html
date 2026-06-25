@@ -414,7 +414,7 @@
           console.error('loadExhibition failed:', err);
           document.getElementById('btnLoad').disabled = false;
           document.getElementById('exName').innerText = '';
-          document.getElementById('exError').innerText = 'エラー: ' + (err && err.message ? err.message : err);
+          document.getElementById('exError').innerText = friendlyError(err, '読み込み');
         });
     }
 

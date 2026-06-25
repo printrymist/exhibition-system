@@ -1737,7 +1737,7 @@
         showMsg('saveMsgSetup', msg, failed.length > 0 ? '#d93025' : '#1a73e8');
       } catch (err) {
         console.error('importFromExhibition failed:', err);
-        alert('読み込み失敗: ' + (err.message || err));
+        alert(friendlyError(err, '読み込み'));
       } finally {
         btn.disabled = false;
         btn.textContent = '読み込む';
@@ -1884,7 +1884,7 @@ ${fieldsText}
           if (res.success) {
             showMsg('sendGuideMsg', `✅ ${res.to} に送信しました。メールを確認のうえ作家へ転送してください。<br>作家が登録したら「③ 作品」で確認できます。<br><button type="button" onclick="switchTab('artworks')" style="margin-top:8px; padding:6px 14px; background:#1a73e8; color:#fff; border:none; border-radius:6px; font-size:0.9em; font-weight:bold; cursor:pointer;">「③ 作品」を見る →</button>`, '#1a73e8');
           } else {
-            showMsg('sendGuideMsg', 'Error: ' + res.error, '#d93025');
+            showMsg('sendGuideMsg', res.error || '送信に失敗しました。通信環境を確認して、もう一度お試しください。', '#d93025');
           }
         })
         .catch(err => {
@@ -2100,7 +2100,7 @@ ${fieldsText}
         const res = await window.fsSaveArtwork(currentEx, fullData);
         if (!res.success) {
           document.getElementById('btnSaveArt').disabled = false;
-          document.getElementById('inputError').innerText = 'Error: ' + res.error;
+          document.getElementById('inputError').innerText = res.error || '登録に失敗しました。通信環境を確認して、もう一度お試しください。';
           return;
         }
         const newId = res.artworkId;
@@ -2152,7 +2152,7 @@ ${fieldsText}
       window.fsGetArtworkList(currentEx)
         .then(res => {
           if (!res.success) {
-            document.getElementById('artworkList').innerHTML = '<div class="list-empty">Error: ' + res.error + '</div>';
+            document.getElementById('artworkList').innerHTML = '<div class="list-empty">' + (res.error || '作品一覧の取得に失敗しました。') + '</div>';
             return;
           }
           artworkCache = res.artworks;
@@ -2430,7 +2430,7 @@ ${fieldsText}
         artworks = res.artworks || [];
       } catch (e) {
         msgEl.style.color = '#d93025';
-        msgEl.textContent = '作品一覧の取得に失敗しました: ' + (e.message || e);
+        msgEl.textContent = friendlyError(e, '作品一覧の取得');
         return;
       }
 
@@ -2793,7 +2793,7 @@ ${fieldsText}
       } catch (err) {
         console.error('graduate failed:', err);
         msgEl.style.color = '#d93025';
-        msgEl.innerText = 'エラー: ' + (err && err.message ? err.message : err) +
+        msgEl.innerText = friendlyError(err, '操作') +
           '（途中で失敗した場合は、もう一度操作すると再試行できます）';
         gradBtns.forEach((b) => { b.disabled = false; });
       }

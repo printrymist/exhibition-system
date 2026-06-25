@@ -1025,7 +1025,7 @@
 
       } catch (e) {
         console.error('recompute failed:', e);
-        document.getElementById('metricMeta').innerText = 'エラー: ' + (e.message || e);
+        document.getElementById('metricMeta').innerText = friendlyError(e, '再集計');
       } finally {
         document.getElementById('loadingMsg').style.display = 'none';
       }
