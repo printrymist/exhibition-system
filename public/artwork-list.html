@@ -177,6 +177,17 @@
 
     <div class="card no-print">
       <div class="card-title">リスト設定</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+        <label style="font-size:0.85em; color:#555;">リスト
+          <select id="listSelect" onchange="onListSelect()" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:14px; margin-left:4px;"></select>
+        </label>
+        <button class="btn-auto-width" onclick="addList()">＋新規</button>
+        <button class="btn-auto-width" onclick="duplicateList()">複製</button>
+        <button class="btn-auto-width" onclick="deleteList()">削除</button>
+      </div>
+      <div style="font-size:0.85em; color:#555; margin-bottom:6px;">リストの名前（価格表・作品目録 など。リスト切替に使う管理名）</div>
+      <input type="text" id="listName" placeholder="例：価格表" oninput="onListNameInput()"
+        style="width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; margin-bottom:14px;">
       <div style="font-size:0.85em; color:#555; margin-bottom:6px;">リストのタイトル（印刷時の見出し）</div>
       <input type="text" id="listTitle" placeholder="例：出品作品一覧" oninput="onTitleInput()">
       <div style="font-size:0.85em; color:#555; margin:8px 0 0;">
@@ -251,8 +262,10 @@
     let currentExName = '';
     let currentExData = null;
     let artworks = [];          // status=1 のみ (取得順)
-    let listConfig = null;      // { title, align, columns: [{ name, on }] }
-    let orderIds = [];          // 作品の表示順 (artwork_id の配列、展覧会で 1 本)
+    let lists = [];             // 名前付きリストの配列 (各要素が 1 つの config)
+    let currentListIdx = 0;     // 編集中のリスト
+    let listConfig = null;      // = lists[currentListIdx] への参照 ({ id, name, title, align, columns: [{ name, on, weight }] })
+    let orderIds = [];          // 作品の表示順 (artwork_id の配列、展覧会で 1 本・全リスト共有)
     let _sortable = null;       // SortableJS インスタンス
     let _loadedForEx = '';      // 二重ロード防止
 
@@ -322,6 +335,120 @@
         sectionCount: sc,
         columns: cols
       };
+    }
+
+    // ── 名前付きリスト (複数) ──
+    function genListId() {
+      return 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+    // 1 つのリスト config に id / name を付けて正規化。
+    function normalizeList(saved) {
+      const cfg = normalizeConfig(saved || {});
+      cfg.id = (saved && saved.id) ? String(saved.id) : genListId();
+      cfg.name = (saved && typeof saved.name === 'string' && saved.name.trim())
+        ? saved.name : (cfg.title || 'リスト');
+      return cfg;
+    }
+    function defaultList(name) {
+      const c = defaultConfig();
+      c.id = genListId();
+      c.name = name || (c.title || 'リスト1');
+      return c;
+    }
+    // exhibitions doc から名前付きリスト群を読む。
+    // 新形式 artwork_list_configs (配列) を優先。無ければ旧 artwork_list_config (単一) を 1 件に変換。
+    function fetchSavedLists() {
+      const data = currentExData || {};
+      const rawArr = data.artwork_list_configs;
+      if (rawArr) {
+        try {
+          const arr = typeof rawArr === 'string' ? JSON.parse(rawArr) : rawArr;
+          if (Array.isArray(arr) && arr.length) return arr.map(normalizeList);
+        } catch (e) { console.warn('artwork_list_configs parse failed:', e); }
+      }
+      const legacy = data.artwork_list_config;
+      if (legacy) {
+        try {
+          const cfg = typeof legacy === 'string' ? JSON.parse(legacy) : legacy;
+          const one = normalizeList(cfg);
+          if (!one.name) one.name = 'リスト1';
+          return [one];
+        } catch (e) { console.warn('artwork_list_config parse failed:', e); }
+      }
+      return [defaultList('リスト1')];
+    }
+    // 選択中リスト (listConfig) の内容を画面コントロールに反映。
+    function applyListToControls() {
+      if (!listConfig) return;
+      const nameEl = document.getElementById('listName');
+      if (nameEl) nameEl.value = listConfig.name || '';
+      document.getElementById('listTitle').value = listConfig.title || '';
+      const _a = listConfig.align === 'center' ? 'center' : 'left';
+      const _radio = document.querySelector('input[name="headerAlign"][value="' + _a + '"]');
+      if (_radio) _radio.checked = true;
+      const _paper = listConfig.paper === 'Letter' ? 'Letter' : 'A4';
+      const _pr = document.querySelector('input[name="paper"][value="' + _paper + '"]');
+      if (_pr) _pr.checked = true;
+      const _or = listConfig.orientation === 'landscape' ? 'landscape' : 'portrait';
+      const _orr = document.querySelector('input[name="orientation"][value="' + _or + '"]');
+      if (_orr) _orr.checked = true;
+      updateSectionOptions();
+      buildColumnList();
+    }
+    // リスト選択ドロップダウンを作り直す (選択は currentListIdx)。
+    function rebuildListSelect() {
+      const sel = document.getElementById('listSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      lists.forEach((l, i) => {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = l.name || ('リスト' + (i + 1));
+        if (i === currentListIdx) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+    function onListSelect() {
+      const sel = document.getElementById('listSelect');
+      const i = parseInt(sel.value, 10) || 0;
+      currentListIdx = Math.min(Math.max(i, 0), lists.length - 1);
+      listConfig = lists[currentListIdx];
+      applyListToControls();
+      renderPreview();
+    }
+    function onListNameInput() {
+      if (!listConfig) return;
+      listConfig.name = document.getElementById('listName').value;
+      const sel = document.getElementById('listSelect');
+      if (sel && sel.options[currentListIdx]) {
+        sel.options[currentListIdx].textContent = listConfig.name || ('リスト' + (currentListIdx + 1));
+      }
+    }
+    function addList() {
+      const c = defaultList('リスト' + (lists.length + 1));
+      lists.push(c);
+      currentListIdx = lists.length - 1;
+      listConfig = c;
+      rebuildListSelect(); applyListToControls(); renderPreview();
+      const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
+    }
+    function duplicateList() {
+      if (!listConfig) return;
+      const copy = JSON.parse(JSON.stringify(listConfig));
+      copy.id = genListId();
+      copy.name = (listConfig.name || 'リスト') + ' のコピー';
+      lists.push(copy);
+      currentListIdx = lists.length - 1;
+      listConfig = copy;
+      rebuildListSelect(); applyListToControls(); renderPreview();
+      const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
+    }
+    function deleteList() {
+      if (lists.length <= 1) { alert('リストは最低 1 つ必要です。最後の 1 つは削除できません。'); return; }
+      if (!confirm('リスト「' + (listConfig.name || '') + '」を削除しますか？')) return;
+      lists.splice(currentListIdx, 1);
+      currentListIdx = Math.min(currentListIdx, lists.length - 1);
+      listConfig = lists[currentListIdx];
+      rebuildListSelect(); applyListToControls(); renderPreview();
     }
 
     // ── 展覧会読み込み ──
@@ -397,25 +524,16 @@
       _loadedForEx = currentEx;
       document.getElementById('countLabel').innerText = '読み込み中...';
       try {
-        const [arts, cfg] = await Promise.all([fetchArtworks(currentEx), fetchSavedConfig(currentEx)]);
-        artworks = arts;
-        // 保存済みの表示順 (展覧会 1 本) を反映。新規作品は末尾に補完して全件を正規化。
+        artworks = await fetchArtworks(currentEx);
+        // 保存済みの表示順 (展覧会 1 本・全リスト共有) を反映。新規作品は末尾に補完して全件を正規化。
         const savedOrder = currentExData && Array.isArray(currentExData.artwork_order)
           ? currentExData.artwork_order : null;
         orderIds = applyArtworkOrder(artworks, savedOrder).map(a => a.artwork_id);
-        listConfig = cfg ? normalizeConfig(cfg) : defaultConfig();
-        document.getElementById('listTitle').value = listConfig.title;
-        const _a = listConfig.align === 'center' ? 'center' : 'left';
-        const _radio = document.querySelector('input[name="headerAlign"][value="' + _a + '"]');
-        if (_radio) _radio.checked = true;
-        const _paper = listConfig.paper === 'Letter' ? 'Letter' : 'A4';
-        const _pr = document.querySelector('input[name="paper"][value="' + _paper + '"]');
-        if (_pr) _pr.checked = true;
-        const _or = listConfig.orientation === 'landscape' ? 'landscape' : 'portrait';
-        const _orr = document.querySelector('input[name="orientation"][value="' + _or + '"]');
-        if (_orr) _orr.checked = true;
-        updateSectionOptions();
-        buildColumnList();
+        lists = fetchSavedLists();
+        currentListIdx = 0;
+        listConfig = lists[currentListIdx];
+        rebuildListSelect();
+        applyListToControls();
         buildOrderList();
         renderPreview();
       } catch (err) {
@@ -444,14 +562,6 @@
       const num = id => parseInt(String(id || '').replace(/[^\d]/g, ''), 10) || 0;
       list.sort((a, b) => num(a.artwork_id) - num(b.artwork_id));
       return list;
-    }
-
-    async function fetchSavedConfig(ex) {
-      // exhibitions doc の artwork_list_config (JSON 文字列) を読む。
-      const v = currentExData && currentExData.artwork_list_config;
-      if (!v) return null;
-      try { return typeof v === 'string' ? JSON.parse(v) : v; }
-      catch (e) { console.warn('artwork_list_config parse failed:', e); return null; }
     }
 
     // ── 列の選択 / 並べ替え UI ──
@@ -728,13 +838,16 @@
       const btn = document.getElementById('btnSaveConfig');
       const msg = document.getElementById('configMsg');
       listConfig.title = document.getElementById('listTitle').value;
+      const _nameEl = document.getElementById('listName');
+      if (_nameEl && _nameEl.value.trim()) listConfig.name = _nameEl.value;
       btn.disabled = true; msg.style.color = '#888'; msg.innerText = '保存中...';
       try {
+        const payload = JSON.stringify(lists);
         await firebase.firestore().collection('exhibitions').doc(currentEx).set({
-          artwork_list_config: JSON.stringify(listConfig),
+          artwork_list_configs: payload,
           updatedAt: new Date().toISOString()
         }, { merge: true });
-        if (currentExData) currentExData.artwork_list_config = JSON.stringify(listConfig);
+        if (currentExData) currentExData.artwork_list_configs = payload;
         msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。';
         setTimeout(() => { msg.innerText = ''; }, 3000);
       } catch (err) {
