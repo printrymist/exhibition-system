@@ -458,6 +458,11 @@
 
 <body>
 
+  <!-- 画面上部固定の一時トースト (提出完了など、スクロール位置に関係なく見せたい通知用) -->
+  <div id="topToast" role="status" style="display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%);
+    max-width:90%; z-index:1100; background:#2e7d32; color:#fff; padding:12px 18px; border-radius:8px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.2); font-size:0.9em; line-height:1.5; text-align:center;"></div>
+
   <div style="text-align:center; margin-bottom:20px;">
     <h1 style="font-size:1.3em; color:#1a73e8;">✏️ 作品情報入力</h1>
     <p style="font-size:0.95em; color:#1a73e8; font-weight:bold; margin-top:4px;" id="exNameHeader"></p>
@@ -809,6 +814,17 @@
       }
     }
 
+    // 画面上部の一時トースト (スクロール位置に関係なく見える)。提出完了の明示などに使う。
+    let _topToastTimer = null;
+    function showTopToast(text, ms) {
+      const t = document.getElementById('topToast');
+      if (!t) return;
+      t.textContent = text;
+      t.style.display = 'block';
+      if (_topToastTimer) clearTimeout(_topToastTimer);
+      _topToastTimer = setTimeout(() => { t.style.display = 'none'; _topToastTimer = null; }, ms || 6000);
+    }
+
     // 「✓ 提出する」ボタンの handler。is_locked=true を Firestore に書いて作家側を read-only に固定する。
     // 解除は主催者が register.html から行う必要がある (CF 側で artist 経路の unlock は禁止)。
     async function submitArtworkLock(art) {
@@ -873,6 +889,8 @@
           // パネル全体を read-only モードで再構築
           buildEditPanel(card, art);
         }
+        // 提出できたことを明示 (カードのロック表示だけだと成功が分かりにくい)。
+        showTopToast('✅「' + label + '」を提出しました。あとは主催者にお任せください。再編集が必要なときは主催者にご連絡ください。');
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
         alert(friendlyError(e, '提出'));
