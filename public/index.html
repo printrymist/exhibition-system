@@ -580,7 +580,7 @@
         regEditBtn:           "修正する",
         regDoneTitle:         "登録完了！",
         regDoneMsg:           "作品情報が正常に保存されました。",
-        regError:             "登録エラー: ",
+        regError:             "登録に失敗しました。通信環境を確認して、もう一度お試しください。",
       },
       en: {
         globalLoading:        "Checking artwork status...",
@@ -618,7 +618,7 @@
         regEditBtn:           "Edit",
         regDoneTitle:         "Registered!",
         regDoneMsg:           "Artwork information saved successfully.",
-        regError:             "Registration error: ",
+        regError:             "Registration failed. Please check your connection and try again.",
       }
     };
 
@@ -1031,8 +1031,9 @@
           if (msgEl) msgEl.textContent = '作品情報が正常に保存されました。（作家情報を' + updatedArtistCount + '件の作品に反映）';
         }
       } catch (err) {
+        console.error('artist registration failed:', err);
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        alert(t('regError') + err.message);
+        alert(t('regError'));
       }
     }
 
@@ -1058,8 +1059,9 @@
         document.getElementById('ansLoading').style.display = 'none';
         ansRenderData(res, ex, id);
       }).catch(err => {
+        console.error('fsGetArtworkData failed:', err);
         document.getElementById('ansLoading').innerHTML =
-          '<div style="color:red">通信エラー: ' + err.message + '</div>';
+          '<div style="color:red">通信エラーが発生しました。時間をおいて、もう一度お試しください。</div>';
       });
     }
 
@@ -1636,7 +1638,7 @@
       } catch (err) {
         console.error('artist photo update failed:', err);
         msgEl.style.color = '#d93025';
-        msgEl.textContent = 'エラー: ' + (err && err.message ? err.message : err);
+        msgEl.textContent = friendlyError(err, '写真の更新');
       } finally {
         btn.disabled = false;
         fileInput.value = '';  // 同じファイルの再選択を可能にする

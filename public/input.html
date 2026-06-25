@@ -591,10 +591,10 @@
           }
 
           let userError;
-          if (code === 'timeout')      userError = 'GAS の応答が遅延しています。少し待ってからもう一度お試しください。';
+          if (code === 'timeout')      userError = 'サーバーの応答が遅延しています。少し待ってからもう一度お試しください。';
           else if (code === 'network') userError = 'ネットワーク接続を確認してください。';
-          else if (code === 'http')    userError = `サーバーエラー (HTTP ${err.status}) が発生しました。`;
-          else                          userError = err.message || '通信エラーが発生しました。';
+          else if (code === 'http')    userError = 'サーバーでエラーが発生しました。少し待ってからもう一度お試しください。';
+          else                          userError = '通信エラーが発生しました。時間をおいて、もう一度お試しください。';
 
           return { success: false, error: userError, code: code };
         });
@@ -694,7 +694,7 @@
           document.getElementById('btnSearch').disabled = false;
           if (!res.success) {
             document.getElementById('searchOk').innerText = '';
-            document.getElementById('searchError').innerText = res.error;
+            document.getElementById('searchError').innerText = res.error || '読み込みに失敗しました。通信環境を確認して、もう一度お試しください。';
             return;
           }
           existingWorks = res.artworks;
@@ -1024,7 +1024,7 @@
         const res = await window.fsSaveArtwork(ex, data);
         if (!res.success) {
           document.getElementById('btnNewSave').disabled = false;
-          document.getElementById('newFormError').innerText = 'Error: ' + res.error;
+          document.getElementById('newFormError').innerText = res.error || '登録に失敗しました。通信環境を確認して、もう一度お試しください。';
           return;
         }
         const newId = res.artworkId;
@@ -1049,7 +1049,7 @@
         await finalizeSaveSuccess(newId);
       } catch (err) {
         document.getElementById('btnNewSave').disabled = false;
-        document.getElementById('newFormError').innerText = 'Error: ' + err.message;
+        document.getElementById('newFormError').innerText = friendlyError(err, '登録');
       }
     }
 
@@ -1211,11 +1211,11 @@
           existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData); if (a.artist === originalArtist) return Object.assign({}, a, artistData); return a; });
           const titleEl = card.querySelector('.artwork-card-title'); if (titleEl) titleEl.textContent = artworkData.title || artworkData.title_en || '（タイトルなし）';
         } else {
-          if (msgEl) { msgEl.textContent = 'Error: ' + res.error; msgEl.style.color = '#d93025'; }
+          if (msgEl) { msgEl.textContent = res.error || '更新に失敗しました。通信環境を確認して、もう一度お試しください。'; msgEl.style.color = '#d93025'; }
         }
       } catch (err) {
         if (btnSave) btnSave.disabled = false;
-        if (msgEl) { msgEl.textContent = 'Error: ' + err.message; msgEl.style.color = '#d93025'; }
+        if (msgEl) { msgEl.textContent = friendlyError(err, '更新'); msgEl.style.color = '#d93025'; }
       }
     }
 
