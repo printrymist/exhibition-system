@@ -64,6 +64,11 @@
       background: #fff; border-radius: 4px; cursor: pointer; font-size: 11px; color: #1a73e8;
     }
     .col-move button:disabled { opacity: 0.3; cursor: default; }
+    .col-row .col-w { width: 46px; padding: 4px 6px; border: 1px solid #ccd; border-radius: 6px; font-size: 12px; text-align: center; flex-shrink: 0; }
+    .col-row.off .col-w { opacity: 0.5; }
+    .col-row .col-w-label { color: #9aa7bd; font-size: 0.78em; flex-shrink: 0; }
+    .btn-auto-width { padding: 6px 12px; background: #fff; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .btn-auto-width:hover { background: #f0f6ff; }
 
     /* 作品の並び順 (ドラッグ) */
     #orderList { max-height: 360px; overflow-y: auto; }
@@ -193,7 +198,11 @@
         段組：<select id="sectionCount" onchange="onSectionChange()" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px;"></select>
         <span style="color:#aaa; font-size:0.92em;">（縦は最大2段、横は最大3段。作品を順に分けて横に並べます）</span>
       </div>
-      <div style="font-size:0.85em; color:#555; margin:16px 0 8px;">表示する項目と並び順（チェックで表示 / ↑↓で列の左右順を調整）</div>
+      <div style="font-size:0.85em; color:#555; margin:16px 0 8px;">表示する項目・並び順・列の幅（チェックで表示 / ↑↓で左右順 / 幅は比率）</div>
+      <div style="margin-bottom:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button class="btn-auto-width" onclick="autoFitWidths()">📐 データから列幅を自動調整</button>
+        <span style="color:#aaa; font-size:0.8em;">作品の中身から推奨幅を計算します（後から各列で微調整できます）</span>
+      </div>
       <div id="columnList"></div>
       <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
         <button class="btn-primary" id="btnSaveConfig" onclick="saveConfig()">💾 設定を保存</button>
@@ -296,7 +305,9 @@
       const seen = {};
       (saved.columns || []).forEach(c => {
         if (c && c.name && COLUMN_CANDIDATES.indexOf(c.name) !== -1 && !seen[c.name]) {
-          cols.push({ name: c.name, on: !!c.on }); seen[c.name] = true;
+          const col = { name: c.name, on: !!c.on };
+          if (Number(c.weight) > 0) col.weight = Number(c.weight);
+          cols.push(col); seen[c.name] = true;
         }
       });
       COLUMN_CANDIDATES.forEach(n => { if (!seen[n]) cols.push({ name: n, on: false }); });
@@ -461,7 +472,18 @@
         cb.onchange = () => { col.on = cb.checked; row.classList.toggle('off', !col.on); renderPreview(); };
         const label = document.createElement('label'); label.setAttribute('for', cb.id);
         label.innerHTML = escapeHtml(labelOf(col.name)) + ' <span class="field-hint">' + escapeHtml(col.name) + '</span>';
+        const wLabel = document.createElement('span'); wLabel.className = 'col-w-label'; wLabel.textContent = '幅';
+        const wInput = document.createElement('input'); wInput.type = 'number'; wInput.className = 'col-w';
+        wInput.min = '1'; wInput.step = '1'; wInput.placeholder = '自動';
+        wInput.value = (Number(col.weight) > 0) ? col.weight : '';
+        wInput.title = '列幅の比率（空欄＝均等）';
+        wInput.oninput = () => {
+          const v = parseFloat(wInput.value);
+          if (v > 0) col.weight = v; else delete col.weight;
+          renderPreview();
+        };
         row.appendChild(move); row.appendChild(cb); row.appendChild(label);
+        row.appendChild(wLabel); row.appendChild(wInput);
         wrap.appendChild(row);
       });
     }
@@ -542,9 +564,60 @@
       }
       return out;
     }
+    // 文字列の表示幅 (半角=1 / 全角・日本語=2)。改行を含む場合は最も長い行で測る。
+    function displayWidth(s) {
+      s = String(s == null ? '' : s);
+      let max = 0;
+      s.split('\n').forEach(line => {
+        let w = 0;
+        for (const ch of line) {
+          w += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1;
+        }
+        if (w > max) max = w;
+      });
+      return max;
+    }
+    // 昇順ソート済みでなくてよい配列の p 分位 (0〜1)。
+    function percentile(arr, p) {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x, y) => x - y);
+      const idx = Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))));
+      return a[idx];
+    }
+    // 表示中の作品データから、ON 列の推奨幅 (比率) を計算して各列に weight を設定。
+    // 代表値は 90 パーセンタイル付近 (1 件だけ極端に長い値に引っ張られない) + 見出し幅を下限に。
+    function autoFitWidths() {
+      if (!listConfig) return;
+      const onCols = listConfig.columns.filter(c => c.on);
+      if (onCols.length === 0) return;
+      const arts = orderedArtworks();
+      const raw = onCols.map(c => {
+        const widths = arts.map(a => displayWidth(a[c.name]));
+        const rep = Math.max(percentile(widths, 0.9), displayWidth(labelOf(c.name)));
+        return Math.max(rep, 1);
+      });
+      const min = Math.max(1, Math.min.apply(null, raw));
+      onCols.forEach((c, i) => { c.weight = Math.max(1, Math.round(raw[i] / min)); });
+      buildColumnList();
+      renderPreview();
+    }
+    // ON 列 cols の幅を % に正規化 (weight 未設定は 1 = 均等)。
+    function colWidthsPercent(cols) {
+      const ws = cols.map(n => {
+        const c = listConfig.columns.find(x => x.name === n);
+        const w = (c && Number(c.weight) > 0) ? Number(c.weight) : 1;
+        return w;
+      });
+      const sum = ws.reduce((a, b) => a + b, 0) || cols.length;
+      return ws.map(w => (w / sum * 100));
+    }
+
     // 選択列 cols の作品 rows を 1 つの表 HTML にする (見出し付き)。
     function buildListTableHtml(cols, rows) {
-      let h = '<table class="list"><thead><tr>';
+      const widths = colWidthsPercent(cols);
+      let h = '<table class="list"><colgroup>';
+      widths.forEach(p => { h += '<col style="width:' + p.toFixed(2) + '%">'; });
+      h += '</colgroup><thead><tr>';
       cols.forEach(n => { h += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
       h += '</tr></thead><tbody>';
       rows.forEach(a => {
