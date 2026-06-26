@@ -6,8 +6,8 @@
 //   v1.X.Y   — バグ修正 / 軽微な改善 (Y が増える)
 //   v2.0.0+  — 破壊的変更
 // 詳細な変更履歴はリポジトリ root の CHANGELOG.md を参照。
-window.APP_VERSION = 'v0.17.1';
-window.APP_RELEASED_AT = '2026-06-23';
+window.APP_VERSION = 'v0.18.0';
+window.APP_RELEASED_AT = '2026-06-26';
 window.APP_NAME = '展覧会システム';
 
 // 任意の親要素にバージョンフッタを差し込むヘルパ。
