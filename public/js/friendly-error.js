@@ -9,7 +9,9 @@
 (function () {
   'use strict';
 
-  function friendlyError(err, actionLabel) {
+  // contactHint: 任意。再試行系の汎用エラーのときだけ末尾に添える連絡先の案内
+  //   (例: '解決しないときは主催者にご連絡ください。')。不慣れな利用者向けの出口。
+  function friendlyError(err, actionLabel, contactHint) {
     var label = actionLabel || '処理';
     try { console.error(label + ' failed:', err); } catch (_e) {}
 
@@ -18,12 +20,14 @@
 
     // Cloud Function (HttpsError) の message は日本語化済みなので見せてよい。
     // 例: code = 'functions/permission-denied', message = 'この作品はロックされています'
+    // (業務上の理由なので連絡先ヒントは添えない)
     if (typeof code === 'string' && code.indexOf('functions/') === 0 && msg) {
       return msg;
     }
 
     // それ以外 (JavaScript / Firestore 等の英語例外) は日本語の汎用文に統一する。
-    return label + 'に失敗しました。通信環境を確認して、もう一度お試しください。';
+    var base = label + 'に失敗しました。通信環境を確認して、もう一度お試しください。';
+    return contactHint ? base + contactHint : base;
   }
 
   window.friendlyError = friendlyError;

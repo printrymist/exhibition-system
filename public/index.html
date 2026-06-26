@@ -580,7 +580,7 @@
         regEditBtn:           "修正する",
         regDoneTitle:         "登録完了！",
         regDoneMsg:           "作品情報が正常に保存されました。",
-        regError:             "登録に失敗しました。通信環境を確認して、もう一度お試しください。",
+        regError:             "登録に失敗しました。通信環境を確認して、もう一度お試しください。解決しないときは主催者にご連絡ください。",
       },
       en: {
         globalLoading:        "Checking artwork status...",
@@ -618,7 +618,7 @@
         regEditBtn:           "Edit",
         regDoneTitle:         "Registered!",
         regDoneMsg:           "Artwork information saved successfully.",
-        regError:             "Registration failed. Please check your connection and try again.",
+        regError:             "Registration failed. Please check your connection and try again. If the problem continues, please contact the organizer.",
       }
     };
 
@@ -1638,7 +1638,7 @@
       } catch (err) {
         console.error('artist photo update failed:', err);
         msgEl.style.color = '#d93025';
-        msgEl.textContent = friendlyError(err, '写真の更新');
+        msgEl.textContent = friendlyError(err, '写真の更新', '解決しないときは主催者にご連絡ください。');
       } finally {
         btn.disabled = false;
         fileInput.value = '';  // 同じファイルの再選択を可能にする

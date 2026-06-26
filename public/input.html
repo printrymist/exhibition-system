@@ -900,7 +900,7 @@
         showTopToast('✅「' + label + '」を提出しました。あとは主催者にお任せください。再編集が必要なときは主催者にご連絡ください。');
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
-        alert(friendlyError(e, '提出'));
+        alert(friendlyError(e, '提出', '解決しないときは主催者にご連絡ください。'));
         if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
       }
     }
@@ -1056,7 +1056,7 @@
         await finalizeSaveSuccess(newId);
       } catch (err) {
         document.getElementById('btnNewSave').disabled = false;
-        document.getElementById('newFormError').innerText = friendlyError(err, '登録');
+        document.getElementById('newFormError').innerText = friendlyError(err, '登録', '解決しないときは主催者にご連絡ください。');
       }
     }
 
@@ -1222,7 +1222,7 @@
         }
       } catch (err) {
         if (btnSave) btnSave.disabled = false;
-        if (msgEl) { msgEl.textContent = friendlyError(err, '更新'); msgEl.style.color = '#d93025'; }
+        if (msgEl) { msgEl.textContent = friendlyError(err, '更新', '解決しないときは主催者にご連絡ください。'); msgEl.style.color = '#d93025'; }
       }
     }
 
