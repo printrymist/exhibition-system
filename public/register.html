@@ -2082,19 +2082,44 @@ ${artistMessage}
       return val;
     }
 
-    function resizeImageToDataUrl(file, maxEdge) {
+    // data:URL (base64) のデコード後バイト数を概算。
+    function _dataUrlBytes(durl) {
+      const i = durl.indexOf(',');
+      if (i < 0) return durl.length;
+      const b64 = durl.slice(i + 1);
+      const pad = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+      return Math.floor(b64.length * 3 / 4) - pad;
+    }
+
+    // 画像を長辺 maxEdge 以下に縮小して JPEG 化。さらに出来上がりが maxBytes (CF の上限)
+    // に収まるよう、画質 → 寸法 の順に自動で詰める (アップロード時にサイズ上限エラーを出さない)。
+    function resizeImageToDataUrl(file, maxEdge, maxBytes) {
       return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
         const img = new Image();
         img.onload = () => {
           URL.revokeObjectURL(url);
-          const longEdge = Math.max(img.width, img.height);
-          const scale = longEdge > maxEdge ? maxEdge / longEdge : 1;
-          const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          const budget = maxBytes || (950 * 1024); // 安全マージン込み (CF は 1MB)
           const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
+          const ctx = canvas.getContext('2d');
+          const qualities = [0.85, 0.78, 0.7, 0.62, 0.55];
+          let edge = maxEdge;
+          let last = null;
+          while (true) {
+            const longEdge = Math.max(img.width, img.height);
+            const scale = longEdge > edge ? edge / longEdge : 1;
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            canvas.width = w; canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+            for (let i = 0; i < qualities.length; i++) {
+              const durl = canvas.toDataURL('image/jpeg', qualities[i]);
+              last = durl;
+              if (_dataUrlBytes(durl) <= budget) { resolve(durl); return; }
+            }
+            if (edge <= 800) { resolve(last); return; } // これ以上は縮めない (最後は CF が判定)
+            edge = Math.round(edge * 0.8);
+          }
         };
         img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
         img.src = url;
