@@ -455,7 +455,8 @@
         document.querySelectorAll('#newArea input, #newArea textarea, #newArea select').forEach(el => el.disabled = true);
       } catch (err) {
         btn.disabled = false;
-        showSubmitMsg('Error: ' + err.message, 'error');
+        console.error('inquiry submit failed:', err);
+        showSubmitMsg(friendlyError(err, '送信'), 'error');
       }
     }
 
@@ -581,7 +582,8 @@
         btn.disabled = false;
       } catch (err) {
         btn.disabled = false;
-        showFollowupMsg('Error: ' + err.message, 'error');
+        console.error('inquiry followup failed:', err);
+        showFollowupMsg(friendlyError(err, '送信'), 'error');
       }
     }
   </script>
