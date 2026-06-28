@@ -2,7 +2,7 @@
 
 展覧会を主催する方向けの手順書です。展覧会の作成からキャプション印刷、Web 展覧会の公開、データ書き出しまでを順番に説明します。
 
-> **現在のバージョン**は各画面下部のフッタに表示されています (例: `展覧会システム v0.9.0 (2026-05-16)`)。サポートに問い合わせる際は併せてお伝えください。リリースごとの変更点は [CHANGELOG.md](https://github.com/printrymist/exhibition-system/blob/main/CHANGELOG.md) にまとめています。
+> **現在のバージョン**は各画面下部のフッタに表示されています (例: `Qriine v0.18.1 (2026-06-26)`)。サポートに問い合わせる際は併せてお伝えください。リリースごとの変更点は [CHANGELOG.md](https://github.com/printrymist/exhibition-system/blob/main/CHANGELOG.md) にまとめています。
 
 ---
 
