@@ -772,6 +772,11 @@
 
 <body>
 
+  <!-- 画面上部固定の一時トースト (コピー/送信完了など、スクロール位置に関係なく見せる通知用) -->
+  <div id="topToast" role="status" style="display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%);
+    max-width:90%; z-index:1100; background:#2e7d32; color:#fff; padding:12px 18px; border-radius:8px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.2); font-size:0.9em; line-height:1.5; text-align:center;"></div>
+
   <!-- B-3: offline-banner.js が body 先頭に #offlineBanner を自動注入する -->
 
   <!-- ========== モーダル群 (タブ外に置かないと該当タブが非表示のとき hidden になる) ========== -->
@@ -950,14 +955,14 @@
             <div style="display:flex; gap:8px; margin-bottom:12px;">
               <input type="text" id="guideUrl" readonly onclick="this.select()"
                 style="flex:1; min-width:0; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fff; box-sizing:border-box;">
-              <button type="button" onclick="copyGuideUrl()"
+              <button type="button" onclick="copyGuideUrl(this)"
                 style="white-space:nowrap; padding:8px 14px; background:#fff; color:#1a73e8; border:1px solid #1a73e8; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">リンクをコピー</button>
             </div>
             <label style="display:block; font-size:0.82em; color:#555; margin-bottom:4px;">案内文（このままコピーして作家へ送れます）</label>
             <textarea id="guideText" readonly onclick="this.select()" rows="12"
               style="width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fff; box-sizing:border-box; font-family:inherit; resize:vertical;"></textarea>
             <div style="margin-top:8px;">
-              <button type="button" onclick="copyGuideText()"
+              <button type="button" onclick="copyGuideText(this)"
                 style="padding:8px 14px; background:#fff; color:#1a73e8; border:1px solid #1a73e8; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">案内文をコピー</button>
             </div>
             <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #c5d9f7;">
@@ -1904,28 +1909,51 @@ ${artistMessage}
       showMsg('sendGuideMsg', '✅ 招待リンクと案内文を作成しました。下のボタンでコピーして作家へお送りください。', '#1a73e8');
     }
 
-    // クリップボードへコピー (失敗時は一時 textarea で fallback)。
-    function _copyToClipboard(text, okMsg) {
-      const done = () => showMsg('sendGuideMsg', okMsg, '#1a73e8');
+    // 画面上部の一時トースト (スクロール位置に関係なく見える)。コピー/送信完了の明示に使う。
+    let _topToastTimer = null;
+    function showTopToast(text, ms) {
+      const t = document.getElementById('topToast');
+      if (!t) return;
+      t.textContent = text;
+      t.style.display = 'block';
+      if (_topToastTimer) clearTimeout(_topToastTimer);
+      _topToastTimer = setTimeout(() => { t.style.display = 'none'; _topToastTimer = null; }, ms || 6000);
+    }
+    // ボタンを一瞬「✅ …」に変えて、押した手元で結果が分かるようにする。
+    function flashBtn(btn, label) {
+      if (!btn) return;
+      const orig = btn.textContent;
+      btn.textContent = label; btn.disabled = true;
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1800);
+    }
+
+    // クリップボードへコピー (失敗時は一時 textarea で fallback)。成功で onOk を呼ぶ。
+    function _copyToClipboard(text, onOk) {
       const fallback = () => {
         const ta = document.createElement('textarea');
         ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
         document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); done(); }
-        catch (e) { showMsg('sendGuideMsg', 'コピーできませんでした。枠内を選んで手動でコピーしてください。', '#d93025'); }
+        try { document.execCommand('copy'); onOk(); }
+        catch (e) { showTopToast('コピーできませんでした。枠内を選んで手動でコピーしてください。'); }
         document.body.removeChild(ta);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done).catch(fallback);
+        navigator.clipboard.writeText(text).then(onOk).catch(fallback);
       } else { fallback(); }
     }
-    function copyGuideUrl() {
+    function copyGuideUrl(btn) {
       if (!_guideUrl) return;
-      _copyToClipboard(_guideUrl, '✅ 招待リンクをコピーしました。');
+      _copyToClipboard(_guideUrl, () => {
+        flashBtn(btn, '✅ コピーしました');
+        showTopToast('✅ 招待リンクをコピーしました。LINE・メール等に貼り付けて作家へお送りください。');
+      });
     }
-    function copyGuideText() {
+    function copyGuideText(btn) {
       if (!_guideArtistMessage) return;
-      _copyToClipboard(_guideArtistMessage, '✅ 案内文をコピーしました。');
+      _copyToClipboard(_guideArtistMessage, () => {
+        flashBtn(btn, '✅ コピーしました');
+        showTopToast('✅ 案内文をコピーしました。LINE・メール等に貼り付けて作家へお送りください。');
+      });
     }
 
     // 補助: 案内文を主催者自身のメールに送る (受信後に作家へ送付)。
@@ -1944,6 +1972,8 @@ ${artistMessage}
           btn.disabled = false;
           if (res.success) {
             showMsg('sendGuideMsg', `✅ ${res.to} に送信しました。メールを確認のうえ作家へお送りください。`, '#1a73e8');
+            flashBtn(btn, '✅ 送信しました');
+            showTopToast(`✅ あなた（${res.to}）宛に送信しました。メールを確認して、その内容を作家へお送りください。`);
           } else {
             showMsg('sendGuideMsg', res.error || '送信に失敗しました。通信環境を確認して、もう一度お試しください。', '#d93025');
           }
