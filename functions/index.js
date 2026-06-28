@@ -1,5 +1,5 @@
 /**
- * Cloud Functions for Rohei Printer System
+ * Cloud Functions for Qriine (Firebase project: rohei-printer-system)
  *
  * - sendSignInLink:
  *   Firebase Auth の Email Link テンプレートが日本語非対応かつ本文編集不可な
@@ -82,9 +82,9 @@ const CLAUDE_API_KEY = defineSecret("CLAUDE_API_KEY");
 // 一致させること。Cloud Function 側でも email auth を二重チェックする。
 const OPERATOR_EMAILS = ["rymist1@gmail.com"];
 
-const SMTP_FROM_NAME = "Rohei Printer System";
+const SMTP_FROM_NAME = "Qriine";
 const SMTP_FROM_ADDR = "noreply.rohei.printer@gmail.com";
-const SMTP_REPLY_TO = "\"Rohei Printer Support\" <noreply.rohei.printer+contact@gmail.com>";
+const SMTP_REPLY_TO = "\"Qriine Support\" <noreply.rohei.printer+contact@gmail.com>";
 
 // continueUrl からサインインリンクの目的を推定して、
 // 件名 / 本文 / ボタン文言を文脈ごとに切り替える。
@@ -178,7 +178,7 @@ async function deriveSignInLinkContext(continueUrl) {
   } else if (exCode) {
     subjectExPart = "(" + exCode + ") — ";
   }
-  const subject = "[Rohei Printer System] " + subjectExPart + ctx.label;
+  const subject = "[Qriine] " + subjectExPart + ctx.label;
 
   return {
     subject,
@@ -276,7 +276,7 @@ exports.sendSignInLink = onCall(
 
     // プレーンテキスト版: URL をそのまま含める (テキスト表示でも見える)
     const text = [
-      "Rohei Printer System をご利用いただきありがとうございます。",
+      "Qriine をご利用いただきありがとうございます。",
       "",
       ctx.intro,
       "",
@@ -285,14 +285,14 @@ exports.sendSignInLink = onCall(
       "このメールに心当たりがない場合は破棄してください。",
       "",
       "──",
-      "Rohei Printer System",
+      "Qriine",
     ].join("\n");
 
     // HTML 版: ボタン + URL の二重表示 (どちらでも到達できる)
     const html = "<!doctype html>\n" +
       "<html lang=\"ja\">\n" +
       "<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #222; line-height: 1.6;\">\n" +
-      "  <p>Rohei Printer System をご利用いただきありがとうございます。</p>\n" +
+      "  <p>Qriine をご利用いただきありがとうございます。</p>\n" +
       "  <p>" + escapeHtmlText(ctx.intro) + "</p>\n" +
       "  <p>\n" +
       "    <a href=\"" + link + "\" style=\"display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;\">" + escapeHtmlText(ctx.button) + "</a>\n" +
@@ -301,7 +301,7 @@ exports.sendSignInLink = onCall(
       "  <p style=\"word-break:break-all;color:#555;font-size:0.9em;\">" + link + "</p>\n" +
       "  <hr style=\"border:none;border-top:1px solid #eee;margin-top:32px;\">\n" +
       "  <p style=\"color:#888;font-size:0.85em;\">このメールに心当たりがない場合は破棄してください。</p>\n" +
-      "  <p style=\"color:#888;font-size:0.85em;\">── Rohei Printer System</p>\n" +
+      "  <p style=\"color:#888;font-size:0.85em;\">── Qriine</p>\n" +
       "</body>\n" +
       "</html>";
 

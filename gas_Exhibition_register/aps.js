@@ -479,12 +479,12 @@ ${captionUrl}
 お問い合わせは下記URLのフォームからお願いします。
 ${inquiryUrl}
 ━━━━━━━━━━━━━━━━━━━━━━━━
-Rohei Printer System
+Qriine
   `;
 
   GmailApp.sendEmail(email, subject, body, {
-    name: 'Rohei Printer System',
-    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    name: 'Qriine',
+    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
     from: 'noreply.rohei.printer@gmail.com'
   });
 }
@@ -598,11 +598,11 @@ https://rohei-printer-system.web.app/register.html?ex=${exCode}
 
 削除後はテスト作品データ・コメント・いいねがすべて消えます。
 ━━━━━━━━━━━━━━━━━━━━━━━━
-Rohei Printer System
+Qriine
 `;
   GmailApp.sendEmail(email, subject, body, {
-    name: 'Rohei Printer System',
-    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    name: 'Qriine',
+    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
     from: 'noreply.rohei.printer@gmail.com'
   });
 }
@@ -615,11 +615,11 @@ function sendSandboxDeletedNotification(email, exCode, exName) {
 新たに練習を始めたい場合、または本番運用したい場合は再度申請してください:
 https://rohei-printer-system.web.app/setup.html
 ━━━━━━━━━━━━━━━━━━━━━━━━
-Rohei Printer System
+Qriine
 `;
   GmailApp.sendEmail(email, subject, body, {
-    name: 'Rohei Printer System',
-    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    name: 'Qriine',
+    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
     from: 'noreply.rohei.printer@gmail.com'
   });
 }
@@ -814,12 +814,12 @@ ${confirmUrl}
 このメールは送信専用です。返信はできません。
 お問い合わせは ryohei.miyagawa.art@gmail.com までご連絡ください。
 ━━━━━━━━━━━━━━━━━━━━━━━━
-Rohei Printer System
+Qriine
   `;
 
   GmailApp.sendEmail(email, subject, body, {
-    name: 'Rohei Printer System',
-    replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+    name: 'Qriine',
+    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
     from: 'noreply.rohei.printer@gmail.com'
   });
 }

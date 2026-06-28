@@ -113,8 +113,8 @@ function sendArtistGuide(ex, subject, body) {
       return { success: false, error: '管理者メールアドレスが見つかりません。' };
     }
     GmailApp.sendEmail(adminEmail, subject, body, {
-      name: 'Rohei Printer System',
-      replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+      name: 'Qriine',
+      replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
       from: 'noreply.rohei.printer@gmail.com'
     });
     return { success: true, to: adminEmail };
@@ -237,8 +237,8 @@ ID      : ${payload.inquiryId || '(なし)'}
 Inbox から内容確認・返信してください。
 `;
     GmailApp.sendEmail(operatorEmail, mailSubject, mailBody, {
-      name: 'Rohei Printer System',
-      replyTo: payload.email || 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+      name: 'Qriine',
+      replyTo: payload.email || 'Qriine <ryohei.miyagawa.art@gmail.com>',
       from: 'noreply.rohei.printer@gmail.com'
     });
     return { success: true };
@@ -287,8 +287,8 @@ Inbox から該当スレッドを確認・返信してください。
 https://rohei-printer-system.web.app/inbox.html
 `;
     GmailApp.sendEmail(operatorEmail, mailSubject, mailBody, {
-      name: 'Rohei Printer System',
-      replyTo: payload.email || 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+      name: 'Qriine',
+      replyTo: payload.email || 'Qriine <ryohei.miyagawa.art@gmail.com>',
       from: 'noreply.rohei.printer@gmail.com'
     });
     return { success: true };
@@ -324,11 +324,11 @@ ${threadUrl}
 ▼ 別件で新しく問い合わせる
 ${newUrl}
 
-Rohei Printer System
+Qriine
 `;
     GmailApp.sendEmail(payload.toEmail, mailSubject, mailBody, {
-      name: 'Rohei Printer System',
-      replyTo: 'Rohei Printer <ryohei.miyagawa.art@gmail.com>',
+      name: 'Qriine',
+      replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
       from: 'noreply.rohei.printer@gmail.com'
     });
     return { success: true };
