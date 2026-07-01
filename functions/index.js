@@ -948,7 +948,7 @@ function escapeAttr(s) {
 
 const GALLERY_DEFAULT_TITLE = "Web 展覧会 - My Art Fair";
 const GALLERY_DEFAULT_DESC = "オンラインで作品を観覧できるバーチャル展覧会です。";
-const HOSTING_ORIGIN = "https://rohei-printer-system.web.app";
+const HOSTING_ORIGIN = "https://qriine.com";
 
 exports.galleryPage = onRequest(async (req, res) => {
   const exRaw = String((req.query && req.query.ex) || "").trim();
@@ -1395,7 +1395,7 @@ exports.mintArtworkQrTokenFromGas = onRequest(
 //   wNNN を採番 → SS に依存しない。各 slot は submitArtwork の空きスロットと
 //   同形状で artworks/{ex}_{wNNN} に書く (server-managed フィールドを CF が直書き)。
 // =========================================================
-const VISITOR_QR_BASE_URL = "https://rohei-printer-system.web.app/";
+const VISITOR_QR_BASE_URL = "https://qriine.com/";
 const ARTWORK_QR_DEFAULT_DAYS = 365;
 
 // 作品スロット 1 件分の Firestore doc data + seed を生成する純粋ヘルパ。

@@ -284,7 +284,7 @@ ID      : ${payload.inquiryId}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 Inbox から該当スレッドを確認・返信してください。
-https://rohei-printer-system.web.app/inbox.html
+https://qriine.com/inbox.html
 `;
     GmailApp.sendEmail(operatorEmail, mailSubject, mailBody, {
       name: 'Qriine',
@@ -305,11 +305,11 @@ function sendInquiryReply(payload) {
     const exLabel = payload.exName ? `（${payload.exName}）` : '';
     const mailSubject = `Re: ${payload.subject || 'お問い合わせ'} ${exLabel}`;
     const threadUrl = payload.inquiryId
-      ? `https://rohei-printer-system.web.app/inquiry.html?id=${payload.inquiryId}`
-      : 'https://rohei-printer-system.web.app/inquiry.html';
+      ? `https://qriine.com/inquiry.html?id=${payload.inquiryId}`
+      : 'https://qriine.com/inquiry.html';
     const newUrl = payload.exCode
-      ? `https://rohei-printer-system.web.app/inquiry.html?ex=${payload.exCode}`
-      : 'https://rohei-printer-system.web.app/inquiry.html';
+      ? `https://qriine.com/inquiry.html?ex=${payload.exCode}`
+      : 'https://qriine.com/inquiry.html';
     const mailBody =
 `お問い合わせいただきありがとうございました。
 以下の通りご回答いたします。

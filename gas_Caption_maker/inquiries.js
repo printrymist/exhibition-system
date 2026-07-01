@@ -66,7 +66,7 @@ function appendInquiryToIndex(payload) {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const now = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd HH:mm:ss');
     const inboxUrl = payload.inquiry_id
-      ? 'https://rohei-printer-system.web.app/inquiry.html?id=' + payload.inquiry_id
+      ? 'https://qriine.com/inquiry.html?id=' + payload.inquiry_id
       : '';
     // 同じ inquiry_id が既にあれば二重追加しない（idempotent）
     const data = sheet.getDataRange().getValues();

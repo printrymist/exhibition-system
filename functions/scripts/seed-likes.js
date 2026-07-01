@@ -227,7 +227,7 @@ async function seed() {
   console.log('');
   console.log(`Done. ${written} seed docs written for ${EX_CODE}.`);
   console.log('');
-  console.log(`Open:    https://rohei-printer-system.web.app/analytics.html?ex=${EX_CODE}`);
+  console.log(`Open:    https://qriine.com/analytics.html?ex=${EX_CODE}`);
   console.log(`Cleanup: node functions/scripts/seed-likes.js --ex=${EX_CODE} --cleanup`);
 }
 

@@ -332,7 +332,7 @@
       "technique": "油彩・キャンバス",
       "size": "530×455mm",
       "price": "85000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_group": {
       "artwork_id": "demo_group",
@@ -344,7 +344,7 @@
       "technique": "アクリル・パネル",
       "size": "410×318mm",
       "price": "45000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_photo": {
       "artwork_id": "demo_photo",
@@ -359,7 +359,7 @@
       "camera": "SONY α7R IV",
       "size": "300×450mm",
       "price": "28000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_intl": {
       "artwork_id": "demo_intl",
@@ -371,7 +371,7 @@
       "technique": "ミクストメディア",
       "size": "600×500mm",
       "price": "120000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_simple_center": {
       "artwork_id": "demo_center",
@@ -381,7 +381,7 @@
       "technique": "水彩・紙",
       "size": "300×400mm",
       "price": "32000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_with_comment": {
       "artwork_id": "demo_comment",
@@ -392,7 +392,7 @@
       "size": "455×380mm",
       "price": "75000",
       "artist_note": "祖母の家で過ごした夏休みに見た庭を、記憶を頼りに描きました。光と影の対比に時間の流れを感じてもらえれば嬉しいです。",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_with_header": {
       "artwork_id": "demo_header",
@@ -402,7 +402,7 @@
       "technique": "アクリル・キャンバス",
       "size": "500×400mm",
       "price": "65000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_print": {
       "artwork_id": "demo_print",
@@ -414,7 +414,7 @@
       "size": "410×318mm",
       "price": "65000",
       "price_framed": "92000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_qronly": {
       "artwork_id": "A-001",
@@ -425,7 +425,7 @@
       "size": "455×380mm",
       "price": "120000",
       "artist_note": "波と空が出会う場所に、人の記憶が落ちて沈んでいく。沈んだものは見えなくなり、海の余白だけが残る。",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     },
     "official_artist_first": {
       "artwork_id": "demo_artist_first",
@@ -437,7 +437,7 @@
       "technique": "アクリル・キャンバス",
       "size": "410×318mm",
       "price": "60000",
-      "qr_url": "https://rohei-printer-system.web.app/?demo=1"
+      "qr_url": "https://qriine.com/?demo=1"
     }
   }
 }

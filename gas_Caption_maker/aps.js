@@ -351,7 +351,7 @@ function getParam(url, param) {
 
 function updateQrUrls() {
   const MASTER_SS_ID = "1h0uSnoUBuQnEqWmFXIOUIRK2CvigmkOmucsWOnaS6xQ";
-  const NEW_BASE_URL = "https://rohei-printer-system.web.app/";
+  const NEW_BASE_URL = "https://qriine.com/";
 
   const ss = SpreadsheetApp.openById(MASTER_SS_ID);
   const exSheet = ss.getSheetByName('exhibitions');

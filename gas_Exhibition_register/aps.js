@@ -437,9 +437,9 @@ function runSetup(payload) {
 // 🌟 完了メール送信
 // =========================================================
 function sendCompletionEmail(email, exCode, exName, isSandbox) {
-  const captionUrl = "https://rohei-printer-system.web.app/caption.html?ex=" + exCode;
-  const registerUrl = "https://rohei-printer-system.web.app/register.html?ex=" + exCode;
-  const inquiryUrl = "https://rohei-printer-system.web.app/inquiry.html?ex=" + exCode;
+  const captionUrl = "https://qriine.com/caption.html?ex=" + exCode;
+  const registerUrl = "https://qriine.com/register.html?ex=" + exCode;
+  const inquiryUrl = "https://qriine.com/inquiry.html?ex=" + exCode;
 
   const subjectPrefix = isSandbox ? '[練習モード] ' : '';
   const subject = subjectPrefix + `[Exhibition Setup Complete] ${exName} (${exCode})`;
@@ -594,7 +594,7 @@ function sendSandboxExpiringNotification(email, exCode, exName, expireAtIso) {
 明日 (${expireAtIso} 以降) に自動的に削除されます。
 
 このまま運用を続けたい場合は、本日中に「本番運用に切替」ボタンを押してください:
-https://rohei-printer-system.web.app/register.html?ex=${exCode}
+https://qriine.com/register.html?ex=${exCode}
 
 削除後はテスト作品データ・コメント・いいねがすべて消えます。
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -613,7 +613,7 @@ function sendSandboxDeletedNotification(email, exCode, exName) {
   const body = `${exName} (${exCode}) は練習モードでの試行期間 (14 日) を過ぎたため、自動的に削除されました。
 
 新たに練習を始めたい場合、または本番運用したい場合は再度申請してください:
-https://rohei-printer-system.web.app/setup.html
+https://qriine.com/setup.html
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Qriine
 `;
@@ -767,7 +767,7 @@ function submitApplication(payload) {
     sheet.appendRow(rowArr);
 
     // 確認メール送信
-    const confirmUrl = "https://rohei-printer-system.web.app/setup.html?token=" + token;
+    const confirmUrl = "https://qriine.com/setup.html?token=" + token;
     sendConfirmationEmail(email, organizer, exName, venue, startDate, confirmUrl, sandbox);
 
     return { success: true };
