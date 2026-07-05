@@ -14,6 +14,8 @@
   function friendlyError(err, actionLabel, contactHint) {
     var label = actionLabel || '処理';
     try { console.error(label + ' failed:', err); } catch (_e) {}
+    // 診断バッファにも記録 (問い合わせ時に発生エラーとして回収するため)。
+    try { if (window.diagLogError) window.diagLogError(label, err); } catch (_e) {}
 
     var code = err && err.code;
     var msg = err && err.message;

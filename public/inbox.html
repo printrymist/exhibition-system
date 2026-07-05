@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <script src="js/diag.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inquiry Inbox - Qriine</title>
   <style>
@@ -467,7 +468,40 @@
     }
 
     function escapeHtml(s) {
-      return (s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+      return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    }
+
+    // 問い合わせに添付された診断情報 (バージョン/画面/端末/直近エラー) を表示する。
+    // 主催者の報告を運営者が再現するための手がかり。
+    function renderDiagnostics(d) {
+      if (!d) return '';
+      const lines = [];
+      if (d.version) lines.push(`<b>バージョン:</b> ${escapeHtml(d.version)}`);
+      if (d.url) lines.push(`<b>URL:</b> <span style="word-break:break-all;">${escapeHtml(d.url)}</span>`);
+      if (d.viewport) lines.push(`<b>画面:</b> ${escapeHtml(d.viewport.w)}×${escapeHtml(d.viewport.h)} <span style="color:#999;">(dpr ${escapeHtml(d.viewport.dpr)})</span>`);
+      const pl = [d.platform, d.lang].filter(Boolean).join(' / ');
+      if (pl) lines.push(`<b>端末:</b> ${escapeHtml(pl)}`);
+
+      const errs = Array.isArray(d.errors) ? d.errors : [];
+      let errHtml;
+      if (errs.length) {
+        errHtml = `<div style="margin-top:6px;"><b>直近のエラー (${errs.length}件):</b>` +
+          errs.map(e => {
+            const head = escapeHtml(`${e.type || ''} · ${e.page || ''}${e.n > 1 ? ' ×' + e.n : ''} · ${e.t || ''}`);
+            const msg = escapeHtml(e.msg || '');
+            const stack = e.stack ? `<pre style="white-space:pre-wrap;word-break:break-all;font-size:0.78em;color:#777;margin:2px 0 0;">${escapeHtml(e.stack)}</pre>` : '';
+            return `<div style="margin-top:4px;padding:6px 8px;background:#fff3f3;border-left:3px solid #e57373;border-radius:4px;">
+                      <div style="font-size:0.75em;color:#999;">${head}</div>
+                      <div style="font-size:0.9em;color:#c62828;">${msg}</div>${stack}
+                    </div>`;
+          }).join('') + `</div>`;
+      } else {
+        errHtml = `<div style="margin-top:6px;color:#999;font-size:0.85em;">記録されたエラーなし</div>`;
+      }
+      return `<div style="margin-top:8px;padding:8px 10px;background:#f7f9fc;border:1px solid #e3e8f0;border-radius:6px;font-size:0.85em;line-height:1.6;">
+                <div style="font-weight:bold;color:#1a2a4a;margin-bottom:4px;">🔧 診断情報</div>
+                ${lines.map(l => `<div>${l}</div>`).join('')}${errHtml}
+              </div>`;
     }
 
     let currentInquiry = null;
@@ -507,6 +541,7 @@
               ${inq.page_url ? `<br><b>発生画面:</b> ${escapeHtml(inq.page_url)}` : ''}
               ${inq.user_agent ? `<br><b>環境:</b> <span style="font-size:0.85em;color:#999;">${escapeHtml(inq.user_agent)}</span>` : ''}
             </div>
+            ${renderDiagnostics(inq.diagnostics)}
             <div class="detail-body">${escapeHtml(inq.message || '')}</div>
           </div>
 

@@ -7,6 +7,8 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <script src="version.js"></script>
+  <script src="js/diag.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>お問い合わせ - Qriine</title>
   <style>
@@ -405,6 +407,7 @@
         subject, message: body,
         page_url: document.referrer || '',
         user_agent: navigator.userAgent || '',
+        diagnostics: (window.getDiagnostics ? window.getDiagnostics() : null),
         status: 'open',
         created_at: firebase.firestore.FieldValue.serverTimestamp(),
         resolved_at: null
@@ -412,6 +415,8 @@
 
       try {
         const docRef = await db.collection('inquiries').add(docData);
+        // 送信できたら診断バッファは畳む (次回報告に古いエラーを持ち越さない)。
+        try { if (window.clearDiagnosticsErrors) window.clearDiagnosticsErrors(); } catch (_e) {}
         let notifyOk = false, notifyErrMsg = '';
         try {
           const notifyRes = await gasCall({
