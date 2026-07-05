@@ -518,6 +518,23 @@
               </div>`;
     }
 
+    // 問い合わせの ex_code から、その展覧会を運営者サポートモードで直接開くリンク。
+    // 運営者は他人の展覧会も開ける (register/caption の運営者例外) ので、ここから1クリックで
+    // 現物を確認・対応できる。今までは自分の展覧会のメールリンク経由で ex を打ち替える手間があった。
+    function renderOpenExhibitionLinks(exCode) {
+      var ex = (exCode || '').trim();
+      if (!ex || !/^[A-Za-z0-9_-]+$/.test(ex)) return '';
+      var q = '?ex=' + encodeURIComponent(ex);
+      var btn = 'display:inline-block;padding:7px 14px;border-radius:6px;font-size:0.85em;font-weight:bold;text-decoration:none;margin:0 8px 6px 0;border:1px solid #1a73e8;color:#1a73e8;background:#e8f0fe;';
+      var a = function (href, label) { return '<a href="' + href + q + '" target="_blank" rel="noopener" style="' + btn + '">' + label + '</a>'; };
+      return '<div style="margin-top:12px;padding:10px 12px;background:#f7f9fc;border:1px solid #e3e8f0;border-radius:8px;">'
+        + '<div style="font-size:0.82em;font-weight:bold;color:#1a2a4a;margin-bottom:8px;">🛟 この展覧会を開いて対応する（運営者サポートモード）</div>'
+        + a('/caption.html', '🖨️ キャプション作成を開く')
+        + a('/register.html', '📝 作品登録/設定を開く')
+        + a('/reports.html', '📊 出力・レポートを開く')
+        + '</div>';
+    }
+
     let currentInquiry = null;
 
     async function showDetail(id) {
@@ -565,6 +582,7 @@
               ${inq.user_agent ? `<br><b>環境:</b> <span style="font-size:0.85em;color:#999;">${escapeHtml(inq.user_agent)}</span>` : ''}
             </div>
             ${renderDiagnostics(inq.diagnostics)}
+            ${renderOpenExhibitionLinks(inq.ex_code)}
             <div class="detail-body">${escapeHtml(inq.message || '')}</div>
             ${renderAttachments(attachments)}
           </div>
