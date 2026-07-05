@@ -144,6 +144,20 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isOperator();
       }
+
+      // スクリーンショット添付サブコレクション。
+      // 誰でも添付可 (問い合わせ本体と同じく認証なし報告を許容) だが、
+      //   - image は data:image/... base64 形式に限定 (data:text/html 等を弾き、
+      //     運営者が inbox で開いた際の同一オリジン XSS を防ぐ)
+      //   - サイズ上限で乱用を抑える (base64 文字列で ~550KB)
+      // 閲覧は運営者のみ (screenshot は機微を含み得るため公開 read しない)。
+      match /attachments/{attachmentId} {
+        allow read: if isOperator();
+        allow create: if request.resource.data.image is string
+          && request.resource.data.image.size() < 550000
+          && request.resource.data.image.matches('^data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$');
+        allow update, delete: if isOperator();
+      }
     }
 
     // キャプションテンプレ（caption.html の保存済みテンプレ）

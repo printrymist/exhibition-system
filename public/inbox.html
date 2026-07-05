@@ -504,6 +504,20 @@
               </div>`;
     }
 
+    // 添付スクリーンショットを表示する。
+    // XSS 対策: data:image/...;base64,<base64のみ> 形式に厳密一致した文字列だけを許可し、
+    // data:text/html 等や属性を抜けるような文字列は描画しない (report は認証なしで作れるため)。
+    function renderAttachments(atts) {
+      const safe = (Array.isArray(atts) ? atts : [])
+        .map(a => a && a.image)
+        .filter(s => typeof s === 'string' && /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(s));
+      if (!safe.length) return '';
+      return `<div style="margin-top:12px;">
+                <div style="font-size:0.82em;font-weight:bold;color:#1a2a4a;margin-bottom:6px;">📎 添付スクリーンショット</div>
+                ${safe.map(s => `<a href="${s}" target="_blank" rel="noopener"><img src="${s}" style="max-width:100%;border:1px solid #ddd;border-radius:8px;margin-bottom:8px;display:block;"></a>`).join('')}
+              </div>`;
+    }
+
     let currentInquiry = null;
 
     async function showDetail(id) {
@@ -521,6 +535,15 @@
         messages = msgSnap.docs.map(d => d.data());
       } catch (err) {
         console.error('messages load error:', err);
+      }
+
+      // 添付 (スクリーンショット) サブコレクション取得
+      let attachments = [];
+      try {
+        const attSnap = await db.collection('inquiries').doc(id).collection('attachments').orderBy('at', 'asc').get();
+        attachments = attSnap.docs.map(d => d.data());
+      } catch (err) {
+        console.error('attachments load error:', err);
       }
 
       const subcatLabel = inq.subcategory ? ` / ${inq.subcategory}` : '';
@@ -543,6 +566,7 @@
             </div>
             ${renderDiagnostics(inq.diagnostics)}
             <div class="detail-body">${escapeHtml(inq.message || '')}</div>
+            ${renderAttachments(attachments)}
           </div>
 
           <div class="messages">

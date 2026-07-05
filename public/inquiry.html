@@ -255,7 +255,12 @@
 
       <label class="field-label" for="bodyInput">本文<span class="badge-required">必須</span></label>
       <textarea id="bodyInput" placeholder="現象・再現手順・期待動作などを具体的にお書きください。"></textarea>
-      <div class="hint">画面 URL やブラウザ情報も自動で送られます。</div>
+      <div class="hint">画面 URL・ブラウザ情報・直近のエラーも自動で送られます。</div>
+
+      <label class="field-label" for="screenshotInput" style="margin-top:14px;">スクリーンショット（任意）</label>
+      <input type="file" id="screenshotInput" accept="image/*" onchange="onShotChange(this)">
+      <div class="hint">問題の画面を撮って添付すると、状況が伝わりやすくなります（1枚・自動で縮小します）。</div>
+      <div id="shotPreview" style="display:none; margin-top:8px;"></div>
 
       <button class="btn-submit" id="btnSubmit" onclick="submitInquiry()">送信</button>
       <div class="msg" id="submitMsg"></div>
@@ -383,6 +388,83 @@
       el.innerHTML = text;
     }
 
+    // ── スクリーンショット添付 (任意・1枚) ──
+    // 送信前に選択画像を JPEG data URL へ縮小し、_shotDataUrl に保持する。
+    // Firestore の添付ドキュメント上限に収めるため base64 文字列で ~450KB 以内を目標。
+    let _shotDataUrl = null;
+
+    function _dataUrlBytes(durl) {
+      const i = durl.indexOf(',');
+      if (i < 0) return durl.length;
+      const b64 = durl.slice(i + 1);
+      const pad = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+      return Math.floor(b64.length * 3 / 4) - pad;
+    }
+
+    function resizeImageToDataUrl(file, maxEdge, maxBytes) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const budget = maxBytes || (330 * 1024);
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const qualities = [0.85, 0.78, 0.7, 0.62, 0.55];
+          let edge = maxEdge, last = null;
+          while (true) {
+            const longEdge = Math.max(img.width, img.height);
+            const scale = longEdge > edge ? edge / longEdge : 1;
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            canvas.width = w; canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+            for (let i = 0; i < qualities.length; i++) {
+              const durl = canvas.toDataURL('image/jpeg', qualities[i]);
+              last = durl;
+              if (_dataUrlBytes(durl) <= budget) { resolve(durl); return; }
+            }
+            if (edge <= 700) { resolve(last); return; }
+            edge = Math.round(edge * 0.8);
+          }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
+        img.src = url;
+      });
+    }
+
+    async function onShotChange(input) {
+      const prev = document.getElementById('shotPreview');
+      _shotDataUrl = null;
+      const file = input.files && input.files[0];
+      if (!file) { prev.style.display = 'none'; prev.innerHTML = ''; return; }
+      if (!/^image\//.test(file.type)) {
+        prev.style.display = 'block';
+        prev.innerHTML = '<span style="color:#c62828;font-size:0.85em;">画像ファイルを選んでください。</span>';
+        input.value = '';
+        return;
+      }
+      prev.style.display = 'block';
+      prev.innerHTML = '<span style="color:#888;font-size:0.85em;"><span class="spinner"></span> 縮小中…</span>';
+      try {
+        _shotDataUrl = await resizeImageToDataUrl(file, 1400, 330 * 1024);
+        prev.innerHTML =
+          '<img src="' + _shotDataUrl + '" alt="添付プレビュー" style="max-width:100%;max-height:220px;border:1px solid #ddd;border-radius:6px;display:block;">' +
+          '<button type="button" class="btn" onclick="clearShot()" style="margin-top:6px;font-size:0.8em;">添付を取り消す</button>';
+      } catch (e) {
+        _shotDataUrl = null;
+        prev.innerHTML = '<span style="color:#c62828;font-size:0.85em;">' + friendlyError(e, '画像の処理') + '</span>';
+      }
+    }
+
+    function clearShot() {
+      _shotDataUrl = null;
+      const inp = document.getElementById('screenshotInput');
+      if (inp) inp.value = '';
+      const prev = document.getElementById('shotPreview');
+      if (prev) { prev.style.display = 'none'; prev.innerHTML = ''; }
+    }
+
     async function submitInquiry() {
       const category = (document.querySelector('input[name=category]:checked') || {}).value || '';
       const subcategory = category === 'op' ? document.getElementById('subcategorySelect').value : '';
@@ -417,6 +499,17 @@
         const docRef = await db.collection('inquiries').add(docData);
         // 送信できたら診断バッファは畳む (次回報告に古いエラーを持ち越さない)。
         try { if (window.clearDiagnosticsErrors) window.clearDiagnosticsErrors(); } catch (_e) {}
+        // スクショが選ばれていれば添付サブコレクションに保存 (best-effort、失敗しても本体は成功扱い)。
+        if (_shotDataUrl) {
+          try {
+            await db.collection('inquiries').doc(docRef.id).collection('attachments').add({
+              image: _shotDataUrl,
+              at: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } catch (attErr) {
+            console.warn('attachment upload failed:', attErr);
+          }
+        }
         let notifyOk = false, notifyErrMsg = '';
         try {
           const notifyRes = await gasCall({
