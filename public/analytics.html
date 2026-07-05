@@ -508,11 +508,24 @@
           opt.textContent = label;
           sel.appendChild(opt);
         });
-        if (snap.docs.length === 0) {
+        // 運営者は自分の主催展でなくても、URL の ?ex= 指定の展覧会を開ける (サポート用)。
+        var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+        if (normalized === 'rymist1@gmail.com' && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx) && !exMap[urlEx]) {
+          try {
+            var exDoc = await db.collection('exhibitions').doc(urlEx).get();
+            if (exDoc.exists) {
+              exMap[urlEx] = exDoc.data();
+              var optOp = document.createElement('option');
+              optOp.value = urlEx;
+              optOp.textContent = (exMap[urlEx].ex_name || '(名称未設定)') + ' (' + urlEx + ') 🛟サポート';
+              sel.insertBefore(optOp, sel.firstChild);
+            }
+          } catch (e) { console.warn('operator ex inject failed:', e); }
+        }
+        if (!exMap[urlEx] && snap.docs.length === 0) {
           sel.innerHTML = '<option value="">主催する展覧会がありません</option>';
           return;
         }
-        var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
         if (urlEx && exMap[urlEx]) sel.value = urlEx;
         onExChange();
       } catch (e) {
