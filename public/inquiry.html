@@ -405,7 +405,7 @@
         email: newCtx.email || '',
         category, subcategory,
         subject, message: body,
-        page_url: document.referrer || '',
+        page_url: (window.diagSanitizeUrl ? window.diagSanitizeUrl(document.referrer || '') : (document.referrer || '')),
         user_agent: navigator.userAgent || '',
         diagnostics: (window.getDiagnostics ? window.getDiagnostics() : null),
         status: 'open',

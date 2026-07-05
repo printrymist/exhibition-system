@@ -13,7 +13,30 @@
   var STACK_MAX = 1200;  // 1 件のスタック最大長
 
   function nowIso() { try { return new Date().toISOString(); } catch (_e) { return ''; } }
-  function pageId() { try { return location.pathname + location.search; } catch (_e) { return ''; } }
+
+  // URL から機微なクエリ値を伏字化する。診断は support ログに保存されるため、
+  // メールサインインの oobCode / apiKey / 作家・来場者アクセスの sig・exp などの
+  // 認証情報を絶対に残さない。キー名に下記パターンを含むものは値を *** にする。
+  var SENSITIVE_KEY = /(oob|token|sig|key|secret|pass|auth|cred|code|exp|session)/i;
+  function sanitizeUrl(u) {
+    try {
+      u = String(u == null ? '' : u);
+      var hash = '', hi = u.indexOf('#');
+      if (hi >= 0) { hash = u.slice(hi); u = u.slice(0, hi); }
+      var qi = u.indexOf('?');
+      if (qi < 0) return u + hash;
+      var base = u.slice(0, qi);
+      var out = u.slice(qi + 1).split('&').map(function (pair) {
+        var eq = pair.indexOf('=');
+        var k = eq >= 0 ? pair.slice(0, eq) : pair;
+        return SENSITIVE_KEY.test(k) ? (k + '=***') : pair;
+      }).join('&');
+      return base + '?' + out + hash;
+    } catch (_e) { return ''; }
+  }
+  window.diagSanitizeUrl = sanitizeUrl;
+
+  function pageId() { try { return sanitizeUrl(location.pathname + location.search); } catch (_e) { return ''; } }
   function truncate(s, n) {
     s = String(s == null ? '' : s);
     return s.length > n ? s.slice(0, n) + '…' : s;
@@ -75,7 +98,7 @@
   window.getDiagnostics = function () {
     var d = {};
     try { d.version = window.APP_VERSION || ''; } catch (_e) {}
-    try { d.url = location.href; } catch (_e) {}
+    try { d.url = sanitizeUrl(location.href); } catch (_e) {}
     try {
       var m = (location.search || '').match(/[?&]ex=([A-Za-z0-9_-]+)/);
       d.ex = m ? m[1] : '';
