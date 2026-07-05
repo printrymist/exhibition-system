@@ -523,12 +523,16 @@
         setTimeout(() => { const el = document.getElementById('operatorEmailInput'); if (el) el.focus(); }, 100);
         return;
       }
-      if (currentExEmail && userEmail === currentExEmail) {
+      // 主催者本人、または運営者 (サポート目的で他人の展覧会も開ける) なら通す。
+      const isOrganizer = !!(currentExEmail && userEmail === currentExEmail);
+      const isOp = !!(window.operatorAuth && window.operatorAuth.isOperatorEmail(userEmail));
+      if (isOrganizer || isOp) {
         document.getElementById('pwCard').style.display = 'none';
         document.getElementById('notOrganizerCard').style.display = 'none';
         document.getElementById('mainArea').style.display = 'block';
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
+        renderOperatorSupportBanner(isOp && !isOrganizer);
         onOrganizerReady();
         return;
       }
@@ -536,6 +540,24 @@
       document.getElementById('mainArea').style.display = 'none';
       document.getElementById('notOrganizerCard').style.display = 'block';
       document.getElementById('notOrganizerEmail').innerText = user.email;
+    }
+
+    function renderOperatorSupportBanner(show) {
+      let el = document.getElementById('operatorSupportBanner');
+      if (!show) { if (el) el.style.display = 'none'; return; }
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'operatorSupportBanner';
+        el.style.cssText = 'position:sticky;top:0;z-index:50;background:#fff3e0;border:1px solid #f0b429;'
+          + 'color:#7a4f00;padding:8px 14px;border-radius:8px;margin:0 0 14px 0;font-size:0.88em;font-weight:bold;';
+        const main = document.getElementById('mainArea');
+        main.insertBefore(el, main.firstChild);
+      }
+      const who = currentExEmail || '(主催者不明)';
+      el.innerHTML = '🛟 運営者サポートモード：この展覧会の主催者は <code style="background:#fff;padding:1px 5px;border-radius:4px;">'
+        + who.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+        + '</code> さんです。本人に代わって操作しています。編集内容は主催者の展覧会に反映されます。';
+      el.style.display = 'block';
     }
 
     // 認証済み (主催者本人) になったら作品 + 設定を読み込む。
