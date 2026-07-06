@@ -348,6 +348,126 @@ exports.sendSignInLink = onCall(
 );
 
 // =========================================================
+// submitContact
+//   公開の「お問い合わせ」フォーム (contact.html) の受け口。展覧会申請前の
+//   見込み客が使う。認証なしで呼べるため、スパム対策 (ハニーポット + 検証 +
+//   レート制限) を CF 側の不変条件として持つ。書き込みは admin SDK 経由なので
+//   inquiries コレクションの create ルールに依存しない (直書きスパムを回避)。
+//   inbox.html が読む inquiries に ex_code='' / category='contact' で追加。
+//   運営者へ Resend で通知。
+// =========================================================
+async function checkContactThrottle(email) {
+  const WINDOW_SEC = 10 * 60;
+  const MAX = 5;
+  const now = Math.floor(Date.now() / 1000);
+  const key = crypto.createHash("sha256").update("contact:" + email)
+    .digest("hex").slice(0, 32);
+  const docRef = admin.firestore().collection("email_throttle").doc(key);
+  let limited = false;
+  try {
+    await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const prev = snap.exists ? (snap.data().attempts || []) : [];
+      const recent = prev.filter((t) =>
+        typeof t === "number" && (now - t) < WINDOW_SEC);
+      if (recent.length >= MAX) {
+        limited = true;
+        return;
+      }
+      recent.push(now);
+      tx.set(docRef, { attempts: recent, updatedAt: now });
+    });
+  } catch (e) {
+    logger.warn("contact throttle txn failed (fail-open)", { error: e && e.message });
+    return;
+  }
+  if (limited) {
+    throw new HttpsError("resource-exhausted",
+      "短時間に送信が集中しています。しばらくしてからお試しください。");
+  }
+}
+
+exports.submitContact = onCall(
+  { secrets: [RESEND_API_KEY] },
+  async (request) => {
+    const data = request.data || {};
+    // ハニーポット: 見えない hp フィールドに値が入るのは bot。成功を装い何もしない。
+    if (String(data.hp || "").trim() !== "") {
+      return { ok: true };
+    }
+    const name = String(data.name || "").trim().slice(0, 100);
+    const email = String(data.email || "").trim().toLowerCase().slice(0, 200);
+    const subject = String(data.subject || "").trim().slice(0, 200);
+    const message = String(data.message || "").trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpsError("invalid-argument", "メールアドレスの形式が正しくありません。");
+    }
+    if (!message) {
+      throw new HttpsError("invalid-argument", "本文を入力してください。");
+    }
+    if (message.length > 5000) {
+      throw new HttpsError("invalid-argument", "本文が長すぎます (5000 文字以内)。");
+    }
+
+    await checkContactThrottle(email);
+
+    const subj = subject || "(件名なし)";
+    const docData = {
+      ex_code: "",
+      ex_name: "",
+      organizer: name || "",
+      email: email,
+      category: "contact",
+      subcategory: "",
+      subject: subj,
+      message: message,
+      status: "open",
+      source: "contact_form",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      resolved_at: null,
+    };
+    let inquiryId = "";
+    try {
+      const ref = await admin.firestore().collection("inquiries").add(docData);
+      inquiryId = ref.id;
+    } catch (err) {
+      logger.error("submitContact firestore add failed", { error: err.message });
+      throw new HttpsError("internal", "送信に失敗しました。時間をおいてお試しください。");
+    }
+
+    const body = [
+      "Qriine の公式サイトお問い合わせフォームから新しい問い合わせが届きました。",
+      "",
+      "お名前   : " + (name || "(未記入)"),
+      "メール   : " + email,
+      "件名     : " + subj,
+      "",
+      "【本文】",
+      message,
+      "",
+      "ID       : " + inquiryId,
+      "受付      : 展覧会前の一般問い合わせ (contact_form)",
+      "",
+      "下記の「問い合わせ管理画面」を開くと、この問い合わせが表示されます:",
+      "https://qriine.com/inbox.html?id=" + inquiryId,
+    ].join("\n");
+    try {
+      await sendMailViaResend({
+        to: "ryohei.miyagawa.art@gmail.com",
+        replyTo: email,
+        subject: "[お問い合わせ] " + subj,
+        text: body,
+      });
+    } catch (err) {
+      logger.warn("submitContact notify failed", { error: err.message });
+    }
+
+    return { ok: true, id: inquiryId };
+  },
+);
+
+// =========================================================
 // finalizeExhibitionSetup
 // =========================================================
 async function verifyTokenWithGas(token, exCode) {
