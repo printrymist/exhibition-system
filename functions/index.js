@@ -22,7 +22,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
-const nodemailer = require("nodemailer");
+// nodemailer は Resend 移行 (2026-07-06) で不要になり削除。
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -52,8 +52,9 @@ const GAS_CAPTION_EXEC_URL = defineString("GAS_CAPTION_EXEC_URL", {
 // 全関数共通: 東京リージョン + 最大同時実行数 10 (暴走防止)
 setGlobalOptions({ maxInstances: 10, region: "asia-northeast1" });
 
-// SMTP パスワードは Secret Manager で管理 (デプロイ時に注入)
-const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
+// Resend (メール配信 ESP) の API キー。自社ドメイン qriine.com から送信し到達率を上げる。
+// Gmail SMTP からの移行 (2026-07-06)。単一差し替え点 = sendMailViaResend。
+const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 // adminRecoverExhibitionDoc 専用: GAS の getCanonicalExhibitionDocAdmin を
 // 叩く際に必要な共有秘密。Script Property `ADMIN_SECRET` と同じ値を入れる。
@@ -82,9 +83,43 @@ const CLAUDE_API_KEY = defineSecret("CLAUDE_API_KEY");
 // 一致させること。Cloud Function 側でも email auth を二重チェックする。
 const OPERATOR_EMAILS = ["rymist1@gmail.com"];
 
-const SMTP_FROM_NAME = "Qriine";
-const SMTP_FROM_ADDR = "noreply.rohei.printer@gmail.com";
+// 返信先。当面は既存 Gmail のまま (受信は今まで通り Gmail で受ける)。
 const SMTP_REPLY_TO = "\"Qriine Support\" <noreply.rohei.printer+contact@gmail.com>";
+
+// 送信元 (Resend 経由・自社ドメイン)。DKIM/SPF/DMARC を qriine.com に設定済。
+const RESEND_FROM = "\"Qriine\" <noreply@qriine.com>";
+
+// 全メール送信の単一差し替え点。Resend の REST API を叩く (Node 24 の global fetch 使用、
+// 追加依存なし)。業者を変える場合はこの関数だけ差し替える。
+// 呼び出し側は RESEND_API_KEY を onCall の secrets に含めること。
+async function sendMailViaResend({ to, subject, text, html, replyTo }) {
+  const apiKey = RESEND_API_KEY.value();
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY が未設定です");
+  }
+  const payload = {
+    from: RESEND_FROM,
+    to: Array.isArray(to) ? to : [to],
+    subject: subject,
+  };
+  if (html) payload.html = html;
+  if (text) payload.text = text;
+  if (replyTo) payload.reply_to = replyTo;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error("Resend HTTP " + res.status + ": " + body);
+  }
+  return res.json();
+}
 
 // continueUrl からサインインリンクの目的を推定して、
 // 件名 / 本文 / ボタン文言を文脈ごとに切り替える。
@@ -233,7 +268,7 @@ async function checkSendLinkThrottle(email) {
 }
 
 exports.sendSignInLink = onCall(
-  { secrets: [SMTP_PASSWORD] },
+  { secrets: [RESEND_API_KEY] },
   async (request) => {
     const email = String((request.data && request.data.email) || "").trim().toLowerCase();
     const continueUrl = String((request.data && request.data.continueUrl) || "").trim();
@@ -260,17 +295,6 @@ exports.sendSignInLink = onCall(
     // 旧実装はすべて「展覧会セットアップの確認」だったため、
     // 後でメールを見返したときどれがどの操作のリンクか分からなくなる問題を解消する。
     const ctx = await deriveSignInLinkContext(continueUrl);
-
-    // Gmail SMTP 経由で送信
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: SMTP_FROM_ADDR,
-        pass: SMTP_PASSWORD.value(),
-      },
-    });
 
     const subject = ctx.subject;
 
@@ -306,8 +330,7 @@ exports.sendSignInLink = onCall(
       "</html>";
 
     try {
-      await transporter.sendMail({
-        from: "\"" + SMTP_FROM_NAME + "\" <" + SMTP_FROM_ADDR + ">",
+      await sendMailViaResend({
         to: email,
         replyTo: SMTP_REPLY_TO,
         subject: subject,
