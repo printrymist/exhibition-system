@@ -223,6 +223,12 @@
       <p>作品データに対する変更を時系列で確認 (誰が・いつ・どのフィールドを・何から何に変えたか)。直近 100 件まで表示。</p>
       <a id="linkAudit" href="#" class="hub-button">→ 開く</a>
     </div>
+
+    <div class="hub-card" id="cardDataViewer" style="display:none;">
+      <h2>🗂️ データ閲覧 (運営者)</h2>
+      <p>Firestore コレクション (展覧会 / 作品 / 問い合わせ) の中身をそのまま表で確認。サポート時の状況確認用。運営者専用・閲覧のみ。</p>
+      <a id="linkDataViewer" href="#" class="hub-button">→ 開く</a>
+    </div>
   </div>
 
   <script>
@@ -309,6 +315,13 @@
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
         renderOperatorSupportBanner(isOp && !isOrganizer);
+        // データ閲覧 (運営者専用) は運営者ログイン時のみ表示。
+        if (isOp) {
+          var dvCard = document.getElementById('cardDataViewer');
+          var dvLink = document.getElementById('linkDataViewer');
+          if (dvCard) dvCard.style.display = '';
+          if (dvLink && currentEx) dvLink.href = 'admin/data-viewer.html?ex=' + currentEx;
+        }
         return;
       }
       document.getElementById('pwCard').style.display = 'none';

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>データ閲覧 (運営者) - Qriine</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 1200px; margin: 0 auto; color: #1a2a4a; }
+    h1 { font-size: 1.3em; }
+    select, button, input { padding: 9px 12px; font-size: 14px; border-radius: 6px; border: 1px solid #ddd; }
+    button { background: #1a73e8; color: #fff; border-color: #1a73e8; cursor: pointer; }
+    button:hover:not(:disabled) { background: #1557b0; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; }
+    .auth-status { padding: 10px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.9em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .toolbar label { font-size: 0.9em; }
+    .count { color: #666; font-size: 0.88em; }
+    .empty { padding: 24px; text-align: center; color: #999; background: #f5f5f5; border-radius: 8px; }
+    .table-wrap { overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 8px; }
+    table { border-collapse: collapse; font-size: 0.82em; white-space: nowrap; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; border-right: 1px solid #f2f2f2; vertical-align: top; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+    th { background: #f7faff; color: #1a4f9c; position: sticky; top: 0; font-weight: bold; }
+    tbody tr:hover { background: #f7faff; cursor: pointer; }
+    td.docid { font-family: monospace; color: #8a6500; }
+    .detail { background: #fbfcff; }
+    .detail td { white-space: normal; max-width: none; }
+    .detail table { width: 100%; }
+    .detail th { width: 180px; white-space: nowrap; position: static; }
+    .note { font-size: 0.82em; color: #888; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <a id="backToReports" href="../reports.html"
+    style="display:inline-block; margin-bottom:8px; padding:6px 14px; background:white; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:13px; text-decoration:none;">
+    &larr; 出力・レポートへ戻る
+  </a>
+  <h1>データ閲覧 (運営者)</h1>
+  <p class="note">Firestore コレクションの中身をそのまま表で確認できます (運営者専用・閲覧のみ)。サポート時の状況確認用。</p>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">運営者ログイン</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+  </div>
+
+  <div id="denied" class="empty" style="display:none; color:#d93025;">この画面は運営者専用です。</div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+    <div class="toolbar">
+      <label>展覧会: <select id="exSelect"></select></label>
+      <label>コレクション:
+        <select id="collSelect">
+          <option value="exhibitions">exhibitions (展覧会)</option>
+          <option value="artworks">artworks (作品)</option>
+          <option value="inquiries">inquiries (問い合わせ)</option>
+        </select>
+      </label>
+      <button id="btnLoad" onclick="loadCollection()">読み込む</button>
+      <span class="count" id="rowCount"></span>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var exMap = {};
+    var LIMIT = 300;
+
+    var COLL = {
+      exhibitions: { docById: true },
+      artworks: { exField: 'exCode' },
+      inquiries: { exField: 'ex_code' }
+    };
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+
+    function valToStr(v) {
+      if (v == null) return '';
+      if (typeof v === 'object') {
+        if (typeof v.toDate === 'function') { try { return v.toDate().toLocaleString('ja-JP', { hour12: false }); } catch (_e) {} }
+        try { return JSON.stringify(v); } catch (_e) { return String(v); }
+      }
+      return String(v);
+    }
+
+    async function loadExhibitionsForUser(userEmail) {
+      var sel = document.getElementById("exSelect");
+      sel.innerHTML = '';
+      exMap = {};
+      if (!userEmail) return;
+      var normalized = userEmail.trim().toLowerCase();
+      var snap = await db.collection("exhibitions").where("email", "==", normalized).get();
+      snap.docs.forEach(function(d){
+        exMap[d.id] = d.data();
+        var opt = document.createElement("option");
+        opt.value = d.id;
+        opt.textContent = ((d.data().ex_name) || "(名称未設定)") + " (" + d.id + ")";
+        sel.appendChild(opt);
+      });
+      var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+      if (normalized === 'rymist1@gmail.com' && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx) && !exMap[urlEx]) {
+        try {
+          var exDoc = await db.collection('exhibitions').doc(urlEx).get();
+          if (exDoc.exists) {
+            exMap[urlEx] = exDoc.data();
+            var optOp = document.createElement('option');
+            optOp.value = urlEx;
+            optOp.textContent = ((exMap[urlEx].ex_name) || '(名称未設定)') + ' (' + urlEx + ') サポート';
+            sel.insertBefore(optOp, sel.firstChild);
+          }
+        } catch (e) { console.warn('operator ex inject failed:', e); }
+      }
+      if (urlEx && exMap[urlEx]) sel.value = urlEx;
+    }
+
+    async function loadCollection() {
+      var ex = document.getElementById('exSelect').value;
+      var coll = document.getElementById('collSelect').value;
+      var resEl = document.getElementById('result');
+      var countEl = document.getElementById('rowCount');
+      if (!ex) { resEl.innerHTML = '<div class="empty">展覧会を選択してください。</div>'; return; }
+      var cfg = COLL[coll];
+      if (!cfg) { resEl.innerHTML = '<div class="empty">未対応のコレクションです。</div>'; return; }
+      var btn = document.getElementById('btnLoad');
+      btn.disabled = true;
+      resEl.innerHTML = '<div class="empty">読み込み中…</div>';
+      countEl.textContent = '';
+      try {
+        var docs = [];
+        if (cfg.docById) {
+          var one = await db.collection(coll).doc(ex).get();
+          if (one.exists) docs.push({ id: one.id, data: one.data() });
+        } else {
+          var snap = await db.collection(coll).where(cfg.exField, '==', ex).limit(LIMIT).get();
+          snap.docs.forEach(function(d){ docs.push({ id: d.id, data: d.data() }); });
+        }
+        renderTable(docs);
+        countEl.textContent = docs.length + ' 件' + (docs.length >= LIMIT ? ' (上限 ' + LIMIT + ' 件まで)' : '');
+      } catch (e) {
+        console.error(e);
+        resEl.innerHTML = '<div class="empty" style="color:#d93025;">エラー: ' + escapeHtml(e.message || e) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderTable(docs) {
+      var resEl = document.getElementById('result');
+      if (!docs.length) { resEl.innerHTML = '<div class="empty">該当するデータはありません。</div>'; return; }
+      var keys = [];
+      var seen = {};
+      docs.forEach(function(d){
+        Object.keys(d.data).sort().forEach(function(k){ if (!seen[k]) { seen[k] = true; keys.push(k); } });
+      });
+      var html = '<div class="table-wrap"><table><thead><tr><th>__id__</th>';
+      keys.forEach(function(k){ html += '<th>' + escapeHtml(k) + '</th>'; });
+      html += '</tr></thead><tbody>';
+      docs.forEach(function(d, i){
+        html += '<tr onclick="toggleDetail(' + i + ')"><td class="docid">' + escapeHtml(d.id) + '</td>';
+        keys.forEach(function(k){
+          var s = valToStr(d.data[k]);
+          html += '<td title="' + escapeHtml(s) + '">' + escapeHtml(s) + '</td>';
+        });
+        html += '</tr>';
+        var detail = '<tr class="detail" id="detail-' + i + '" style="display:none;"><td colspan="' + (keys.length + 1) + '"><table><tbody>';
+        detail += '<tr><th>__id__</th><td>' + escapeHtml(d.id) + '</td></tr>';
+        Object.keys(d.data).sort().forEach(function(k){
+          detail += '<tr><th>' + escapeHtml(k) + '</th><td>' + escapeHtml(valToStr(d.data[k])) + '</td></tr>';
+        });
+        detail += '</tbody></table></td></tr>';
+        html += detail;
+      });
+      html += '</tbody></table></div>';
+      resEl.innerHTML = html;
+    }
+
+    function toggleDetail(i) {
+      var el = document.getElementById('detail-' + i);
+      if (el) el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';
+    }
+
+    (function updateBackLink() {
+      var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
+      var backLink = document.getElementById('backToReports');
+      if (backLink && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx)) {
+        backLink.href = '../reports.html?ex=' + urlEx;
+      }
+    })();
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) { if (user) setMsg('ログインしました: ' + user.email, '#1a73e8'); })
+        .catch(function (err) { setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025'); });
+
+      window.operatorAuth.onAuthChange(function (user) {
+        var authCard = document.getElementById('authCard');
+        var mainArea = document.getElementById('mainArea');
+        var denied = document.getElementById('denied');
+        var statusEl = document.getElementById('operatorAuthStatus');
+        var isOp = window.operatorAuth.isOperatorUser(user);
+        if (user && isOp) {
+          statusEl.innerHTML = user.email + ' でログイン中 ' +
+            '<a href="#" onclick="window.operatorAuth.signOut();return false;" style="color:#1a73e8;margin-left:8px;text-decoration:underline;">ログアウト</a>';
+          statusEl.style.display = 'block';
+          authCard.style.display = 'none';
+          denied.style.display = 'none';
+          mainArea.style.display = 'block';
+          loadExhibitionsForUser(user.email);
+        } else if (user && !isOp) {
+          authCard.style.display = 'none';
+          mainArea.style.display = 'none';
+          denied.style.display = 'block';
+        } else {
+          authCard.style.display = 'block';
+          mainArea.style.display = 'none';
+          denied.style.display = 'none';
+        }
+      });
+
+      window.requestOperatorSignInLink = function () {
+        var emailInput = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (emailInput.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () { btn.disabled = false; setMsg('ログイン用リンクを送信しました: ' + email, '#1a73e8'); })
+          .catch(function (err) { btn.disabled = false; setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025'); });
+      };
+    })();
+  </script>
+</body>
+</html>
