@@ -98,6 +98,38 @@ function saveRegistrationFields(ex, fieldsJson) {
 // これらが参照していた {ex}_artworks SS は addArtworks (作品枠の採番) で現役。
 
 // =========================================================
+// 🌟 メール送信の単一差し替え点 (Resend 経由・自社ドメイン)
+//   Gmail から Resend に移行 (2026-07-06) して到達率を上げる。
+//   API キーは Script Property `RESEND_API_KEY` に登録しておくこと。
+//   from は noreply@qriine.com (DKIM/SPF/DMARC を qriine.com に設定済)。
+// =========================================================
+function sendMailViaResend_(to, subject, body, replyTo) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('RESEND_API_KEY');
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY (Script Property) が未設定です');
+  }
+  var payload = {
+    from: 'Qriine <noreply@qriine.com>',
+    to: [to],
+    subject: subject,
+    text: body
+  };
+  if (replyTo) payload.reply_to = replyTo;
+  var res = UrlFetchApp.fetch('https://api.resend.com/emails', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + apiKey },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('Resend HTTP ' + code + ': ' + res.getContentText());
+  }
+  return JSON.parse(res.getContentText());
+}
+
+// =========================================================
 // 🌟 作家向け案内メール送信
 //   ex_code に紐づく管理者メールアドレス宛にメールを送る。
 //   本文は呼び出し側（register.html）で組み立てたものをそのまま使う。
@@ -112,11 +144,7 @@ function sendArtistGuide(ex, subject, body) {
     if (!adminEmail) {
       return { success: false, error: '管理者メールアドレスが見つかりません。' };
     }
-    GmailApp.sendEmail(adminEmail, subject, body, {
-      name: 'Qriine',
-      replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-      from: 'noreply.rohei.printer@gmail.com'
-    });
+    sendMailViaResend_(adminEmail, subject, body, 'ryohei.miyagawa.art@gmail.com');
     return { success: true, to: adminEmail };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -236,11 +264,7 @@ ID      : ${payload.inquiryId || '(なし)'}
 
 Inbox から内容確認・返信してください。
 `;
-    GmailApp.sendEmail(operatorEmail, mailSubject, mailBody, {
-      name: 'Qriine',
-      replyTo: payload.email || 'Qriine <ryohei.miyagawa.art@gmail.com>',
-      from: 'noreply.rohei.printer@gmail.com'
-    });
+    sendMailViaResend_(operatorEmail, mailSubject, mailBody, payload.email || 'ryohei.miyagawa.art@gmail.com');
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -286,11 +310,7 @@ ID      : ${payload.inquiryId}
 Inbox から該当スレッドを確認・返信してください。
 https://qriine.com/inbox.html
 `;
-    GmailApp.sendEmail(operatorEmail, mailSubject, mailBody, {
-      name: 'Qriine',
-      replyTo: payload.email || 'Qriine <ryohei.miyagawa.art@gmail.com>',
-      from: 'noreply.rohei.printer@gmail.com'
-    });
+    sendMailViaResend_(operatorEmail, mailSubject, mailBody, payload.email || 'ryohei.miyagawa.art@gmail.com');
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -326,11 +346,7 @@ ${newUrl}
 
 Qriine
 `;
-    GmailApp.sendEmail(payload.toEmail, mailSubject, mailBody, {
-      name: 'Qriine',
-      replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-      from: 'noreply.rohei.printer@gmail.com'
-    });
+    sendMailViaResend_(payload.toEmail, mailSubject, mailBody, 'ryohei.miyagawa.art@gmail.com');
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
