@@ -12,6 +12,35 @@
 // マスタースプレッドシートのID
 const MASTER_SS_ID = "1h0uSnoUBuQnEqWmFXIOUIRK2CvigmkOmucsWOnaS6xQ";
 
+// メール送信の単一差し替え点 (Resend 経由・自社ドメイン)。
+// Gmail から Resend に移行 (2026-07-06)。API キーは Script Property RESEND_API_KEY。
+// from は noreply@qriine.com (DKIM/SPF/DMARC を qriine.com に設定済)。
+function sendMailViaResend_(to, subject, body, replyTo) {
+  var apiKey = PropertiesService.getScriptProperties().getProperty('RESEND_API_KEY');
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY (Script Property) が未設定です');
+  }
+  var payload = {
+    from: 'Qriine <noreply@qriine.com>',
+    to: [to],
+    subject: subject,
+    text: body
+  };
+  if (replyTo) payload.reply_to = replyTo;
+  var res = UrlFetchApp.fetch('https://api.resend.com/emails', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + apiKey },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('Resend HTTP ' + code + ': ' + res.getContentText());
+  }
+  return JSON.parse(res.getContentText());
+}
+
 // =========================================================
 // 🌟 ユーティリティ
 // =========================================================
@@ -482,11 +511,7 @@ ${inquiryUrl}
 Qriine
   `;
 
-  GmailApp.sendEmail(email, subject, body, {
-    name: 'Qriine',
-    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-    from: 'noreply.rohei.printer@gmail.com'
-  });
+  sendMailViaResend_(email, subject, body, 'ryohei.miyagawa.art@gmail.com');
 }
 
 // =========================================================
@@ -600,11 +625,7 @@ https://qriine.com/register.html?ex=${exCode}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Qriine
 `;
-  GmailApp.sendEmail(email, subject, body, {
-    name: 'Qriine',
-    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-    from: 'noreply.rohei.printer@gmail.com'
-  });
+  sendMailViaResend_(email, subject, body, 'ryohei.miyagawa.art@gmail.com');
 }
 
 // 削除完了通知
@@ -617,11 +638,7 @@ https://qriine.com/setup.html
 ━━━━━━━━━━━━━━━━━━━━━━━━
 Qriine
 `;
-  GmailApp.sendEmail(email, subject, body, {
-    name: 'Qriine',
-    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-    from: 'noreply.rohei.printer@gmail.com'
-  });
+  sendMailViaResend_(email, subject, body, 'ryohei.miyagawa.art@gmail.com');
 }
 
 // 定期トリガを設定する関数 (運営者が一度だけ実行する)
@@ -817,11 +834,7 @@ ${confirmUrl}
 Qriine
   `;
 
-  GmailApp.sendEmail(email, subject, body, {
-    name: 'Qriine',
-    replyTo: 'Qriine <ryohei.miyagawa.art@gmail.com>',
-    from: 'noreply.rohei.printer@gmail.com'
-  });
+  sendMailViaResend_(email, subject, body, 'ryohei.miyagawa.art@gmail.com');
 }
 
 // =========================================================
