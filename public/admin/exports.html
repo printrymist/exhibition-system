@@ -255,12 +255,13 @@
     async function dlArtworks(ex) {
       log("Artworks 取得中...");
       var exDoc = exMap[ex] || {};
-      var captionFields = [];
-      if (exDoc.caption_fields) {
-        try { captionFields = JSON.parse(exDoc.caption_fields); }
-        catch (e) { console.warn("caption_fields parse failed:", e); }
+      var regFields = [];
+      if (exDoc.registration_fields) {
+        try { regFields = JSON.parse(exDoc.registration_fields); }
+        catch (e) { console.warn("registration_fields parse failed:", e); }
       }
-      var fieldNames = captionFields.map(function(f){ return f.name; });
+      var fieldNames = regFields.map(function(f){ return f.name; })
+        .filter(function(n){ return !(typeof FIELD_MAP !== 'undefined' && FIELD_MAP[n] && FIELD_MAP[n].type === 'image'); });
       if (fieldNames.length === 0) {
         fieldNames = ["title","artist","year","technique","size","price"];
       }
@@ -473,11 +474,12 @@
     function _captionFieldNames(ex) {
       var exDoc = exMap[ex] || {};
       var arr = [];
-      if (exDoc.caption_fields) {
-        try { arr = JSON.parse(exDoc.caption_fields); }
-        catch (e) { console.warn('caption_fields parse failed:', e); }
+      if (exDoc.registration_fields) {
+        try { arr = JSON.parse(exDoc.registration_fields); }
+        catch (e) { console.warn('registration_fields parse failed:', e); }
       }
-      var names = (arr || []).map(function(f){ return f && f.name; }).filter(Boolean);
+      var names = (arr || []).map(function(f){ return f && f.name; }).filter(Boolean)
+        .filter(function(n){ return !(typeof FIELD_MAP !== 'undefined' && FIELD_MAP[n] && FIELD_MAP[n].type === 'image'); });
       if (names.length === 0) names = ['title','artist','year','technique','size','price'];
       // 作家系列を追加 (dlArtworks の挙動と揃える)
       var seen = {};
