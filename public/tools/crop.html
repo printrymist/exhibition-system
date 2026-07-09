@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v22</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v23</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -113,11 +113,12 @@
         </div>
         <div class="row" style="margin-top:10px;">
           <button id="redetect">🔍 もう一度自動検出</button>
+          <button id="aiInner">🎯 内側の絵を検出</button>
           <button id="refine">✨ 四隅を微調整</button>
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。</p>
+        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
       </div>
 
       <div>
@@ -430,8 +431,8 @@
     return null;
   }
 
-  // AI外周 quad (フル座標 [{x,y}]) → 内側の絵の四角形 or null (見つからない/曖昧なら動かさない)
-  function refineInward(quadPts) {
+  // フル座標の四角形で正面補正した RGBA Mat を返す (呼び出し側で .mat.delete() すること)
+  function mlRectify(quadPts) {
     const q = orderCorners(quadPts);
     const len = (A, B) => Math.hypot(B.x - A.x, B.y - A.y);
     let W = Math.round((len(q[0], q[1]) + len(q[3], q[2])) / 2);
@@ -442,9 +443,18 @@
     const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [q[0].x, q[0].y, q[1].x, q[1].y, q[2].x, q[2].y, q[3].x, q[3].y]);
     const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W, 0, W, H, 0, H]);
     const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    let rect = new cv.Mat();
+    const rect = new cv.Mat();
     cv.warpPerspective(fullMat, rect, M, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-    const data = rect.data; // RGBA
+    srcTri.delete(); dstTri.delete(); M.delete();
+    return { mat: rect, W, H, q };
+  }
+
+  // AI外周 quad (フル座標 [{x,y}]) → 内側の絵の四角形 or null (見つからない/曖昧なら動かさない)
+  function refineInward(quadPts) {
+    const R = mlRectify(quadPts);
+    if (!R) return null;
+    const q = R.q, W = R.W, H = R.H;
+    const data = R.mat.data; // RGBA
     const px = (x, y) => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
     let t = 0, b = H, l = 0, r = W;
     const minW = W * 0.3, minH = H * 0.3;
@@ -466,13 +476,101 @@
       if (rr && (r - rr.k) - l > minW) { r -= rr.k; moved = true; }
       if (!moved) break;
     }
-    rect.delete(); srcTri.delete(); dstTri.delete(); M.delete();
+    R.mat.delete();
     if (!(t > 0 || b < H || l > 0 || r < W)) return null;
     const map = mlSquareToQuad(q);
     const FW = fullMat.cols, FH = fullMat.rows;
     return [[l / W, t / H], [r / W, t / H], [r / W, b / H], [l / W, b / H]]
       .map(([u, v]) => map(u, v))
       .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) }));
+  }
+
+  // ===== 2回目AI: 1回目の外周枠の中で「絵そのもの」を掴み直す =====
+  // 外周で切り出すと台紙・マット・カッティングマットは「背景」になるので、
+  // 同じモデルがこんどは絵を主役として掴む (ユーザー発案・25枚GTで実証)。
+  // 採用判定は2つの検品 (25枚GTで校正、しきい値は今後の実データで再確認):
+  //   solidity = 掴んだ塊の面積/外接矩形 (長方形らしさ)。0.80以上なら単独で採用。
+  //   σ後 = 新しい枠のすぐ外側の帯の色ばらつき。solidity 0.65〜0.80 のときは σ後≤40 (外が無地) を要求。
+  // 失敗モード「絵の中の塊への潜り込み」は solidity か σ後のどちらかに現れる。
+
+  function mlSigmaOutside(data, W, H, rect) { // data: RGBA。帯が取れなければ null
+    const d = Math.max(4, Math.round(Math.min(W, H) * 0.03));
+    const t = Math.round(rect.t), b = Math.round(rect.b), l = Math.round(rect.l), r = Math.round(rect.r);
+    const px = (x, y) => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+    const sample = [];
+    const stepX = Math.max(1, Math.round((r - l) / 200));
+    const stepY = Math.max(1, Math.round((b - t) / 200));
+    for (let x = Math.max(0, l); x < Math.min(W, r); x += stepX) for (let k = 1; k <= d; k++) {
+      if (t - k >= 0) sample.push(px(x, t - k));
+      if (b + k - 1 < H) sample.push(px(x, b + k - 1));
+    }
+    for (let y = Math.max(0, t); y < Math.min(H, b); y += stepY) for (let k = 1; k <= d; k++) {
+      if (l - k >= 0) sample.push(px(l - k, y));
+      if (r + k - 1 < W) sample.push(px(r + k - 1, y));
+    }
+    if (sample.length < 50) return null;
+    const med = (arr) => { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; };
+    const mc = [0, 1, 2].map(ch => med(sample.map(p => p[ch])));
+    const d2 = sample.map(p => (p[0] - mc[0]) ** 2 + (p[1] - mc[1]) ** 2 + (p[2] - mc[2]) ** 2);
+    return Math.sqrt(d2.reduce((s, v) => s + v, 0) / d2.length / 3);
+  }
+
+  async function aiSecondPass(quadPts) {
+    const session = await mlInit;
+    if (!session || !fullMat) return null;
+    const R = mlRectify(quadPts);
+    if (!R) return null;
+    try {
+      // 正面補正画像 → 320×320 → モデル
+      const src = document.createElement('canvas');
+      src.width = R.W; src.height = R.H;
+      src.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(R.mat.data), R.W, R.H), 0, 0);
+      const S = ML_SIZE, N = S * S;
+      const cnv = document.createElement('canvas'); cnv.width = S; cnv.height = S;
+      const ctx = cnv.getContext('2d');
+      ctx.drawImage(src, 0, 0, S, S);
+      const px = ctx.getImageData(0, 0, S, S).data;
+      const f = new Float32Array(3 * N);
+      for (let i = 0; i < N; i++) {
+        f[i]       = (px[i*4]   / 255 - 0.485) / 0.229;
+        f[N + i]   = (px[i*4+1] / 255 - 0.456) / 0.224;
+        f[2*N + i] = (px[i*4+2] / 255 - 0.406) / 0.225;
+      }
+      const out = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', f, [1, 3, S, S]) });
+      const d0 = out[session.outputNames[0]].data;
+      let mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < N; i++) { if (d0[i] < mn) mn = d0[i]; if (d0[i] > mx) mx = d0[i]; }
+      const bin = new Uint8Array(N);
+      for (let i = 0; i < N; i++) bin[i] = (d0[i] - mn) / (mx - mn + 1e-9) > 0.5 ? 1 : 0;
+      const comp = mlLargestComponent(bin, S, S);
+      const frac = comp.count / N;
+      if (comp.count < 200) return null;
+      let x0 = S, x1 = 0, y0 = S, y1 = 0;
+      const m = comp.mask;
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        if (!m[y * S + x]) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const solidity = comp.count / Math.max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
+      // 正面補正済み空間では絵は軸平行 → マスクの外接矩形をそのまま枠に
+      const rect = { t: y0 * R.H / S, b: (y1 + 1) * R.H / S, l: x0 * R.W / S, r: (x1 + 1) * R.W / S };
+      const sigAfter = mlSigmaOutside(R.mat.data, R.W, R.H, rect);
+      const map = mlSquareToQuad(R.q);
+      const FW = fullMat.cols, FH = fullMat.rows;
+      const quad = [[rect.l / R.W, rect.t / R.H], [rect.r / R.W, rect.t / R.H], [rect.r / R.W, rect.b / R.H], [rect.l / R.W, rect.b / R.H]]
+        .map(([u, v]) => map(Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v))))
+        .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) }));
+      return { quad, frac, solidity, sigAfter };
+    } finally {
+      R.mat.delete();
+    }
+  }
+
+  // 2回目AIの採用判定 (自動時のゲート)
+  function secondPassAccepted(second) {
+    if (!second || second.frac < 0.15 || second.frac > 0.92) return false;
+    if (second.solidity >= 0.80) return true;
+    return second.solidity >= 0.65 && second.sigAfter !== null && second.sigAfter <= 40;
   }
 
   // ===== 状態 =====
@@ -484,6 +582,7 @@
   let dragIndex = -1;
   let dragEdge = -1, edgeState = null;   // 辺スライド (平行移動)
   let currentFileName = '';   // 読み込んだ写真のファイル名 (GT 記録キー)
+  let lastOuterQuad = null;   // 直近の自動検出が出した AI 外周枠 (🎯 の起点)
 
   const view = $('view');
   const vctx = view.getContext('2d');
@@ -547,19 +646,30 @@
   // AI 検出 (u2netp) を主役に、失敗時は従来の多候補生成 → 領域スコア選択に落ちる。
   async function autoDetect() {
     window.detectBusy = true;
+    lastOuterQuad = null;
     setStatus('自動検出中…', 'info');
     let ml = null;
     try { ml = await detectByML(); } catch (e) { console.warn('AI検出でエラー。従来検出に切り替えます。', e); }
     if (ml) {
       const outer = orderCorners(ml.quad);
-      let inner = null;
-      try { inner = refineInward(outer); } catch (e) { console.warn('内側の境目探索でエラー。外周の枠を使います。', e); }
-      if (inner) {
-        corners = inner;
-        setStatus('自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。', 'ok');
+      lastOuterQuad = outer;   // 🎯 ボタンの起点として記憶
+      // 2回目AI: 外周の中で絵そのものを掴み直す。検品 (solidity/σ後) を通れば採用
+      let second = null;
+      try { second = await aiSecondPass(outer); } catch (e) { console.warn('2回目のAI検出でエラー。境目探索に切り替えます。', e); }
+      if (secondPassAccepted(second)) {
+        corners = second.quad;
+        setStatus('自動検出しました（AI・内側の絵まで検出）。ずれていたら辺の青四角で調整してください。', 'ok');
       } else {
-        corners = outer;
-        setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドしてください。', 'ok');
+        // 検品を通らなければ v22 までの動き: ルールで境目を探し、だめなら外周
+        let inner = null;
+        try { inner = refineInward(outer); } catch (e) { console.warn('内側の境目探索でエラー。外周の枠を使います。', e); }
+        if (inner) {
+          corners = inner;
+          setStatus('自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。', 'ok');
+        } else {
+          corners = outer;
+          setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドするか「🎯 内側の絵」を試してください。', 'ok');
+        }
       }
       redraw();
       updateMetrics();
@@ -1258,6 +1368,25 @@
 
   // ===== ボタン =====
   $('redetect').addEventListener('click', autoDetect);
+  // 🎯 = 1回目の外周枠を起点に2回目AIを強制実行 (自動の検品が見送った写真を人の判断で救う)。
+  // 「今の枠」でなく外周枠から始めるのは、台紙が丸ごと残った構図でないと2回目の実力が出ないため。
+  $('aiInner').addEventListener('click', async () => {
+    if (!fullMat) return;
+    if (!lastOuterQuad) { setStatus('先に「🔍 もう一度自動検出」を実行してください（この写真ではAI検出が使えていません）。', 'warn'); return; }
+    window.detectBusy = true;
+    setStatus('内側の絵を検出中…', 'info');
+    let second = null;
+    try { second = await aiSecondPass(lastOuterQuad); } catch (e) { console.warn('内側の検出でエラー。', e); }
+    if (second && second.frac >= 0.05 && second.frac <= 0.97) {
+      corners = second.quad;
+      setStatus('内側の絵を検出しました。ずれていたら辺の青四角で調整、元に戻すには「🔍 もう一度自動検出」。', 'ok');
+    } else {
+      setStatus('内側の絵を見つけられませんでした。四隅を手で合わせて「✨ 四隅を微調整」をお試しください。', 'warn');
+    }
+    redraw();
+    updateMetrics();
+    window.detectBusy = false;
+  });
   $('refine').addEventListener('click', () => {
     if (!corners || !fullMat) return;
     corners = refineFromCorners(corners);
