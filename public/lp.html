@@ -246,6 +246,14 @@
   }
   .contact-btn:hover{background:var(--vermillion-deep);}
 
+  .hero-cta{
+    display:inline-block;margin-top:26px;text-decoration:none;
+    background:var(--vermillion);color:#fff;font-size:15px;
+    padding:12px 28px;border-radius:3px;border:1px solid var(--vermillion-deep);
+    transition:background .15s ease;
+  }
+  .hero-cta:hover{background:var(--vermillion-deep);}
+
   @media (max-width:720px){
     .demo-steps,.picker-grid{grid-template-columns:1fr;}
     nav.links{display:none;}
@@ -270,6 +278,7 @@
     <span class="eyebrow">QR IINE ― 展示のための双方向コミュニケーション</span>
     <h1>展示作品のそばにあるQRコードを読み取るだけで、<br>その場で作品への感想を作家に届けられる仕組みです。</h1>
     <p class="lead">作家と観客のコミュニケーションを活性化して、展覧会をもっと楽しく、アクティブにします。</p>
+    <a class="hero-cta" href="/setup.html">無料で使ってみる（練習モードあり）</a>
   </div>
 </section>
 
@@ -421,6 +430,10 @@
     <h2>お問い合わせ</h2>
     <p class="lead">導入のご相談や、対応のご要望など、お気軽にご連絡ください。</p>
     <div class="contact-rows">
+      <div class="contact-row">
+        <p>まずは自分で試したい方：無料・練習モードで気軽に始められます</p>
+        <a class="contact-btn" href="/setup.html">展覧会を作ってみる</a>
+      </div>
       <div class="contact-row">
         <p>主催者・画廊主の方：導入のご相談はこちら</p>
         <a class="contact-btn" href="https://qriine.com/contact.html" target="_blank" rel="noopener">お問い合わせ</a>
