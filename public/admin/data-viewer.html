@@ -59,7 +59,11 @@
   <div id="mainArea" style="display:none;">
     <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
     <div class="toolbar">
-      <label>展覧会: <select id="exSelect"></select></label>
+      <label>展覧会:
+        <input id="exInput" list="exList" placeholder="展覧会名 / exコード / メールで検索"
+          style="min-width:300px;" autocomplete="off">
+        <datalist id="exList"></datalist>
+      </label>
       <label>コレクション:
         <select id="collSelect" onchange="onCollChange()">
           <option value="exhibitions">exhibitions (展覧会)</option>
@@ -135,42 +139,41 @@
       return String(v);
     }
 
-    async function loadExhibitionsForUser(userEmail) {
-      var sel = document.getElementById("exSelect");
-      sel.innerHTML = '';
+    // 運営者は全展覧会を候補に読み込む (Rules: exhibitions の list は isOperator 可)。
+    // datalist なので名前 / exコード / メールの部分一致で絞り込める + コード直接入力も同じ欄で済む。
+    async function loadAllExhibitions() {
+      var dl = document.getElementById('exList');
+      dl.innerHTML = '';
       exMap = {};
-      if (!userEmail) return;
-      var normalized = userEmail.trim().toLowerCase();
-      var snap = await db.collection("exhibitions").where("email", "==", normalized).get();
+      var snap = await db.collection('exhibitions').limit(500).get();
+      var rows = [];
       snap.docs.forEach(function(d){
         exMap[d.id] = d.data();
-        var opt = document.createElement("option");
-        opt.value = d.id;
-        opt.textContent = ((d.data().ex_name) || "(名称未設定)") + " (" + d.id + ")";
-        sel.appendChild(opt);
+        rows.push({ id: d.id, data: d.data() });
+      });
+      // 新しい順 (フィールドが無い古い doc は後ろ)
+      rows.sort(function(a, b){
+        function ts(r) { return sortTs(r.data.updatedAt || r.data.created_at || r.data.timestamp); }
+        return ts(b) - ts(a);
+      });
+      rows.forEach(function(r){
+        var opt = document.createElement('option');
+        opt.value = r.id;
+        opt.label = ((r.data.ex_name) || '(名称未設定)') + ' — ' + (r.data.email || '');
+        dl.appendChild(opt);
       });
       var urlEx = new URLSearchParams(window.location.search).get('ex') || '';
-      if (normalized === 'rymist1@gmail.com' && urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx) && !exMap[urlEx]) {
-        try {
-          var exDoc = await db.collection('exhibitions').doc(urlEx).get();
-          if (exDoc.exists) {
-            exMap[urlEx] = exDoc.data();
-            var optOp = document.createElement('option');
-            optOp.value = urlEx;
-            optOp.textContent = ((exMap[urlEx].ex_name) || '(名称未設定)') + ' (' + urlEx + ') サポート';
-            sel.insertBefore(optOp, sel.firstChild);
-          }
-        } catch (e) { console.warn('operator ex inject failed:', e); }
+      if (urlEx && /^[A-Za-z0-9_-]+$/.test(urlEx)) {
+        document.getElementById('exInput').value = urlEx;
       }
-      if (urlEx && exMap[urlEx]) sel.value = urlEx;
     }
 
     async function loadCollection() {
-      var ex = document.getElementById('exSelect').value;
+      var ex = (document.getElementById('exInput').value || '').trim();
       var coll = document.getElementById('collSelect').value;
       var resEl = document.getElementById('result');
       var countEl = document.getElementById('rowCount');
-      if (!ex) { resEl.innerHTML = '<div class="empty">展覧会を選択してください。</div>'; return; }
+      if (!ex) { resEl.innerHTML = '<div class="empty">展覧会を選択 (または ex コードを入力) してください。</div>'; return; }
       var cfg = COLL[coll];
       if (!cfg) { resEl.innerHTML = '<div class="empty">未対応のコレクションです。</div>'; return; }
       var btn = document.getElementById('btnLoad');
@@ -275,7 +278,7 @@
           authCard.style.display = 'none';
           denied.style.display = 'none';
           mainArea.style.display = 'block';
-          loadExhibitionsForUser(user.email);
+          loadAllExhibitions();
         } else if (user && !isOp) {
           authCard.style.display = 'none';
           mainArea.style.display = 'none';
