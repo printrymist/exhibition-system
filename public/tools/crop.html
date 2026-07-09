@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v21</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v22</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -366,6 +366,115 @@
     return { quad: quad.map(p => ({ x: Math.max(0, Math.min(W, p[0])), y: Math.max(0, Math.min(H, p[1])) })), frac };
   }
 
+  // ===== 二段目: AI外周の内側で「マット/台紙 → 絵」の境目を探す =====
+  // AI は台紙・マット・額ごと「物体ぜんたい」を掴むことがある。外周は正確なので、
+  // まず外周で正面補正 (歪みが消え、絵の縁は水平/垂直の直線になる) してから、
+  // 各辺の内向きに「手前は辺の色で均一・そこから先はずっと違う」遷移ラインを探す。
+  // 額→マット→絵 のように多重のときは反復で段階的に入る。見つからなければ外周のまま。
+  // (25枚GT: 一段のみ 平均IoU 0.75 → 二段 0.83。判断が曖昧な写真では動かさない設計)
+
+  // square(u,v∈0..1) → 四角形 の射影写像 (正面補正の逆向き。内側矩形をフル座標へ戻す用)
+  function mlSquareToQuad(q) { // q: [{x,y}] TL,TR,BR,BL
+    const p0 = q[0], p1 = q[1], p2 = q[2], p3 = q[3];
+    const dx1 = p1.x - p2.x, dx2 = p3.x - p2.x, dx3 = p0.x - p1.x + p2.x - p3.x;
+    const dy1 = p1.y - p2.y, dy2 = p3.y - p2.y, dy3 = p0.y - p1.y + p2.y - p3.y;
+    let a, b, c, d, e, f, g, h;
+    if (Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9) {
+      a = p1.x - p0.x; b = p2.x - p1.x; c = p0.x;
+      d = p1.y - p0.y; e = p2.y - p1.y; f = p0.y;
+      g = 0; h = 0;
+    } else {
+      const den = dx1 * dy2 - dx2 * dy1;
+      g = (dx3 * dy2 - dx2 * dy3) / den;
+      h = (dx1 * dy3 - dx3 * dy1) / den;
+      a = p1.x - p0.x + g * p1.x;
+      b = p3.x - p0.x + h * p3.x;
+      c = p0.x;
+      d = p1.y - p0.y + g * p1.y;
+      e = p3.y - p0.y + h * p3.y;
+      f = p0.y;
+    }
+    return (u, v) => {
+      const w = g * u + h * v + 1;
+      return { x: (a * u + b * v + c) / w, y: (d * u + e * v + f) / w };
+    };
+  }
+
+  // 1辺ぶんの内向き遷移探索。lineAt(k)=辺から内側へ k の位置の画素列 ([r,g,b] の配列)
+  function mlFindTransition(lineAt, searchLen, K) {
+    const samples = [];
+    for (let k = 2; k < 2 + K; k++) for (const p of lineAt(k)) samples.push(p);
+    if (samples.length < 20) return null;
+    const mean = [0, 1, 2].map(ch => samples.reduce((s, p) => s + p[ch], 0) / samples.length);
+    const std = Math.sqrt(samples.reduce((s, p) => s + (p[0] - mean[0]) ** 2 + (p[1] - mean[1]) ** 2 + (p[2] - mean[2]) ** 2, 0) / samples.length / 3);
+    const T = Math.max(30, std * 3);
+    const dfrac = [];
+    for (let k = 0; k < searchLen; k++) {
+      const line = lineAt(k);
+      let n = 0;
+      for (const p of line) {
+        if (Math.hypot(p[0] - mean[0], p[1] - mean[1], p[2] - mean[2]) > T) n++;
+      }
+      dfrac.push(line.length ? n / line.length : 0);
+    }
+    const win = (i0, i1) => { let s = 0, n = 0; for (let i = Math.max(0, i0); i < Math.min(dfrac.length, i1); i++) { s += dfrac[i]; n++; } return n ? s / n : 0; };
+    let best = -1, bk = -1;
+    for (let k = K + 1; k < searchLen - K; k++) {
+      const score = win(k, k + K) - win(k - K, k);
+      if (score > best) { best = score; bk = k; }
+    }
+    if (bk < 0) return null;
+    const before = win(bk - K, bk), after = win(bk, bk + K);
+    // 採用条件: 遷移前はマットらしく均一 (違う画素が少ない)・遷移後は絵が続く
+    if (before < 0.15 && after > 0.45) return { k: bk };
+    return null;
+  }
+
+  // AI外周 quad (フル座標 [{x,y}]) → 内側の絵の四角形 or null (見つからない/曖昧なら動かさない)
+  function refineInward(quadPts) {
+    const q = orderCorners(quadPts);
+    const len = (A, B) => Math.hypot(B.x - A.x, B.y - A.y);
+    let W = Math.round((len(q[0], q[1]) + len(q[3], q[2])) / 2);
+    let H = Math.round((len(q[0], q[3]) + len(q[1], q[2])) / 2);
+    const cap = 1000 / Math.max(W, H);
+    if (cap < 1) { W = Math.round(W * cap); H = Math.round(H * cap); }
+    if (W < 60 || H < 60) return null;
+    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [q[0].x, q[0].y, q[1].x, q[1].y, q[2].x, q[2].y, q[3].x, q[3].y]);
+    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, W, 0, W, H, 0, H]);
+    const M = cv.getPerspectiveTransform(srcTri, dstTri);
+    let rect = new cv.Mat();
+    cv.warpPerspective(fullMat, rect, M, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+    const data = rect.data; // RGBA
+    const px = (x, y) => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+    let t = 0, b = H, l = 0, r = W;
+    const minW = W * 0.3, minH = H * 0.3;
+    for (let iter = 0; iter < 4; iter++) {
+      let moved = false;
+      const mx = Math.round((r - l) * 0.06), my = Math.round((b - t) * 0.06);
+      const K = Math.max(3, Math.round(Math.min(r - l, b - t) * 0.02));
+      const step = Math.max(1, Math.round((r - l) / 300));
+      const searchV = Math.round((b - t) * 0.42), searchH = Math.round((r - l) * 0.42);
+      const rowAt = (y) => { const out = []; for (let x = l + mx; x < r - mx; x += step) out.push(px(x, y)); return out; };
+      const colAt = (x) => { const out = []; for (let y = t + my; y < b - my; y += step) out.push(px(x, y)); return out; };
+      const tt = mlFindTransition(k => rowAt(t + k), searchV, K);
+      const bb = mlFindTransition(k => rowAt(b - 1 - k), searchV, K);
+      const ll = mlFindTransition(k => colAt(l + k), searchH, K);
+      const rr = mlFindTransition(k => colAt(r - 1 - k), searchH, K);
+      if (tt && b - (t + tt.k) > minH) { t += tt.k; moved = true; }
+      if (bb && (b - bb.k) - t > minH) { b -= bb.k; moved = true; }
+      if (ll && r - (l + ll.k) > minW) { l += ll.k; moved = true; }
+      if (rr && (r - rr.k) - l > minW) { r -= rr.k; moved = true; }
+      if (!moved) break;
+    }
+    rect.delete(); srcTri.delete(); dstTri.delete(); M.delete();
+    if (!(t > 0 || b < H || l > 0 || r < W)) return null;
+    const map = mlSquareToQuad(q);
+    const FW = fullMat.cols, FH = fullMat.rows;
+    return [[l / W, t / H], [r / W, t / H], [r / W, b / H], [l / W, b / H]]
+      .map(([u, v]) => map(u, v))
+      .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) }));
+  }
+
   // ===== 状態 =====
   let imgEl = null;         // 読み込んだ元画像 (フルサイズ)
   let fullMat = null;       // OpenCV の元画像 Mat
@@ -442,8 +551,16 @@
     let ml = null;
     try { ml = await detectByML(); } catch (e) { console.warn('AI検出でエラー。従来検出に切り替えます。', e); }
     if (ml) {
-      corners = orderCorners(ml.quad);
-      setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドしてください。', 'ok');
+      const outer = orderCorners(ml.quad);
+      let inner = null;
+      try { inner = refineInward(outer); } catch (e) { console.warn('内側の境目探索でエラー。外周の枠を使います。', e); }
+      if (inner) {
+        corners = inner;
+        setStatus('自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。', 'ok');
+      } else {
+        corners = outer;
+        setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドしてください。', 'ok');
+      }
       redraw();
       updateMetrics();
       window.detectBusy = false;
