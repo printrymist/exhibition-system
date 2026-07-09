@@ -92,7 +92,7 @@
   .chapter-audience .chapter-flex{display:flex;gap:30px;align-items:flex-start;margin-top:18px;}
   .chapter-audience .c-text{flex:1;min-width:0;}
   .chapter-audience .c-media{width:200px;flex:none;}
-  .chapter-audience .c-media .shot-placeholder{height:220px;margin-top:0;}
+  .chapter-audience .c-media .shot-img{margin-top:0;}
   @media (max-width:640px){
     .chapter-audience .chapter-flex{flex-direction:column;}
     .chapter-audience .c-media{width:100%;}
@@ -144,6 +144,21 @@
     margin-top:14px;height:120px;border:1px dashed var(--line);border-radius:4px;
     display:flex;align-items:center;justify-content:center;
     font-size:12px;color:var(--ink-soft);background:#fff;
+  }
+  .shot-img{
+    display:block;width:100%;height:auto;margin-top:14px;
+    border:1px solid var(--line);border-radius:4px;background:#fff;
+  }
+  .shot-duo{
+    display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px;
+  }
+  .shot-duo .shot-img{margin-top:0;}
+  .shot-duo figure{margin:0;}
+  .shot-duo figcaption{
+    font-size:12.5px;color:var(--ink-soft);margin-top:8px;text-align:center;
+  }
+  @media (max-width:640px){
+    .shot-duo{grid-template-columns:1fr;}
   }
   .demo-note{margin-top:20px;font-size:14px;color:var(--ink-soft);}
 
@@ -268,17 +283,17 @@
       <div class="step-card">
         <span class="step-num">一</span>
         <p>作品のそばにあるQRコードを、スマホのカメラで読み取る。</p>
-        <div class="shot-placeholder">画面イメージ（挿入予定）</div>
+        <img class="shot-img" src="/assets/lp/step1_scan.jpg" alt="作品横のキャプションのQRコードをスマホのカメラで読み取っている様子" loading="lazy">
       </div>
       <div class="step-card">
         <span class="step-num">二</span>
         <p>画面が開く。名前の登録もアプリのダウンロードも不要。</p>
-        <div class="shot-placeholder">画面イメージ（挿入予定）</div>
+        <img class="shot-img" src="/assets/lp/step2_open.jpg" alt="QRコードを読むと開く作品ページ。作品画像とタイトル、作家名が表示されている" loading="lazy">
       </div>
       <div class="step-card">
         <span class="step-num">三</span>
         <p>「いいね」やひとことコメントを送って完了。数秒で終わる。</p>
-        <div class="shot-placeholder">画面イメージ（挿入予定）</div>
+        <img class="shot-img" src="/assets/lp/step3_done.jpg" alt="いいねを送ったあとのお礼画面。ハートと応援数が表示されている" loading="lazy">
       </div>
     </div>
     <p class="demo-note">※ これは仕組みの分かりやすさを伝えるための紹介です。実際にQRを読んだときの操作案内は、この場で別途表示されます。</p>
@@ -325,7 +340,7 @@
             </div>
           </div>
           <div class="c-media">
-            <div class="shot-placeholder">実際にQRを読んで<br>画面が開く様子<br>（挿入予定）</div>
+            <img class="shot-img" src="/assets/lp/audience_scan.jpg" alt="ギャラリーで作品横のQRコードをスマホで読み取っている来場者" loading="lazy">
           </div>
         </div>
       </div>
@@ -359,7 +374,16 @@
           <span class="seal">開催のたびに企画精度が上がる</span>
         </div>
 
-        <div class="shot-placeholder">会期中の反応画面＋会期後の振り返り・分析画面（挿入予定）</div>
+        <div class="shot-duo">
+          <figure>
+            <img class="shot-img" src="/assets/lp/host_dashboard.jpg" alt="会期中のリアルタイム集計画面。参加者数・いいね数・コメント数と作品ランキング、最新コメントが並ぶ" loading="lazy">
+            <figcaption>会期中：反応をリアルタイムに表示</figcaption>
+          </figure>
+          <figure>
+            <img class="shot-img" src="/assets/lp/host_analytics.jpg" alt="会期後の分析画面。作品ごとの反応の集まり方をグラフで振り返る" loading="lazy">
+            <figcaption>会期後：作品ごとの反応をじっくり分析</figcaption>
+          </figure>
+        </div>
       </div>
     </div>
   </div>
