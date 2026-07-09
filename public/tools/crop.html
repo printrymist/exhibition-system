@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v23</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v24</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -135,18 +135,19 @@
         <p class="hint">実寸を入れると、検出が多少ずれても仕上がりの縦横比が正確になります。</p>
 
         <div class="row" style="margin-top:14px;">
-          <label class="seg">余白 横
-            <input id="marginX" type="number" min="0" step="1" value="0">
+          <label class="seg"><input id="marginOn" type="checkbox"> 余白を付ける</label>
+          <label class="seg">横
+            <input id="marginX" type="number" min="0" step="1" value="0" disabled>
           </label>
           <label class="seg">縦
-            <input id="marginY" type="number" min="0" step="1" value="0">
+            <input id="marginY" type="number" min="0" step="1" value="0" disabled>
           </label>
-          <select id="marginUnit">
+          <select id="marginUnit" disabled>
             <option value="mm">mm</option>
             <option value="pct">%</option>
           </select>
         </div>
-        <p class="hint">0 より大きくすると、切り出し範囲の外側に余白を足して大きく切り出します（上下左右それぞれの辺に付きます）。mm 指定には「作品の実寸から」の幅・高さの入力が必要です。写真に写っていない部分は白になります。</p>
+        <p class="hint">チェックを入れると、切り出し範囲の外側に余白を足して大きく切り出します（上下左右それぞれの辺に付きます）。mm 指定には「作品の実寸から」の幅・高さの入力が必要です（％指定なら不要）。写真に写っていない部分は白になります。チェックを外しても入力値は残ります。</p>
 
         <div class="row" style="margin-top:16px;">
           <button id="crop" class="primary">③ この範囲で切り出す</button>
@@ -1366,6 +1367,12 @@
   function showCornerLoupe() { if (dragIndex >= 0) showLoupe(corners[dragIndex].x, corners[dragIndex].y, 'corner'); }
   function hideLoupe() { loupe.style.display = 'none'; loupe2.style.display = 'none'; }
 
+  // ===== 余白 ON/OFF (OFF でも入力値は保持し、切り出しに反映しないだけ) =====
+  $('marginOn').addEventListener('change', () => {
+    const on = $('marginOn').checked;
+    ['marginX', 'marginY', 'marginUnit'].forEach(id => { $(id).disabled = !on; });
+  });
+
   // ===== ボタン =====
   $('redetect').addEventListener('click', autoDetect);
   // 🎯 = 1回目の外周枠を起点に2回目AIを強制実行 (自動の検品が見送った写真を人の判断で救う)。
@@ -1441,8 +1448,10 @@
       h = Math.round(w * (rh / rw));
     }
     // 余白: 上下左右それぞれの辺に付く。mm は実寸から換算、% は切り出し幅・高さに対する割合。
-    const mxv = Math.max(0, parseFloat($('marginX').value) || 0);
-    const myv = Math.max(0, parseFloat($('marginY').value) || 0);
+    // チェック OFF のときは入力値を保持したまま無効 (0 扱い)。
+    const marginOn = $('marginOn').checked;
+    const mxv = marginOn ? Math.max(0, parseFloat($('marginX').value) || 0) : 0;
+    const myv = marginOn ? Math.max(0, parseFloat($('marginY').value) || 0) : 0;
     let mx = 0, my = 0;
     if (mxv > 0 || myv > 0) {
       if ($('marginUnit').value === 'mm') {
