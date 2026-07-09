@@ -20,12 +20,16 @@
     .toolbar label { font-size: 0.9em; }
     .count { color: #666; font-size: 0.88em; }
     .empty { padding: 24px; text-align: center; color: #999; background: #f5f5f5; border-radius: 8px; }
-    .table-wrap { overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 8px; }
+    /* 縦横とも枠内スクロール: 横スクロールバーが常に画面内に見える */
+    .table-wrap { overflow: auto; max-height: 70vh; border: 1px solid #e0e0e0; border-radius: 8px; }
     table { border-collapse: collapse; font-size: 0.82em; white-space: nowrap; }
     th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; border-right: 1px solid #f2f2f2; vertical-align: top; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
-    th { background: #f7faff; color: #1a4f9c; position: sticky; top: 0; font-weight: bold; }
+    th { background: #f7faff; color: #1a4f9c; position: sticky; top: 0; z-index: 2; font-weight: bold; }
     tbody tr:hover { background: #f7faff; cursor: pointer; }
-    td.docid { font-family: monospace; color: #8a6500; }
+    /* 左端 (__id__) 列は横スクロールしても固定 */
+    td.docid { font-family: monospace; color: #8a6500; position: sticky; left: 0; background: #fff; z-index: 1; }
+    tbody tr:hover td.docid { background: #f7faff; }
+    th.docid { left: 0; z-index: 3; }
     .detail { background: #fbfcff; }
     .detail td { white-space: normal; max-width: none; }
     .detail table { width: 100%; }
@@ -209,7 +213,7 @@
       docs.forEach(function(d){
         Object.keys(d.data).sort().forEach(function(k){ if (!seen[k]) { seen[k] = true; keys.push(k); } });
       });
-      var html = '<div class="table-wrap"><table><thead><tr><th>__id__</th>';
+      var html = '<div class="table-wrap"><table><thead><tr><th class="docid">__id__</th>';
       keys.forEach(function(k){ html += '<th>' + escapeHtml(k) + '</th>'; });
       html += '</tr></thead><tbody>';
       docs.forEach(function(d, i){
