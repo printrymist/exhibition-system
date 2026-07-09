@@ -2249,19 +2249,36 @@ ${artistMessage}
           return;
         }
         const newId = res.artworkId;
+        // 画像アップロードは作品 doc 作成後の第 2 段階。ここで失敗しても作品は
+        // 登録済みなので、全体を失敗扱いにすると「もう一度保存」で重複登録になる。
+        // 失敗は分けて捕捉し、「登録済み + 画像だけ後から追加」の案内に落とす。
+        let imageUploadFailed = false;
         const imageField = activeFields.find(f => FIELD_MAP[f.name] && FIELD_MAP[f.name].type === 'image');
         if (imageField) {
           const preview = document.getElementById('art_' + imageField.name + '_preview');
           const pending = preview && preview.dataset ? preview.dataset.pending : '';
           if (pending) {
-            const url = await window.fsUploadArtworkImage(currentEx, newId, pending);
-            await window.fsSetArtwork(currentEx, newId, { image_url: url });
+            try {
+              const url = await window.fsUploadArtworkImage(currentEx, newId, pending);
+              await window.fsSetArtwork(currentEx, newId, { image_url: url });
+            } catch (imgErr) {
+              console.error('image upload failed after artwork create:', newId, imgErr);
+              imageUploadFailed = true;
+            }
           }
         }
         document.getElementById('btnSaveArt').disabled = false;
         const banner = document.getElementById('saveBanner');
-        banner.innerText = '✅ ' + newId + ' を登録しました。';
+        banner.innerText = imageUploadFailed
+          ? '✅ ' + newId + ' を登録しました（画像は未添付）。'
+          : '✅ ' + newId + ' を登録しました。';
         banner.style.display = 'block';
+        if (imageUploadFailed) {
+          document.getElementById('inputError').innerText =
+            '⚠ 作品情報は保存できましたが、画像のアップロードに失敗しました。' +
+            'もう一度「保存」を押すと同じ作品が二重に登録されるのでご注意ください。' +
+            '下の登録済み一覧から ' + newId + ' を開いて画像を選び直し、「💾 更新する」で追加できます。';
+        }
         // 連続入力支援: 画像だけクリア、テキスト系は全部保持して次の作品入力を楽にする。
         // タイトルもシリーズ作品では使い回せるよう保持する。
         activeFields.filter(f => !ALL_ARTIST_FIELDS.includes(f.name)).forEach(f => {
