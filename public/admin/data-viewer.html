@@ -57,11 +57,18 @@
     <div class="toolbar">
       <label>展覧会: <select id="exSelect"></select></label>
       <label>コレクション:
-        <select id="collSelect">
+        <select id="collSelect" onchange="onCollChange()">
           <option value="exhibitions">exhibitions (展覧会)</option>
           <option value="artworks">artworks (作品)</option>
           <option value="inquiries">inquiries (問い合わせ)</option>
+          <option value="likes">likes (いいね/コメント)</option>
+          <option value="caption_templates">caption_templates (保存テンプレ)</option>
+          <option value="audit">audit (変更履歴)</option>
         </select>
+      </label>
+      <label id="commentOnlyLabel" style="display:none;">
+        <input type="checkbox" id="commentOnly" onchange="loadCollection()" style="padding:0; vertical-align:middle;">
+        💬 コメントのある行だけ
       </label>
       <button id="btnLoad" onclick="loadCollection()">読み込む</button>
       <span class="count" id="rowCount"></span>
@@ -89,8 +96,25 @@
     var COLL = {
       exhibitions: { docById: true },
       artworks: { exField: 'exCode' },
-      inquiries: { exField: 'ex_code' }
+      inquiries: { exField: 'ex_code' },
+      // 時系列系は新しい順に見たい。where + orderBy は composite index が要るので
+      // sortField はクライアント側で降順ソートする。
+      likes: { exField: 'exCode', sortField: 'timestamp' },
+      caption_templates: { exField: 'exCode' },
+      audit: { exField: 'exCode', sortField: 'timestamp' }
     };
+
+    function onCollChange() {
+      var coll = document.getElementById('collSelect').value;
+      document.getElementById('commentOnlyLabel').style.display = (coll === 'likes') ? '' : 'none';
+    }
+
+    function sortTs(v) {
+      if (v == null) return 0;
+      if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_e) {} }
+      var t = Date.parse(v);
+      return isNaN(t) ? 0 : t;
+    }
 
     function escapeHtml(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -158,8 +182,17 @@
           var snap = await db.collection(coll).where(cfg.exField, '==', ex).limit(LIMIT).get();
           snap.docs.forEach(function(d){ docs.push({ id: d.id, data: d.data() }); });
         }
+        var total = docs.length;
+        if (cfg.sortField) {
+          docs.sort(function(a, b){ return sortTs(b.data[cfg.sortField]) - sortTs(a.data[cfg.sortField]); });
+        }
+        if (coll === 'likes' && document.getElementById('commentOnly').checked) {
+          docs = docs.filter(function(d){ return String(d.data.comment || '').trim() !== ''; });
+        }
         renderTable(docs);
-        countEl.textContent = docs.length + ' 件' + (docs.length >= LIMIT ? ' (上限 ' + LIMIT + ' 件まで)' : '');
+        countEl.textContent = docs.length + ' 件' +
+          (docs.length !== total ? ' (全 ' + total + ' 件中)' : '') +
+          (total >= LIMIT ? ' (上限 ' + LIMIT + ' 件まで)' : '');
       } catch (e) {
         console.error(e);
         resEl.innerHTML = '<div class="empty" style="color:#d93025;">エラー: ' + escapeHtml(e.message || e) + '</div>';
