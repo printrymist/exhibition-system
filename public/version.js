@@ -23,15 +23,19 @@ window.renderVersionFooter = function (containerId) {
     window.APP_RELEASED_AT + ')</span>';
 };
 
-// お問い合わせリンク (主催者の主要画面: caption / register / reports のみ呼ぶ)。
+// お問い合わせリンク (主催者向け画面のフッタで呼ぶ)。
 // バージョンフッタの直上にボタン風で配置する想定。
 // 現在のページの ex= があれば inquiry.html?ex=… に引き継ぐ。
+// ex が無いとき (setup の展覧会作成前など) は inquiry.html が開けないので
+// 一般問い合わせ contact.html に振る。
 window.renderInquiryLink = function (containerId) {
   var el = document.getElementById(containerId || 'inquiryLink');
   if (!el) return;
   var ex = '';
   try { ex = new URLSearchParams(window.location.search).get('ex') || ''; } catch (_e) {}
-  var href = '/inquiry.html' + (ex && /^[A-Za-z0-9_-]+$/.test(ex) ? '?ex=' + encodeURIComponent(ex) : '');
+  var href = (ex && /^[A-Za-z0-9_-]+$/.test(ex))
+    ? '/inquiry.html?ex=' + encodeURIComponent(ex)
+    : '/contact.html';
   el.style.cssText = 'text-align:center;margin-top:24px;';
   el.innerHTML =
     '<a href="' + href + '" style="display:inline-block;padding:8px 18px;background:#e8f0fe;' +

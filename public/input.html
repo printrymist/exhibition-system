@@ -549,6 +549,7 @@
   <script src="offline-banner.js" data-message="⚠ オフラインです。作品の登録・更新は接続復帰後に行ってください。"></script>
   <script src="field-defs.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script>setFriendlyErrorContact('artist');</script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -905,7 +906,7 @@
         showTopToast('✅「' + label + '」を提出しました。あとは主催者にお任せください。再編集が必要なときは主催者にご連絡ください。');
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
-        alert(friendlyError(e, '提出', '解決しないときは主催者にご連絡ください。'));
+        alert(friendlyError(e, '提出'));
         if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
       }
     }
@@ -1061,7 +1062,7 @@
         await finalizeSaveSuccess(newId);
       } catch (err) {
         document.getElementById('btnNewSave').disabled = false;
-        document.getElementById('newFormError').innerText = friendlyError(err, '登録', '解決しないときは主催者にご連絡ください。');
+        document.getElementById('newFormError').innerText = friendlyError(err, '登録');
       }
     }
 
@@ -1227,7 +1228,7 @@
         }
       } catch (err) {
         if (btnSave) btnSave.disabled = false;
-        if (msgEl) { msgEl.textContent = friendlyError(err, '更新', '解決しないときは主催者にご連絡ください。'); msgEl.style.color = '#d93025'; }
+        if (msgEl) { msgEl.textContent = friendlyError(err, '更新'); msgEl.style.color = '#d93025'; }
       }
     }
 

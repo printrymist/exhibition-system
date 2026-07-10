@@ -854,6 +854,7 @@
   </script>
   <script src="js/operator-auth.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script>setFriendlyErrorContact('organizer');</script>
   <script>
     (function () {
       function setMsg(text, color) {
@@ -919,9 +920,10 @@
       };
     })();
   </script>
+  <div id="inquiryLink"></div>
   <div id="versionFooter"></div>
   <script src="version.js"></script>
-  <script>renderVersionFooter();</script>
+  <script>renderInquiryLink();renderVersionFooter();</script>
 </body>
 
 </html>

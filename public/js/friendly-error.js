@@ -9,8 +9,24 @@
 (function () {
   'use strict';
 
+  // 画面の役割に応じた既定の連絡先案内 (再試行しても解決しないときの出口)。
+  // ページ初期化時に一度だけ宣言する: friendly-error.js の直後で
+  //   <script>setFriendlyErrorContact('organizer');</script>
+  // organizer = 主催者画面 (✉ お問い合わせボタンが画面下にあること)
+  // artist    = 作家画面 (窓口は主催者)
+  // 宣言しない画面 (来場者向け等) は従来どおり案内なし。
+  var CONTACT_HINTS = {
+    organizer: '解決しないときは画面下の「✉ お問い合わせ」からご連絡ください。',
+    artist: '解決しないときは主催者にご連絡ください。'
+  };
+  var defaultContactHint = '';
+  window.setFriendlyErrorContact = function (role) {
+    defaultContactHint = CONTACT_HINTS[role] || '';
+  };
+
   // contactHint: 任意。再試行系の汎用エラーのときだけ末尾に添える連絡先の案内
-  //   (例: '解決しないときは主催者にご連絡ください。')。不慣れな利用者向けの出口。
+  //   (例: '解決しないときは主催者にご連絡ください。')。省略時はページの既定
+  //   (setFriendlyErrorContact) を使う。不慣れな利用者向けの出口。
   function friendlyError(err, actionLabel, contactHint) {
     var label = actionLabel || '処理';
     try { console.error(label + ' failed:', err); } catch (_e) {}
@@ -29,7 +45,8 @@
 
     // それ以外 (JavaScript / Firestore 等の英語例外) は日本語の汎用文に統一する。
     var base = label + 'に失敗しました。通信環境を確認して、もう一度お試しください。';
-    return contactHint ? base + contactHint : base;
+    var hint = contactHint || defaultContactHint;
+    return hint ? base + hint : base;
   }
 
   window.friendlyError = friendlyError;
