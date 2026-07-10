@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v26</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v28</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -76,25 +76,6 @@
     <div class="two">
       <div>
         <h2>① 四隅を確認・調整</h2>
-        <div class="row" style="margin-bottom:10px;">
-          <label class="seg">検出対象
-            <select id="target">
-              <option value="art">色付き作品（マット内）</option>
-              <option value="matwindow">額の内側／マット窓</option>
-              <option value="plate">プレートマーク・画像</option>
-            </select>
-          </label>
-          <label class="seg">マット
-            <select id="condMat"><option value="yes">有</option><option value="no">無</option></select>
-          </label>
-          <label class="seg">額
-            <select id="condFrame"><option value="no">写っていない</option><option value="yes">写っている</option></select>
-          </label>
-          <label class="seg">ガラス
-            <select id="condGlass"><option value="no">無</option><option value="yes">有</option></select>
-          </label>
-        </div>
-        <p class="hint" style="margin:-4px 0 10px;">条件を選ぶと検出を絞り込みます。変えたら「🔍 もう一度自動検出」で再検出。</p>
         <div class="stage" id="stage">
           <canvas id="view" class="view"></canvas>
           <div class="loupe" id="loupe"><canvas id="loupeCanvas" width="260" height="260"></canvas>
@@ -112,13 +93,22 @@
           <span id="gtCount" class="muted"></span>
         </div>
         <div class="row" style="margin-top:10px;">
+          <button id="rotL">↺ 左に回す</button>
+          <button id="rotR">↻ 右に回す</button>
+          <button id="trimBtn">✂ 周りを切り落とす</button>
+        </div>
+        <div class="row" id="trimRow" style="margin-top:10px; display:none;">
+          <button id="trimApply" class="primary">✔ この範囲に切り落とす</button>
+          <button id="trimCancel">✖ やめる</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
           <button id="redetect">🔍 もう一度自動検出</button>
           <button id="aiInner">🎯 内側の絵を検出</button>
           <button id="refine">✨ 四隅を微調整</button>
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
+        <p class="hint" style="margin-top:8px;">↺↻＝写真ごと 90° 回転（横向き・逆さまに撮れた写真を直せます）。✂＝周りに余計な物が写り込んだとき、先に残す範囲だけに切り落とします（検出が安定し、余白にも写り込みません）。白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
       </div>
 
       <div>
@@ -584,6 +574,10 @@
   let dragEdge = -1, edgeState = null;   // 辺スライド (平行移動)
   let currentFileName = '';   // 読み込んだ写真のファイル名 (GT 記録キー)
   let lastOuterQuad = null;   // 直近の自動検出が出した AI 外周枠 (🎯 の起点)
+  let trimMode = false, trimRect = null, trimDrag = null;  // ✂ 切り落としモード (trimRect は画像座標 {l,t,r,b})
+  let imageEdited = false;    // 回転・切り落とし後 true。GT は加工後画像を別名保存してそれに対して記録する
+  let editSeq = 0;            // 加工状態の通し番号 (保存名 _edit1, _edit2, … に使う)
+  let editedSavedName = null; // 今の加工状態を保存したファイル名 (未保存なら null。再記録時の二重DL防止)
 
   const view = $('view');
   const vctx = view.getContext('2d');
@@ -611,6 +605,10 @@
       if (fullMat) { fullMat.delete(); fullMat = null; }
       imgEl = img;
       fullMat = cv.imread(img);
+      imageEdited = false;
+      editSeq = 0;
+      editedSavedName = null;
+      exitTrim();
       buildGrad();
       $('editCard').style.display = 'block';
       $('outWrap').style.display = 'none';
@@ -634,16 +632,7 @@
   window.addEventListener('resize', () => { if (fullMat) layoutCanvas(); });
 
   // ===== 自動検出 (多候補生成 → 評価指標で最良を選択) =====
-  // 工夫①: 条件(対象/マット/額/ガラス)で場合分け。工夫②: 複数手がかりで候補を出し、
-  // 領域スコア S(Q) が最大の候補を採用。リファインは掛けない(✨ボタンで別途)。
-  function readConditions() {
-    return {
-      target: ($('target') && $('target').value) || 'art',
-      mat: ($('condMat') && $('condMat').value) || 'yes',
-      frame: ($('condFrame') && $('condFrame').value) || 'no',
-      glass: ($('condGlass') && $('condGlass').value) || 'no',
-    };
-  }
+  // 複数手がかりで候補を出し、領域スコア S(Q) が最大の候補を採用。リファインは掛けない(✨ボタンで別途)。
   // AI 検出 (u2netp) を主役に、失敗時は従来の多候補生成 → 領域スコア選択に落ちる。
   async function autoDetect() {
     window.detectBusy = true;
@@ -677,8 +666,7 @@
       window.detectBusy = false;
       return;
     }
-    const cond = readConditions();
-    const cands = generateCandidates(cond);
+    const cands = generateCandidates();
     let best = null, bestScore = -1;
     for (const c of cands) {
       c.quad = orderCorners(c.quad);
@@ -690,7 +678,6 @@
     }
     if (best && bestScore > 0) {
       corners = best.quad;
-      // (彩度遷移吸着 refineByColorTransition は「どの平行線か」を誤選択し regression するため未適用)
       setStatus('検出（' + best.src + '／スコア ' + bestScore + '・' + cands.length + '候補から選択）。ずれたら四隅ドラッグか「✨四隅を微調整」。', 'ok');
     } else {
       corners = insetRect();
@@ -736,84 +723,6 @@
     }
     gray.delete(); blur.delete(); edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
     return pts;
-  }
-
-  // 背景色ベースの領域分割で四隅を推定。
-  // 外周(額縁状の帯)の色を背景モデルとし、そこから色が離れた最大の塊 = 作品。
-  // 作品輪郭を 4 点近似 (A)、崩れたら凸包の四隅 (フォールバック) で取り出す。
-  // 返り値: { pts|null, confidence:'high'|'medium'|'low', frac, borderStd, fullBleed }
-  function detectQuadByBackground(mat) {
-    const W = mat.cols, H = mat.rows;
-    let borderMask = cv.Mat.zeros(H, W, cv.CV_8UC1);
-    const bw = Math.max(2, Math.round(Math.min(W, H) * 0.04));
-    cv.rectangle(borderMask, new cv.Point(0, 0), new cv.Point(W - 1, H - 1), new cv.Scalar(255), -1);
-    cv.rectangle(borderMask, new cv.Point(bw, bw), new cv.Point(W - 1 - bw, H - 1 - bw), new cv.Scalar(0), -1);
-    let mean = new cv.Mat(), stdd = new cv.Mat();
-    cv.meanStdDev(mat, mean, stdd, borderMask);
-    const bg = new cv.Scalar(mean.doubleAt(0, 0), mean.doubleAt(1, 0), mean.doubleAt(2, 0), 255);
-    const borderStd = (stdd.doubleAt(0, 0) + stdd.doubleAt(1, 0) + stdd.doubleAt(2, 0)) / 3;
-    let bgMat = new cv.Mat(H, W, mat.type(), bg);
-    let diff = new cv.Mat(), dist = new cv.Mat(), bin = new cv.Mat();
-    cv.absdiff(mat, bgMat, diff);
-    cv.cvtColor(diff, dist, cv.COLOR_RGBA2GRAY);
-    cv.threshold(dist, bin, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-    let k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
-    cv.morphologyEx(bin, bin, cv.MORPH_OPEN, k);
-    cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, k);
-    const frac = cv.countNonZero(bin) / (W * H);
-    let result = null;
-    const fullBleed = frac > 0.9;
-    if (!fullBleed && frac >= 0.03) {
-      let contours = new cv.MatVector(), hi = new cv.Mat();
-      cv.findContours(bin, contours, hi, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-      let best = null, bestA = 0;
-      for (let i = 0; i < contours.size(); i++) {
-        let c = contours.get(i);
-        const a = cv.contourArea(c);
-        if (a > bestA) { if (best) best.delete(); best = c.clone(); bestA = a; }
-        c.delete();
-      }
-      if (best && bestA > W * H * 0.05) {
-        const peri = cv.arcLength(best, true);
-        let approx = new cv.Mat();
-        cv.approxPolyDP(best, approx, 0.02 * peri, true);
-        let pts;
-        if (approx.rows === 4 && cv.isContourConvex(approx)) {
-          pts = [];
-          for (let i = 0; i < 4; i++) pts.push({ x: approx.data32S[i*2], y: approx.data32S[i*2+1] });
-        } else {
-          let hull = new cv.Mat();
-          cv.convexHull(best, hull, false, true);
-          pts = fourExtreme(hull);
-          hull.delete();
-        }
-        approx.delete();
-        let confidence = 'low';
-        if (borderStd < 25 && frac >= 0.08 && frac <= 0.85) confidence = 'high';
-        else if (borderStd < 48 && frac >= 0.05 && frac <= 0.90) confidence = 'medium';
-        result = { pts, confidence, frac, borderStd, fullBleed: false };
-      }
-      if (best) best.delete();
-      contours.delete(); hi.delete();
-    }
-    if (!result) result = { pts: null, confidence: 'low', frac, borderStd, fullBleed };
-    borderMask.delete(); mean.delete(); stdd.delete(); bgMat.delete();
-    diff.delete(); dist.delete(); bin.delete(); k.delete();
-    return result;
-  }
-
-  // 凸包の点群から四隅を取り出す (x+y 最小=TL / 最大=BR, x-y 最大=TR / 最小=BL)
-  function fourExtreme(hull) {
-    let tl, tr, br, bl, sMin = Infinity, sMax = -Infinity, dMin = Infinity, dMax = -Infinity;
-    for (let i = 0; i < hull.rows; i++) {
-      const x = hull.data32S[i*2], y = hull.data32S[i*2+1];
-      const sum = x + y, dif = x - y;
-      if (sum < sMin) { sMin = sum; tl = { x, y }; }
-      if (sum > sMax) { sMax = sum; br = { x, y }; }
-      if (dif > dMax) { dMax = dif; tr = { x, y }; }
-      if (dif < dMin) { dMin = dif; bl = { x, y }; }
-    }
-    return [tl, tr, br, bl];
   }
 
   // 彩度ベース: 高彩度の塊で「画像の縁に接しない最大の領域」= マットに囲まれた作品。
@@ -894,8 +803,8 @@
     return cands;
   }
 
-  // 複数の手がかりで四角形候補を生成 (工夫②)。返り値: [{quad(full座標), src}]
-  function generateCandidates(cond) {
+  // 複数の手がかりで四角形候補を生成。返り値: [{quad(full座標), src}]
+  function generateCandidates() {
     const detLong = 1200;
     const s = Math.min(1, detLong / Math.max(fullMat.cols, fullMat.rows));
     let small = new cv.Mat();
@@ -906,8 +815,8 @@
     toFull(detectQuad(small, 50, 150), '輪郭50');
     toFull(detectQuad(small, 30, 90), '輪郭30');
     toFull(detectQuad(small, 75, 200), '輪郭75');
-    // 彩度領域 (色付き作品モード)
-    if (!cond || cond.target === 'art') toFull(detectQuadByColor(small, cond ? cond.mat !== 'no' : true), '彩度');
+    // 彩度領域 (マットに囲まれた色付き作品)
+    toFull(detectQuadByColor(small, true), '彩度');
     // 直線ベースの長方形候補 (額/マット/作品の縁)。選択は直線支持で行うので誤選択しにくい。
     const lineCands = detectQuadByLines(small);
     for (const q of lineCands) out.push({ quad: q.map(p => ({ x: p.x/s, y: p.y/s })), src: '直線' });
@@ -1077,7 +986,7 @@
   // ===== 直線支持 (評価指標の本命) =====
   // 各辺が「本物の直線エッジ」の上に乗っているかを測る。人間が一目で分かる直線性を数値化。
   // 偽の長方形は4辺が実エッジに乗らない → 低スコアで弾ける。画像読み込み時に勾配を1回だけ用意。
-  let gradG = null, gradW = 0, gradH = 0, gradS = 1, satMap = null;
+  let gradG = null, gradW = 0, gradH = 0, gradS = 1;
   function buildGrad() {
     const detLong = 1000;
     const s = Math.min(1, detLong / Math.max(fullMat.cols, fullMat.rows));
@@ -1085,53 +994,13 @@
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     c.getContext('2d').drawImage(imgEl, 0, 0, w, h);
     const d = c.getContext('2d').getImageData(0, 0, w, h).data;
-    const g = new Float32Array(w*h), sm = new Float32Array(w*h);
+    const g = new Float32Array(w*h);
     for (let i = 0, p = 0; i < w*h; i++, p += 4) {
       g[i] = 0.299*d[p] + 0.587*d[p+1] + 0.114*d[p+2];
-      sm[i] = Math.max(d[p], d[p+1], d[p+2]) - Math.min(d[p], d[p+1], d[p+2]); // 彩度(色の鮮やかさ)
     }
-    gradG = g; gradW = w; gradH = h; gradS = s; satMap = sm;
+    gradG = g; gradW = w; gradH = h; gradS = s;
   }
 
-  // 向きが合っている前提で、各辺を垂直方向にスキャンし「作品→マット(鮮やか→白)の遷移」に吸着。
-  // 内部の黒線でなく彩度の落ち込みを探すので、平行な"正しい線"に乗る。色付き作品(art)用。
-  function refineByColorTransition(cornersFull) {
-    if (!satMap) return cornersFull;
-    const w = gradW, h = gradH, S = satMap, s = gradS;
-    const C = cornersFull.map(p => ({ x: p.x*s, y: p.y*s }));
-    const cen = { x:(C[0].x+C[1].x+C[2].x+C[3].x)/4, y:(C[0].y+C[1].y+C[2].y+C[3].y)/4 };
-    const range = Math.round(Math.min(w, h) * 0.30);
-    const sat = (x, y) => { x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h) return 0; return S[y*w+x]; };
-    const sides = [[0,1],[1,2],[2,3],[3,0]];
-    const fitLineP = (pts) => {
-      let mx=0,my=0; for(const p of pts){mx+=p.x;my+=p.y;} mx/=pts.length; my/=pts.length;
-      let sxx=0,syy=0,sxy=0; for(const p of pts){const dx=p.x-mx,dy=p.y-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;}
-      const th=0.5*Math.atan2(2*sxy,sxx-syy); return {x0:mx,y0:my,ux:Math.cos(th),uy:Math.sin(th)};
-    };
-    const interL = (L1,L2) => { if(!L1||!L2) return null; const d=L1.ux*L2.uy-L1.uy*L2.ux; if(Math.abs(d)<1e-6) return null;
-      const t=((L2.x0-L1.x0)*L2.uy-(L2.y0-L1.y0)*L2.ux)/d; return {x:L1.x0+t*L1.ux,y:L1.y0+t*L1.uy}; };
-    const L = [];
-    for (const [ia, ib] of sides) {
-      const a=C[ia], b=C[ib], dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
-      let nx=-dy/len, ny=dx/len; const mx=a.x+dx*0.5, my=a.y+dy*0.5;
-      if (nx*(mx-cen.x)+ny*(my-cen.y) < 0) { nx=-nx; ny=-ny; }  // 外向き
-      const pts = [];
-      for (let t=0.1; t<=0.9; t+=0.03) {
-        const cx=a.x+dx*t, cy=a.y+dy*t;
-        let maxDrop=0, dropK=null;                              // S が外向きに最も落ちる位置=作品/マット境界
-        for (let k=-range; k<range; k+=2) {
-          const drop = sat(cx+nx*k, cy+ny*k) - sat(cx+nx*(k+3), cy+ny*(k+3));
-          if (drop > maxDrop) { maxDrop = drop; dropK = k+1.5; }
-        }
-        if (dropK !== null && maxDrop > 20) pts.push({ x:cx+nx*dropK, y:cy+ny*dropK });
-      }
-      L.push(pts.length >= 8 ? fitLineP(pts) : null);
-    }
-    const out = cornersFull.map(p => ({ x:p.x, y:p.y }));
-    const put = (idx, p) => { if (p) out[idx] = { x:p.x/s, y:p.y/s }; };
-    put(0, interL(L[3], L[0])); put(1, interL(L[0], L[1])); put(2, interL(L[1], L[2])); put(3, interL(L[2], L[3]));
-    return out;
-  }
   function computeLineSupport(cornersFull) {
     if (!gradG || !cornersFull) return null;
     const w = gradW, h = gradH, g = gradG, s = gradS;
@@ -1185,6 +1054,7 @@
     if (!fullMat || !imgEl) return;
     vctx.clearRect(0, 0, view.width, view.height);
     vctx.drawImage(imgEl, 0, 0, view.width, view.height);
+    if (trimMode && trimRect) { drawTrimOverlay(); return; }
     if (!corners) return;
     vctx.save();
     vctx.beginPath();
@@ -1213,6 +1083,29 @@
       vctx.beginPath(); vctx.arc(x, y, HANDLE_R, 0, Math.PI * 2);
       vctx.fillStyle = (i === dragIndex) ? '#2b7de9' : '#fff';
       vctx.fill(); vctx.strokeStyle = '#2b7de9'; vctx.lineWidth = 2; vctx.stroke();
+    }
+  }
+
+  // ✂ モードの表示: 残す範囲の外を暗くし、白破線の枠 + 四隅/辺中点ハンドル
+  function drawTrimOverlay() {
+    const s = dispScale, l = trimRect.l*s, t = trimRect.t*s, r = trimRect.r*s, b = trimRect.b*s;
+    vctx.save();
+    vctx.beginPath();
+    vctx.rect(0, 0, view.width, view.height);
+    vctx.rect(l, t, r-l, b-t);
+    vctx.fillStyle = 'rgba(0,0,0,0.55)';
+    vctx.fill('evenodd');
+    vctx.restore();
+    vctx.strokeStyle = '#fff'; vctx.lineWidth = 2;
+    vctx.setLineDash([7, 5]);
+    vctx.strokeRect(l, t, r-l, b-t);
+    vctx.setLineDash([]);
+    const hs = 7;
+    const pts = [[l,t],[r,t],[r,b],[l,b],[(l+r)/2,t],[r,(t+b)/2],[(l+r)/2,b],[l,(t+b)/2]];
+    for (const [x, y] of pts) {
+      vctx.beginPath(); vctx.rect(x-hs, y-hs, hs*2, hs*2);
+      vctx.fillStyle = '#fff'; vctx.fill();
+      vctx.strokeStyle = '#2b7de9'; vctx.lineWidth = 2; vctx.stroke();
     }
   }
 
@@ -1268,7 +1161,29 @@
   // ドラッグは増分方式: 前回位置からの差分を隅/辺に足す。Shift 中は 1/5 倍で微調整が効く。
   let lastPt = null;      // 直前のポインタ位置 (画像座標)
   let edgePerpAcc = 0;    // 辺スライドの累積移動量 (法線方向)
+  // ✂ モード: 四隅/辺中点ハンドルで大きさ変更、枠の中はつまんで移動。返り値は動かす辺の集合。
+  function trimHitTest(p) {
+    const s = dispScale, l = trimRect.l*s, t = trimRect.t*s, r = trimRect.r*s, b = trimRect.b*s;
+    const near = (x, y) => Math.hypot(p.dispX-x, p.dispY-y) <= 16;
+    if (near(l, t)) return { L:1, T:1 };
+    if (near(r, t)) return { R:1, T:1 };
+    if (near(r, b)) return { R:1, B:1 };
+    if (near(l, b)) return { L:1, B:1 };
+    if (near((l+r)/2, t)) return { T:1 };
+    if (near(r, (t+b)/2)) return { R:1 };
+    if (near((l+r)/2, b)) return { B:1 };
+    if (near(l, (t+b)/2)) return { L:1 };
+    if (p.dispX > l && p.dispX < r && p.dispY > t && p.dispY < b) return { move:1 };
+    return null;
+  }
   function onDown(e) {
+    if (trimMode) {
+      if (!trimRect) return;
+      const tp = evtToImg(e);
+      const th = trimHitTest(tp);
+      if (th) { trimDrag = th; lastPt = tp; e.preventDefault(); }
+      return;
+    }
     if (!corners) return;
     const p = evtToImg(e);
     const ci = hitTest(p);
@@ -1279,6 +1194,25 @@
   function onMove(e) {
     const p = evtToImg(e);
     const slow = e.shiftKey ? 0.2 : 1;   // Shift+ドラッグ = 1/5 の速さ (タッチは常に等速)
+    if (trimMode) {
+      if (!trimDrag) return;
+      e.preventDefault();
+      const dx = (p.imgX - lastPt.imgX) * slow, dy = (p.imgY - lastPt.imgY) * slow;
+      lastPt = p;
+      const W = fullMat.cols, H = fullMat.rows, MIN = 24, tr = trimRect;
+      if (trimDrag.move) {
+        const w = tr.r - tr.l, hh = tr.b - tr.t;
+        tr.l = Math.max(0, Math.min(W - w, tr.l + dx)); tr.r = tr.l + w;
+        tr.t = Math.max(0, Math.min(H - hh, tr.t + dy)); tr.b = tr.t + hh;
+      } else {
+        if (trimDrag.L) tr.l = Math.max(0, Math.min(tr.r - MIN, tr.l + dx));
+        if (trimDrag.R) tr.r = Math.min(W, Math.max(tr.l + MIN, tr.r + dx));
+        if (trimDrag.T) tr.t = Math.max(0, Math.min(tr.b - MIN, tr.t + dy));
+        if (trimDrag.B) tr.b = Math.min(H, Math.max(tr.t + MIN, tr.b + dy));
+      }
+      redraw();
+      return;
+    }
     if (dragIndex >= 0) {
       e.preventDefault();
       corners[dragIndex].x = Math.max(0, Math.min(fullMat.cols, corners[dragIndex].x + (p.imgX - lastPt.imgX) * slow));
@@ -1299,6 +1233,7 @@
     }
   }
   function onUp() {
+    if (trimDrag) { trimDrag = null; return; }
     if (dragIndex >= 0) { dragIndex = -1; hideLoupe(); redraw(); updateMetrics(); }
     else if (dragEdge >= 0) { dragEdge = -1; edgeState = null; hideLoupe(); redraw(); updateMetrics(); }
   }
@@ -1379,6 +1314,69 @@
     ['marginX', 'marginY', 'marginUnit'].forEach(id => { $(id).disabled = !on; });
   });
 
+  // ===== 写真を整える (回転・切り落とし) =====
+  // 元画像を canvas に差し替える (canvas も drawImage / cv.imread の入力としてそのまま使える)。
+  // 差し替え後は座標系が変わるので自動検出をやり直し、GT 記録は不可にする。
+  function replaceImage(cnv) {
+    imgEl = cnv;
+    if (fullMat) fullMat.delete();
+    fullMat = cv.imread(cnv);
+    imageEdited = true;
+    editSeq++;
+    editedSavedName = null;
+    exitTrim();
+    buildGrad();
+    $('outWrap').style.display = 'none';
+    layoutCanvas();
+    autoDetect();
+    gtCountUpdate();
+  }
+  function rotate90(cw) {
+    if (!fullMat || !imgEl) return;
+    const w = fullMat.cols, h = fullMat.rows;
+    const c = document.createElement('canvas');
+    c.width = h; c.height = w;
+    const ctx = c.getContext('2d');
+    ctx.translate(h / 2, w / 2);
+    ctx.rotate((cw ? 90 : -90) * Math.PI / 180);
+    ctx.drawImage(imgEl, -w / 2, -h / 2);
+    replaceImage(c);
+  }
+  $('rotL').addEventListener('click', () => rotate90(false));
+  $('rotR').addEventListener('click', () => rotate90(true));
+
+  // ✂ モード中は他の操作を止め、枠の確定/取りやめだけにする
+  const TRIM_TOGGLE_IDS = ['rotL', 'rotR', 'redetect', 'aiInner', 'refine', 'reset', 'newImg', 'crop', 'recordGt', 'exportGt'];
+  $('trimBtn').addEventListener('click', () => {
+    if (!fullMat) return;
+    trimMode = true;
+    const mx = fullMat.cols * 0.08, my = fullMat.rows * 0.08;
+    trimRect = { l: mx, t: my, r: fullMat.cols - mx, b: fullMat.rows - my };
+    $('trimBtn').disabled = true;
+    $('trimRow').style.display = 'flex';
+    TRIM_TOGGLE_IDS.forEach(id => { $(id).disabled = true; });
+    setStatus('残す範囲を枠で指定してください。枠の中をつまむと移動、四隅・辺のハンドルで大きさ変更です。', 'info');
+    redraw();
+  });
+  function exitTrim() {
+    trimMode = false; trimRect = null; trimDrag = null;
+    $('trimBtn').disabled = false;
+    $('trimRow').style.display = 'none';
+    TRIM_TOGGLE_IDS.forEach(id => { $(id).disabled = false; });
+  }
+  $('trimApply').addEventListener('click', () => {
+    if (!trimRect || !fullMat) return;
+    const l = Math.max(0, Math.round(trimRect.l)), t = Math.max(0, Math.round(trimRect.t));
+    const w = Math.min(fullMat.cols, Math.round(trimRect.r)) - l;
+    const h = Math.min(fullMat.rows, Math.round(trimRect.b)) - t;
+    if (w < 24 || h < 24) return;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(imgEl, l, t, w, h, 0, 0, w, h);
+    replaceImage(c);
+  });
+  $('trimCancel').addEventListener('click', () => { exitTrim(); redraw(); });
+
   // ===== ボタン =====
   $('redetect').addEventListener('click', autoDetect);
   // 🎯 = 1回目の外周枠を起点に2回目AIを強制実行 (自動の検品が見送った写真を人の判断で救う)。
@@ -1412,19 +1410,38 @@
   // ===== 正解 (GT) の記録・書き出し (開発用) =====
   // 今合わせている四隅を「この写真の正解」として localStorage に保存。
   // 全写真ぶん記録したら「書き出し」で crop-gt.json をダウンロードして渡してもらう。
+  // 回転・切り落とし後は「検出器が実際に見た画像」= 加工後画像が正解の対象。
+  // 手元にファイルが無いと座標と画像がペアにならないので、初回記録時に _editN.jpg として
+  // 自動保存し、GT はその名前・その座標系で記録する (canvas 再保存なので EXIF も消える)。
   function gtStore() { try { return JSON.parse(localStorage.getItem('crop_gt') || '{}'); } catch (e) { return {}; } }
+  function gtKey() {
+    if (!imageEdited) return currentFileName;
+    return editedSavedName;  // 未保存 (null) = この加工状態はまだ記録されていない
+  }
   function gtCountUpdate() {
     const n = Object.keys(gtStore()).length;
-    const has = currentFileName && gtStore()[currentFileName];
+    const key = gtKey();
+    const has = key && gtStore()[key];
     $('gtCount').textContent = (has ? 'この写真: 記録済み / ' : '') + (n ? '合計 ' + n + ' 枚' : '未記録');
   }
   $('recordGt').addEventListener('click', () => {
     if (!corners || !fullMat) { alert('写真を読み込んで四隅を合わせてください。'); return; }
     if (!currentFileName) { alert('ファイル名が取得できませんでした。'); return; }
+    let key = currentFileName, savedNow = false;
+    if (imageEdited) {
+      if (!editedSavedName) {
+        editedSavedName = currentFileName.replace(/\.[^.]+$/, '') + '_edit' + editSeq + '.jpg';
+        downloadData(imgEl.toDataURL('image/jpeg', 0.95), editedSavedName);  // 加工後の imgEl は canvas
+        savedNow = true;
+      }
+      key = editedSavedName;
+    }
     const store = gtStore();
-    store[currentFileName] = { corners: corners.map(p => [Math.round(p.x), Math.round(p.y)]), w: fullMat.cols, h: fullMat.rows };
+    store[key] = { corners: corners.map(p => [Math.round(p.x), Math.round(p.y)]), w: fullMat.cols, h: fullMat.rows };
     localStorage.setItem('crop_gt', JSON.stringify(store));
-    setStatus('この四隅を「' + currentFileName + '」の正解として記録しました。', 'ok');
+    setStatus(savedNow
+      ? '加工後の画像を「' + key + '」として保存し、この四隅をその正解として記録しました。保存した画像は元の写真と同じ場所に置いてください。'
+      : 'この四隅を「' + key + '」の正解として記録しました。', 'ok');
     gtCountUpdate();
   });
   $('exportGt').addEventListener('click', () => {
