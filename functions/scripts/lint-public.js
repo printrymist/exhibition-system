@@ -243,6 +243,33 @@ function* walkFiles(dir, exts) {
 
 function severityName(s) { return s === 2 ? 'error' : 'warn'; }
 
+// OPERATOR_EMAILS は 3 箇所 (firestore.rules / functions/index.js /
+// public/js/operator-auth.js) に重複定義されていて内容一致が必須。
+// 運営者を増やすときの更新漏れを機械検出する。
+function collectOperatorEmails() {
+  const sources = [];
+  for (const rel of ['functions/index.js', 'public/js/operator-auth.js']) {
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const m = text.match(/OPERATOR_EMAILS\s*=\s*\[([^\]]*)\]/);
+    const emails = m
+      ? (m[1].match(/['"]([^'"]+)['"]/g) || [])
+          .map(s => s.slice(1, -1).trim().toLowerCase()).sort()
+      : [];
+    sources.push({ rel, emails });
+  }
+  {
+    const rel = 'firestore.rules';
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const fn = text.match(/function isOperator\(\)\s*\{([\s\S]*?)\}/);
+    const emails = fn
+      ? (fn[1].match(/['"][^'"]+@[^'"]+['"]/g) || [])
+          .map(s => s.slice(1, -1).trim().toLowerCase()).sort()
+      : [];
+    sources.push({ rel, emails });
+  }
+  return sources;
+}
+
 (function main() {
   const linter = new Linter();
   const targets = [];
@@ -266,10 +293,26 @@ function severityName(s) { return s === 2 ? 'error' : 'warn'; }
     byRule[key] = (byRule[key] || 0) + 1;
   });
 
+  // OPERATOR_EMAILS 3 箇所の突合
+  const opSources = collectOperatorEmails();
+  const opBase = JSON.stringify(opSources[0].emails);
+  const opMismatch = opSources.some(
+    s => s.emails.length === 0 || JSON.stringify(s.emails) !== opBase,
+  );
+  if (opMismatch) process.exitCode = 1;
+
   const lines = [];
   lines.push('=== lint-public.js report ===');
   lines.push(`scanned: ${targets.length} files`);
   lines.push(`with issues: ${fileSummary.length} files, ${allMessages.length} messages`);
+  lines.push('');
+  lines.push('=== OPERATOR_EMAILS 突合 (rules / functions / operator-auth.js) ===');
+  opSources.forEach(s => {
+    lines.push(`  ${s.rel}: ${s.emails.join(', ') || '(抽出失敗)'}`);
+  });
+  lines.push(opMismatch
+    ? '  ✗ 不一致または抽出失敗 — 3 箇所の運営者リストを一致させてください'
+    : '  ✓ 一致');
   lines.push('');
   lines.push('=== by rule ===');
   Object.entries(byRule).sort((a, b) => b[1] - a[1]).forEach(([rule, n]) => {

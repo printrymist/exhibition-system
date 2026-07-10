@@ -19,6 +19,9 @@
 const { setGlobalOptions } = require("firebase-functions");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const {
+  onDocumentWrittenWithAuthContext,
+} = require("firebase-functions/v2/firestore");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -2236,7 +2239,12 @@ exports.submitArtwork = onCall(
       // is_locked 単独の変更は audit に書かない (作品 doc の現在値で十分追跡可能、
       // 一括ロックで N 件のエントリが膨らむのを防ぐ)。複数フィールドの一部に
       // is_locked が含まれる場合は他のフィールドと合わせて記録する。
-      const isLockOnly = changedFields.length === 1 && changedFields[0] === "is_locked";
+      // ただし運営者の代行 (自分が主催者でない展覧会) は is_locked 単独でも
+      // 記録する (サポートモードの undo 手掛かり)。
+      let isLockOnly = changedFields.length === 1 && changedFields[0] === "is_locked";
+      if (isLockOnly && authMode === "operator") {
+        isLockOnly = await isOrganizerForEx(authEmail, exCode);
+      }
       if (changedFields.length > 0 && !isLockOnly) {
         const auditEntry = {
           exCode,
@@ -3325,3 +3333,164 @@ exports.deleteLike = onCall(async (request) => {
   logger.info("deleteLike", { likeId, by: isOperator ? "operator" : "owner" });
   return { success: true };
 });
+
+// =========================================================
+// クライアント直書きの監査トリガ (運営者サポートモードの undo 土台)
+//   exhibitions / caption_templates / likes は Firestore Rules が
+//   organizer / operator のクライアント直書きを許しているが、これまで
+//   audit に何も残らなかった。UI からの自己申告に頼らず、書き込み
+//   イベント側で変更前後を audit collection に記録する (AI-Native 原則:
+//   「代行変更は必ず記録される」を層の奥で成立させる)。
+//   - service_account / system (= CF admin SDK・TTL 等) は除外:
+//     CF 経由の書き込みは各 CF が記録責任を持つ (submitArtwork 等)。
+//   - likes は create を記録しない (来場者の通常トラフィック)。Rules 上
+//     likes のクライアント update/delete は operator のみ = 記録される
+//     のはモデレーション操作だけ。
+//   - authType / authId は Eventarc の auth context。Firebase Auth の
+//     end user 書き込みなら authId = UID → admin.auth().getUser で email
+//     に解決して operator / organizer を判定する。解決できない場合も
+//     authType / authId は生のまま記録する。
+//   - トリガは書き込み後に非同期で走るため、記録の失敗が主催者の保存
+//     操作を止めることはない (logger.warn に降ろす)。
+// =========================================================
+
+const CLIENT_AUDIT_SKIP_AUTH_TYPES = ["service_account", "system"];
+// before/after の合計がこれを超えたら値を落とす (audit doc の 1MB 上限保護)。
+const CLIENT_AUDIT_MAX_VALUE_CHARS = 300000;
+
+// top-level フィールドの JSON 比較 diff。変更されたキーだけ before/after を残す。
+function diffTopLevelFields(beforeData, afterData) {
+  const keys = new Set(
+    Object.keys(beforeData).concat(Object.keys(afterData)),
+  );
+  const changedFields = [];
+  const beforeFields = {};
+  const afterFields = {};
+  for (const k of keys) {
+    const b = beforeData[k];
+    const a = afterData[k];
+    let same;
+    try {
+      same = JSON.stringify(b) === JSON.stringify(a);
+    } catch (e) {
+      same = false;
+    }
+    if (same) continue;
+    changedFields.push(k);
+    if (b !== undefined) beforeFields[k] = b;
+    if (a !== undefined) afterFields[k] = a;
+  }
+  return { changedFields, beforeFields, afterFields };
+}
+
+async function resolveClientWriteCaller(event) {
+  const authType = String(event.authType || "unknown");
+  const uid = event.authId ? String(event.authId) : null;
+  let email = null;
+  if (uid) {
+    try {
+      const user = await admin.auth().getUser(uid);
+      email = String(user.email || "").trim().toLowerCase() || null;
+    } catch (e) {
+      // authId が Firebase Auth の UID でない (api_key 等) 場合は email なし
+    }
+  }
+  const isOperator = !!email && OPERATOR_EMAILS.indexOf(email) !== -1;
+  return { authType, uid, email, isOperator };
+}
+
+function clientWriteAuditor(collectionName, opts) {
+  const options = opts || {};
+  return async (event) => {
+    try {
+      const authType = String(event.authType || "unknown");
+      if (CLIENT_AUDIT_SKIP_AUTH_TYPES.indexOf(authType) !== -1) return;
+
+      const beforeSnap = event.data ? event.data.before : null;
+      const afterSnap = event.data ? event.data.after : null;
+      const beforeExists = !!(beforeSnap && beforeSnap.exists);
+      const afterExists = !!(afterSnap && afterSnap.exists);
+      if (!beforeExists && !afterExists) return;
+      const kind = !beforeExists ?
+        "create" : (!afterExists ? "delete" : "update");
+      if (options.skipCreate && kind === "create") return;
+
+      const beforeData = beforeExists ? (beforeSnap.data() || {}) : {};
+      const afterData = afterExists ? (afterSnap.data() || {}) : {};
+      const { changedFields, beforeFields, afterFields } =
+        diffTopLevelFields(beforeData, afterData);
+      if (kind === "update" && changedFields.length === 0) return;
+
+      const caller = await resolveClientWriteCaller(event);
+
+      const docId = String((event.params && event.params.docId) || "");
+      let exCode = null;
+      if (collectionName === "exhibitions") {
+        exCode = docId;
+      } else {
+        const src = afterExists ? afterData : beforeData;
+        if (typeof src.exCode === "string" && src.exCode) exCode = src.exCode;
+      }
+
+      // operator > organizer (doc の所有者 email と一致) > user
+      let authMode = "user";
+      if (caller.isOperator) {
+        authMode = "operator";
+      } else if (caller.email) {
+        const ownerEmail = String(
+          (collectionName === "caption_templates" ?
+            (afterData.createdBy || beforeData.createdBy) :
+            (afterData.email || beforeData.email)) || "",
+        ).trim().toLowerCase();
+        if (ownerEmail && ownerEmail === caller.email) authMode = "organizer";
+      }
+
+      const entry = {
+        timestamp: String(event.time || new Date().toISOString()),
+        source: "client_write",
+        collection: collectionName,
+        docId,
+        exCode,
+        event: kind,
+        authType: caller.authType,
+        callerUid: caller.uid,
+        callerEmail: caller.email,
+        authMode,
+        changedFields,
+        before: beforeFields,
+        after: afterFields,
+        isNew: kind === "create",
+      };
+      try {
+        const approx = JSON.stringify({ b: entry.before, a: entry.after });
+        if (approx.length > CLIENT_AUDIT_MAX_VALUE_CHARS) {
+          entry.before = null;
+          entry.after = null;
+          entry.valuesOmitted = true;
+        }
+      } catch (e) {
+        entry.before = null;
+        entry.after = null;
+        entry.valuesOmitted = true;
+      }
+
+      await admin.firestore().collection("audit").add(entry);
+    } catch (err) {
+      logger.warn("client write audit failed", {
+        collection: collectionName,
+        document: event && event.document,
+        error: err && err.message ? err.message : String(err),
+      });
+    }
+  };
+}
+
+exports.auditExhibitionWrite = onDocumentWrittenWithAuthContext(
+  "exhibitions/{docId}", clientWriteAuditor("exhibitions"),
+);
+exports.auditCaptionTemplateWrite = onDocumentWrittenWithAuthContext(
+  "caption_templates/{docId}", clientWriteAuditor("caption_templates"),
+);
+exports.auditLikeWrite = onDocumentWrittenWithAuthContext(
+  "likes/{docId}", clientWriteAuditor("likes", { skipCreate: true }),
+);
