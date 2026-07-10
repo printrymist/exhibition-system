@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v24</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v26</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -118,7 +118,7 @@
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
+        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
       </div>
 
       <div>
@@ -1265,26 +1265,32 @@
       start: { x: p.imgX, y: p.imgY }
     };
   }
+  // ドラッグは増分方式: 前回位置からの差分を隅/辺に足す。Shift 中は 1/5 倍で微調整が効く。
+  let lastPt = null;      // 直前のポインタ位置 (画像座標)
+  let edgePerpAcc = 0;    // 辺スライドの累積移動量 (法線方向)
   function onDown(e) {
     if (!corners) return;
     const p = evtToImg(e);
     const ci = hitTest(p);
-    if (ci >= 0) { dragIndex = ci; e.preventDefault(); showCornerLoupe(); redraw(); return; }
+    if (ci >= 0) { dragIndex = ci; lastPt = p; e.preventDefault(); showCornerLoupe(); redraw(); return; }
     const ei = edgeHit(p);
-    if (ei >= 0) { startEdgeDrag(ei, p); e.preventDefault(); showEdgeLoupes(ei); redraw(); }
+    if (ei >= 0) { startEdgeDrag(ei, p); lastPt = p; edgePerpAcc = 0; e.preventDefault(); showEdgeLoupes(ei); redraw(); }
   }
   function onMove(e) {
     const p = evtToImg(e);
+    const slow = e.shiftKey ? 0.2 : 1;   // Shift+ドラッグ = 1/5 の速さ (タッチは常に等速)
     if (dragIndex >= 0) {
       e.preventDefault();
-      corners[dragIndex].x = Math.max(0, Math.min(fullMat.cols, p.imgX));
-      corners[dragIndex].y = Math.max(0, Math.min(fullMat.rows, p.imgY));
+      corners[dragIndex].x = Math.max(0, Math.min(fullMat.cols, corners[dragIndex].x + (p.imgX - lastPt.imgX) * slow));
+      corners[dragIndex].y = Math.max(0, Math.min(fullMat.rows, corners[dragIndex].y + (p.imgY - lastPt.imgY) * slow));
+      lastPt = p;
       redraw(); showCornerLoupe();
     } else if (dragEdge >= 0) {
       e.preventDefault();
       const es = edgeState;
-      const perp = (p.imgX-es.start.x)*es.n.x + (p.imgY-es.start.y)*es.n.y;   // 垂直方向の移動量
-      const sPt = { x: es.sPt.x + es.n.x*perp, y: es.sPt.y + es.n.y*perp };   // 平行移動した辺の直線
+      edgePerpAcc += ((p.imgX - lastPt.imgX) * es.n.x + (p.imgY - lastPt.imgY) * es.n.y) * slow; // 垂直方向の増分
+      lastPt = p;
+      const sPt = { x: es.sPt.x + es.n.x * edgePerpAcc, y: es.sPt.y + es.n.y * edgePerpAcc };    // 平行移動した辺の直線
       const c0 = interRay(sPt, es.sDir, es.aAnchor, es.aDir);                 // 隣の辺との交点
       const c1 = interRay(sPt, es.sDir, es.bAnchor, es.bDir);
       corners[dragEdge] = c0; corners[(dragEdge+1)%4] = c1;
