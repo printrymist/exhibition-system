@@ -39,7 +39,9 @@
     // Cloud Function (HttpsError) の message は日本語化済みなので見せてよい。
     // 例: code = 'functions/permission-denied', message = 'この作品はロックされています'
     // (業務上の理由なので連絡先ヒントは添えない)
-    if (typeof code === 'string' && code.indexOf('functions/') === 0 && msg) {
+    // ただし通信断などでは SDK 自身が同じ functions/ コードで英語 message
+    // ('internal' 等) を作るため、日本語 (非 ASCII) を含むときだけ素通しする。
+    if (typeof code === 'string' && code.indexOf('functions/') === 0 && msg && /[^\x00-\x7F]/.test(msg)) {
       return msg;
     }
 
