@@ -403,6 +403,16 @@
     <div id="globalLoadingMsg" style="font-weight:bold; color:#666;">作品ステータスを確認中...</div>
   </div>
 
+  <!-- QR パラメータ不備・読み込み失敗時の案内カード。
+       alert() だけ出して画面が真っ白になる問題の対策 (公開前スモーク 2026-07-11)。
+       qriine.com 直打ちや URL タイプミス (** rewrite) もここに落ちる。 -->
+  <div id="globalNotice" style="display:none; max-width:480px; margin:60px auto 0; padding:30px 22px; background:white; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.08); text-align:center;">
+    <div id="globalNoticeIcon" style="font-size:44px; margin-bottom:10px;">🖼️</div>
+    <h2 id="globalNoticeTitle" style="margin:0 0 10px; color:#333; font-size:1.15em;"></h2>
+    <p id="globalNoticeText" style="color:#666; line-height:1.7; margin:0 0 20px; font-size:0.95em; white-space:pre-line; text-align:left;"></p>
+    <a href="/lp.html" style="display:inline-block; padding:11px 24px; background:#1a73e8; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">Qriine の紹介ページを見る</a>
+  </div>
+
   <div class="unity-container">
     <div id="regWrapper" style="display:none; width: 100%;">
       <div id="regLoadingOverlay">
@@ -730,6 +740,17 @@
       return _visitorAuthReady;
     }
 
+    // 読み込み失敗・パラメータ不備のときに画面内の案内カードを出す。
+    // (alert() だけだと閉じた後に真っ白になるため使わない)
+    function showGlobalNotice(title, text) {
+      document.getElementById('unityGlobalLoading').style.display = 'none';
+      document.getElementById('regWrapper').style.display = 'none';
+      document.getElementById('ansWrapper').style.display = 'none';
+      document.getElementById('globalNoticeTitle').innerText = title;
+      document.getElementById('globalNoticeText').innerText = text;
+      document.getElementById('globalNotice').style.display = 'block';
+    }
+
     function reloadApp() {
       document.getElementById('unityGlobalLoading').style.display = 'flex';
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
@@ -747,7 +768,9 @@
       fsGetArtworkData(exVal, idVal).then(data => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
         if (!data.success) {
-          alert("エラー: " + (data.msg || "データ取得失敗"));
+          showGlobalNotice('作品を読み込めませんでした',
+            (data.msg || 'データを取得できませんでした。') +
+            '\nお手数ですが、会場の QR コードをもう一度読み取ってください。');
           return;
         }
         if (data.isRegistered) {
@@ -760,7 +783,7 @@
           regInit(exVal, idVal);
         }
       }).catch(err => {
-        alert(friendlyError(err, '読み込み'));
+        showGlobalNotice('作品を読み込めませんでした', friendlyError(err, '読み込み'));
       });
     }
 
@@ -768,13 +791,26 @@
       // sessionId を localStorage / cookie / IndexedDB から復元する (Phase V1)
       try { await window.restoreSessionIdFromIDB(); } catch (_e) { /* fall through */ }
       applyLang();
+
+      // QR パラメータが無い = qriine.com 直打ち / URL タイプミス。
+      // エラーではなく案内を出す (CF / Firestore は呼ばない)。
+      if (!exVal || !idVal) {
+        showGlobalNotice('このページは作品の QR コードから開きます',
+          '展示会場で作品のそばにある QR コードを読み取ると、ここに作品情報が表示され、' +
+          'その場で「いいね」や感想を作家に送れます。\n' +
+          'Qriine について詳しくは、下の紹介ページをご覧ください。');
+        return;
+      }
+
       document.getElementById('unityGlobalLoading').style.display = 'flex';
 
       // 🟣 Firestore から作品データ + 展覧会名を取得（フェーズ3）
       fsGetArtworkData(exVal, idVal).then(data => {
         document.getElementById('unityGlobalLoading').style.display = 'none';
         if (!data.success) {
-          alert("エラー: " + (data.msg || "データ取得失敗"));
+          showGlobalNotice('作品を読み込めませんでした',
+            (data.msg || 'データを取得できませんでした。') +
+            '\nお手数ですが、会場の QR コードをもう一度読み取ってください。');
           return;
         }
         // セッション 3: keyVal チェックは撤去 (実 security は Cloud Function 側で
@@ -790,8 +826,7 @@
           regInit(exVal, idVal);
         }
       }).catch(err => {
-        document.getElementById('unityGlobalLoading').style.display = 'none';
-        alert(friendlyError(err, '読み込み'));
+        showGlobalNotice('作品を読み込めませんでした', friendlyError(err, '読み込み'));
       });
     };
 
