@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v25</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v24</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -118,7 +118,7 @@
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">白い丸＝ドラッグで四隅を調整（拡大鏡つき）、<b>クリックでその隅だけ自動吸着</b>。青い四角＝ドラッグで辺が平行スライド、<b>クリックでその辺だけ境目に自動吸着</b>。<b>枠から離れた場所をクリックすると最寄りの隅がそこへ移動</b>します（だいたいの位置でOK、細かい位置は自動で合います）。選択中（黄色）の隅・辺は<b>矢印キー</b>で 1px（Shift で 10px）動かせます。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
+        <p class="hint" style="margin-top:8px;">白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
       </div>
 
       <div>
@@ -582,8 +582,6 @@
   const HANDLE_R = 11;
   let dragIndex = -1;
   let dragEdge = -1, edgeState = null;   // 辺スライド (平行移動)
-  let selCorner = -1, selEdge = -1;      // 選択中の隅/辺 (矢印キー微調整の対象)
-  let downInfo = null;                   // クリックかドラッグかの判定用 {type, index, p, moved}
   let currentFileName = '';   // 読み込んだ写真のファイル名 (GT 記録キー)
   let lastOuterQuad = null;   // 直近の自動検出が出した AI 外周枠 (🎯 の起点)
 
@@ -939,11 +937,7 @@
   // かつ外側3象限が互いに揃う」点を探す。作品内部の黒線は 3象限=同色 を満たさないので
   // 自動的に棄却される (最強勾配に吸われる旧方式の欠陥を根治)。
   // 積分画像で各象限の平均色を O(1) 計算し高速化。mat/rough は同一座標系。
-  // opts: { indices: 補正する隅の番号列 (省略=全4隅), winFrac: 探索窓 (短辺比、省略=0.05) }
-  function refineCorners(mat, rough, opts) {
-    opts = opts || {};
-    const indices = opts.indices || [0, 1, 2, 3];
-    const winFrac = opts.winFrac || 0.05;
+  function refineCorners(mat, rough) {
     const W = mat.cols, H = mat.rows;
     let rgb = new cv.Mat();
     cv.cvtColor(mat, rgb, cv.COLOR_RGBA2RGB);
@@ -971,9 +965,9 @@
     }
     const cdist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
     const r = Math.max(6, Math.round(Math.min(W, H) * 0.03));  // 象限パッチ半径
-    const win = Math.max(6, Math.round(Math.min(W, H) * winFrac)); // 探索窓 ±win
+    const win = Math.max(6, Math.round(Math.min(W, H) * 0.05)); // 探索窓 ±win
     const out = rough.map(p => ({ x: p.x, y: p.y }));
-    for (const i of indices) {
+    for (let i = 0; i < 4; i++) {
       const cx0 = Math.round(rough[i].x), cy0 = Math.round(rough[i].y);
       let best = -Infinity, bx = cx0, by = cy0;
       for (let dy = -win; dy <= win; dy += 2) {
@@ -1001,13 +995,13 @@
   }
 
   // 現在の (フル座標の) 四隅を検出解像度に落としてリファインし、フル座標で返す。
-  function refineFromCorners(cornersFull, opts) {
+  function refineFromCorners(cornersFull) {
     const detLong = 1200;
     const s = Math.min(1, detLong / Math.max(fullMat.cols, fullMat.rows));
     let small = new cv.Mat();
     cv.resize(fullMat, small, new cv.Size(Math.max(1, Math.round(fullMat.cols*s)), Math.max(1, Math.round(fullMat.rows*s))));
     const roughSmall = cornersFull.map(p => ({ x: p.x * s, y: p.y * s }));
-    const refined = refineCorners(small, roughSmall, opts);
+    const refined = refineCorners(small, roughSmall);
     small.delete();
     return refined.map(p => ({ x: p.x / s, y: p.y / s }));
   }
@@ -1211,13 +1205,13 @@
       const a = corners[i], b = corners[(i+1)%4];
       const mx = (a.x+b.x)/2 * dispScale, my = (a.y+b.y)/2 * dispScale, r = 6;
       vctx.beginPath(); vctx.rect(mx-r, my-r, r*2, r*2);
-      vctx.fillStyle = (i === dragEdge) ? '#2b7de9' : (i === selEdge ? '#ffd66e' : '#dbe9ff');
+      vctx.fillStyle = (i === dragEdge) ? '#2b7de9' : '#dbe9ff';
       vctx.fill(); vctx.strokeStyle = '#2b7de9'; vctx.lineWidth = 2; vctx.stroke();
     }
     for (let i = 0; i < 4; i++) {
       const x = corners[i].x * dispScale, y = corners[i].y * dispScale;
       vctx.beginPath(); vctx.arc(x, y, HANDLE_R, 0, Math.PI * 2);
-      vctx.fillStyle = (i === dragIndex) ? '#2b7de9' : (i === selCorner ? '#ffd66e' : '#fff');
+      vctx.fillStyle = (i === dragIndex) ? '#2b7de9' : '#fff';
       vctx.fill(); vctx.strokeStyle = '#2b7de9'; vctx.lineWidth = 2; vctx.stroke();
     }
   }
@@ -1275,24 +1269,12 @@
     if (!corners) return;
     const p = evtToImg(e);
     const ci = hitTest(p);
-    if (ci >= 0) {
-      dragIndex = ci; selCorner = ci; selEdge = -1;
-      downInfo = { type: 'corner', index: ci, p, moved: false };
-      e.preventDefault(); showCornerLoupe(); redraw(); return;
-    }
+    if (ci >= 0) { dragIndex = ci; e.preventDefault(); showCornerLoupe(); redraw(); return; }
     const ei = edgeHit(p);
-    if (ei >= 0) {
-      startEdgeDrag(ei, p); selEdge = ei; selCorner = -1;
-      downInfo = { type: 'edge', index: ei, p, moved: false };
-      e.preventDefault(); showEdgeLoupes(ei); redraw(); return;
-    }
-    downInfo = { type: 'empty', index: -1, p, moved: false };
+    if (ei >= 0) { startEdgeDrag(ei, p); e.preventDefault(); showEdgeLoupes(ei); redraw(); }
   }
   function onMove(e) {
     const p = evtToImg(e);
-    if (downInfo && !downInfo.moved) {
-      if (Math.hypot(p.dispX - downInfo.p.dispX, p.dispY - downInfo.p.dispY) > 5) downInfo.moved = true;
-    }
     if (dragIndex >= 0) {
       e.preventDefault();
       corners[dragIndex].x = Math.max(0, Math.min(fullMat.cols, p.imgX));
@@ -1311,157 +1293,9 @@
     }
   }
   function onUp() {
-    const info = downInfo; downInfo = null;
-    if (dragIndex >= 0) {
-      const wasClick = info && !info.moved && info.type === 'corner';
-      dragIndex = -1; hideLoupe();
-      if (wasClick) { snapCornerAction(info.index); return; }
-      redraw(); updateMetrics(); return;
-    }
-    if (dragEdge >= 0) {
-      const wasClick = info && !info.moved && info.type === 'edge';
-      dragEdge = -1; edgeState = null; hideLoupe();
-      if (wasClick) { snapEdgeAction(info.index); return; }
-      redraw(); updateMetrics(); return;
-    }
-    if (info && !info.moved && info.type === 'empty' && corners && fullMat) placeCornerAction(info.p);
+    if (dragIndex >= 0) { dragIndex = -1; hideLoupe(); redraw(); updateMetrics(); }
+    else if (dragEdge >= 0) { dragEdge = -1; edgeState = null; hideLoupe(); redraw(); updateMetrics(); }
   }
-
-  // ===== クリック操作 (ドラッグ不要の調整。v25) =====
-  // 白丸クリック = その隅だけ4象限吸着 / 青四角クリック = その辺だけ境目へ直線吸着 /
-  // 枠から離れた場所クリック = 最寄りの隅をそこへ移動して小窓で吸着。
-  function snapCornerAction(i) {
-    corners = refineFromCorners(corners, { indices: [i], winFrac: 0.05 });
-    setStatus('この隅を吸着させました。ずれたらもう一度クリックするか、ドラッグ／矢印キーで調整してください。', 'ok');
-    redraw(); updateMetrics();
-  }
-  function snapEdgeAction(i) {
-    const ok = snapEdgeLine(i);
-    if (ok) setStatus('この辺を境目に合わせました。ずれたら青四角のドラッグや矢印キーで調整してください。', 'ok');
-    else setStatus('この辺の近くに、はっきりした境目が見つかりませんでした。青四角のドラッグか矢印キーで合わせてください。', 'warn');
-    redraw(); updateMetrics();
-  }
-  function placeCornerAction(p) {
-    let bi = 0, bd = Infinity;
-    for (let i = 0; i < 4; i++) {
-      const d = Math.hypot(corners[i].x - p.imgX, corners[i].y - p.imgY);
-      if (d < bd) { bd = d; bi = i; }
-    }
-    corners[bi] = { x: Math.max(0, Math.min(fullMat.cols, p.imgX)), y: Math.max(0, Math.min(fullMat.rows, p.imgY)) };
-    selCorner = bi; selEdge = -1;
-    corners = refineFromCorners(corners, { indices: [bi], winFrac: 0.025 });
-    setStatus('クリック位置に' + ['左上', '右上', '右下', '左下'][bi] + 'の隅を移動して吸着させました。', 'ok');
-    redraw(); updateMetrics();
-  }
-
-  // 辺 i を法線方向に走査し「外帯が無地・内帯に中身が続く」境目の線へ平行スナップ。
-  // 見つからなければ動かさず false。判定基準は自動検出の二段目 (ルール式) と同じ。
-  function snapEdgeLine(k) {
-    const detLong = 1200;
-    const s = Math.min(1, detLong / Math.max(fullMat.cols, fullMat.rows));
-    let small = new cv.Mat();
-    cv.resize(fullMat, small, new cv.Size(Math.max(1, Math.round(fullMat.cols * s)), Math.max(1, Math.round(fullMat.rows * s))));
-    const data = small.data, W = small.cols, H = small.rows; // RGBA
-    const px = (x, y) => {
-      x = Math.round(x); y = Math.round(y);
-      if (x < 0 || y < 0 || x >= W || y >= H) return null;
-      const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]];
-    };
-    const norm = (v) => { const L = Math.hypot(v.x, v.y) || 1; return { x: v.x / L, y: v.y / L }; };
-    const c0 = { x: corners[k].x * s, y: corners[k].y * s }, c1 = { x: corners[(k + 1) % 4].x * s, y: corners[(k + 1) % 4].y * s };
-    const prev = { x: corners[(k + 3) % 4].x * s, y: corners[(k + 3) % 4].y * s }, next = { x: corners[(k + 2) % 4].x * s, y: corners[(k + 2) % 4].y * s };
-    const sdir = norm({ x: c1.x - c0.x, y: c1.y - c0.y });
-    let n = { x: -sdir.y, y: sdir.x };
-    const gx = (c0.x + c1.x + prev.x + next.x) / 4, gy = (c0.y + c1.y + prev.y + next.y) / 4;
-    const mid = { x: (c0.x + c1.x) / 2, y: (c0.y + c1.y) / 2 };
-    if ((gx - mid.x) * n.x + (gy - mid.y) * n.y < 0) n = { x: -n.x, y: -n.y }; // n = 内向き
-    const shortSide = Math.min(W, H);
-    const win = Math.max(6, Math.round(shortSide * 0.05));
-    const d = Math.max(3, Math.round(shortSide * 0.015));
-    const med = (arr) => { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; };
-    function lineAt(o, off) {
-      const pts = [];
-      for (let t = 0.08; t <= 0.92; t += 0.84 / 60) {
-        const bx = c0.x + (c1.x - c0.x) * t + n.x * (o + off), by = c0.y + (c1.y - c0.y) * t + n.y * (o + off);
-        const p = px(bx, by); if (p) pts.push(p);
-      }
-      return pts;
-    }
-    function scoreAt(o) {
-      const outPts = [], inPts = [];
-      for (let kk = 1; kk <= d; kk++) {
-        for (const p of lineAt(o, -kk)) outPts.push(p);
-        for (const p of lineAt(o, kk - 1)) inPts.push(p);
-      }
-      if (outPts.length < 30 || inPts.length < 30) return null;
-      const mc = [0, 1, 2].map(ch => med(outPts.map(p => p[ch])));
-      const dist = (p) => Math.hypot(p[0] - mc[0], p[1] - mc[1], p[2] - mc[2]);
-      const sigma = Math.sqrt(outPts.reduce((s2, p) => s2 + dist(p) ** 2, 0) / outPts.length);
-      if (sigma > 45) return null;                       // 外帯が無地でない
-      const T = Math.max(35, sigma * 3);
-      const content = inPts.filter(p => dist(p) > T).length / inPts.length;
-      if (content < 0.35) return null;                   // 内帯に中身がない
-      return content;
-    }
-    let best = null, bo = null;
-    for (let o = -win; o <= win; o++) {
-      const sc = scoreAt(o);
-      if (sc === null) continue;
-      const adj = sc - 0.10 * Math.abs(o) / win;         // 同点なら近い方
-      if (best === null || adj > best) { best = adj; bo = o; }
-    }
-    small.delete();
-    if (bo === null) return false;
-    // フル座標で辺を平行移動 (隣接辺の直線との交点で四隅を更新)
-    const perpFull = bo / s;
-    const C0 = corners[k], C1 = corners[(k + 1) % 4], P = corners[(k + 3) % 4], N = corners[(k + 2) % 4];
-    const sdirF = norm({ x: C1.x - C0.x, y: C1.y - C0.y });
-    let nF = { x: -sdirF.y, y: sdirF.x };
-    const midF = { x: (C0.x + C1.x) / 2, y: (C0.y + C1.y) / 2 };
-    const gxF = (C0.x + C1.x + P.x + N.x) / 4, gyF = (C0.y + C1.y + P.y + N.y) / 4;
-    if ((gxF - midF.x) * nF.x + (gyF - midF.y) * nF.y < 0) nF = { x: -nF.x, y: -nF.y };
-    const sPt = { x: C0.x + nF.x * perpFull, y: C0.y + nF.y * perpFull };
-    const c0n = interRay(sPt, sdirF, { x: P.x, y: P.y }, norm({ x: C0.x - P.x, y: C0.y - P.y }));
-    const c1n = interRay(sPt, sdirF, { x: N.x, y: N.y }, norm({ x: C1.x - N.x, y: C1.y - N.y }));
-    corners[k] = { x: Math.max(0, Math.min(fullMat.cols, c0n.x)), y: Math.max(0, Math.min(fullMat.rows, c0n.y)) };
-    corners[(k + 1) % 4] = { x: Math.max(0, Math.min(fullMat.cols, c1n.x)), y: Math.max(0, Math.min(fullMat.rows, c1n.y)) };
-    return true;
-  }
-
-  // ===== 矢印キー微調整 (選択中の隅/辺を 1px、Shift で 10px) =====
-  window.addEventListener('keydown', (e) => {
-    if (!fullMat || !corners) return;
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key)) return;
-    const tag = document.activeElement && document.activeElement.tagName;
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (e.key === 'Escape') { selCorner = -1; selEdge = -1; redraw(); return; }
-    if (selCorner < 0 && selEdge < 0) return;
-    e.preventDefault();
-    const step = e.shiftKey ? 10 : 1;
-    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-    if (selCorner >= 0) {
-      corners[selCorner].x = Math.max(0, Math.min(fullMat.cols, corners[selCorner].x + dx));
-      corners[selCorner].y = Math.max(0, Math.min(fullMat.rows, corners[selCorner].y + dy));
-    } else {
-      // 辺: 矢印を辺の法線に射影して平行スライド (辺スライドと同じ幾何)
-      const k = selEdge, C0 = corners[k], C1 = corners[(k + 1) % 4], P = corners[(k + 3) % 4], N = corners[(k + 2) % 4];
-      const norm = (v) => { const L = Math.hypot(v.x, v.y) || 1; return { x: v.x / L, y: v.y / L }; };
-      const sdir = norm({ x: C1.x - C0.x, y: C1.y - C0.y });
-      const n = { x: -sdir.y, y: sdir.x };
-      const perp = dx * n.x + dy * n.y;
-      if (Math.abs(perp) > 1e-9) {
-        const sPt = { x: C0.x + n.x * perp, y: C0.y + n.y * perp };
-        const c0n = interRay(sPt, sdir, { x: P.x, y: P.y }, norm({ x: C0.x - P.x, y: C0.y - P.y }));
-        const c1n = interRay(sPt, sdir, { x: N.x, y: N.y }, norm({ x: C1.x - N.x, y: C1.y - N.y }));
-        corners[k] = c0n; corners[(k + 1) % 4] = c1n;
-      }
-    }
-    redraw();
-    updateMetricsSoon();
-  });
-  let metricsTimer = null;
-  function updateMetricsSoon() { clearTimeout(metricsTimer); metricsTimer = setTimeout(updateMetrics, 300); }
 
   view.addEventListener('mousedown', onDown);
   window.addEventListener('mousemove', onMove);
