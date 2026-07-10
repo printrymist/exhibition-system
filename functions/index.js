@@ -2825,9 +2825,11 @@ exports.getArtwork = onCall(
     }
 
     if (!authMode) {
+      // 来場者 (QR) にそのまま表示されるため、プログラム用語を出さない
       throw new HttpsError(
         "permission-denied",
-        "読取り権限がありません (operator / organizer auth または有効なアクセストークンが必要)",
+        "このリンクでは作品を表示できません。QR コードが古いか、" +
+        "リンクが正しくない可能性があります。",
       );
     }
 
@@ -2929,9 +2931,11 @@ exports.listArtworksByArtist = onCall(
     }
 
     if (!authMode) {
+      // 作家 (招待リンク) にそのまま表示されるため、プログラム用語を出さない
       throw new HttpsError(
         "permission-denied",
-        "読取り権限がありません",
+        "このリンクは使用できません。主催者から新しい招待リンクを" +
+        "受け取ってください。",
       );
     }
 
@@ -2987,7 +2991,12 @@ exports.findEmptyArtworkSlot = onCall(
     }
 
     if (!authMode) {
-      throw new HttpsError("permission-denied", "読取り権限がありません");
+      // 作家 (招待リンク) にそのまま表示されるため、プログラム用語を出さない
+      throw new HttpsError(
+        "permission-denied",
+        "このリンクは使用できません。主催者から新しい招待リンクを" +
+        "受け取ってください。",
+      );
     }
 
     // 空きスロット = status='0' or status=''。artwork_id でソートして先頭を返す。
