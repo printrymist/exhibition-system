@@ -194,6 +194,16 @@ service cloud.firestore {
       );
     }
 
+    // 短縮 QR コード (qriine.com/A/{code} → index.html が個別 get で解決)。
+    // code はランダム 50bit で推測不能。doc の sig は従来 qr_url に載せていた
+    // ものと同じ「入場券」なので、個別 get の公開は従来と同じセキュリティ水準。
+    // list を operator に限定して総当たり列挙を防ぐ。書き込みは CF (admin SDK) のみ。
+    match /qr_codes/{code} {
+      allow get: if true;
+      allow list: if isOperator();
+      allow create, update, delete: if false;
+    }
+
     // Phase E (2026-05-10): submitArtwork CF が変更履歴を append する監査ログ。
     // クライアントからの書き込みは禁止 (admin SDK 経由の CF だけが書ける)。
     // 読み取りは operator のみ (主催者の作品履歴閲覧 UI を後付けする場合は別の経路で渡す)。

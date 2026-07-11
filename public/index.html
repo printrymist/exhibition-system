@@ -543,14 +543,19 @@
     // 🌟 URL パラメータ取得
     // =========================================================
     const urlParams = new URLSearchParams(window.location.search);
-    const exVal  = urlParams.get('ex')  || '';
-    const idVal  = urlParams.get('id')  || '';
+    // 短縮 QR (qriine.com/A/{code} [+ /C = caption mode]) で開かれた場合は
+    // window.onload で qr_codes/{code} を 1 回引いて ex/id/exp/sig に合流する
+    // (2026-07-12: 印刷 QR のマス数削減のため)。そのため let で宣言する。
+    let exVal  = urlParams.get('ex')  || '';
+    let idVal  = urlParams.get('id')  || '';
     // key パラメータは Phase 6c で撤去 (実 security は Cloud Function 側の HMAC で検証)
-    const expVal = urlParams.get('exp') || '';
-    const sigVal = urlParams.get('sig') || '';
+    let expVal = urlParams.get('exp') || '';
+    let sigVal = urlParams.get('sig') || '';
     // caption=1: caption mode で起動 (QR のみシール経由)。
     // 作品情報 (caption テンプレの items[]) をスマホ画面で表示し、紙キャプションの代替に。
-    const captionMode = urlParams.get('caption') === '1';
+    let captionMode = urlParams.get('caption') === '1';
+    // 短縮 QR のパス。hosting の ** rewrite で index.html に届く。
+    const shortQrMatch = window.location.pathname.match(/^\/a\/([a-z0-9]+)(\/c)?\/?$/i);
 
     // Phase 6c: gas_QRlikes 経路を完全撤去。GAS_URL / gasCall は不要に。
     // すべての write は Cloud Function (submitArtwork) 経由、read は Firestore 直接。
@@ -791,6 +796,32 @@
       // sessionId を localStorage / cookie / IndexedDB から復元する (Phase V1)
       try { await window.restoreSessionIdFromIDB(); } catch (_e) { /* fall through */ }
       applyLang();
+
+      // 短縮 QR コードの解決 (qriine.com/A/{code})。
+      // qr_codes/{code} から従来の ex/id/exp/sig を引いて以降のフローに合流する。
+      if (shortQrMatch && !exVal) {
+        document.getElementById('unityGlobalLoading').style.display = 'flex';
+        try {
+          const snap = await fsDb.collection('qr_codes')
+            .doc(shortQrMatch[1].toUpperCase()).get();
+          if (snap.exists) {
+            const d = snap.data();
+            exVal  = String(d.exCode || '');
+            idVal  = String(d.artworkId || '');
+            expVal = String(d.exp || '');
+            sigVal = String(d.sig || '');
+            if (shortQrMatch[2]) captionMode = true;
+          }
+        } catch (e) {
+          console.error('short qr resolve failed:', e);
+        }
+        if (!exVal || !idVal) {
+          showGlobalNotice('作品を読み込めませんでした',
+            'この QR コードは使えなくなっています。\n' +
+            'お手数ですが、会場の QR コードをもう一度読み取るか、主催者にお知らせください。');
+          return;
+        }
+      }
 
       // QR パラメータが無い = qriine.com 直打ち / URL タイプミス。
       // エラーではなく案内を出す (CF / Firestore は呼ばない)。

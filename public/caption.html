@@ -1404,7 +1404,8 @@
           </div>
           <div class="layout-item">
             <label>QR サイズ</label>
-            <input type="number" id="qrSize" min="10" max="50" value="20" style="width:60px;">
+            <input type="number" id="qrSize" min="8" max="50" value="20" style="width:60px;" oninput="updateQrSizeWarn()">
+            <span id="qrSizeWarn" style="display:none; color:#c62828; font-size:0.8em; margin-left:6px;">⚠️ 10mm 未満は読み取りが不安定になるおそれがあります</span>
             <span>mm</span>
           </div>
           <div class="layout-item">
@@ -3751,21 +3752,45 @@
       return html;
     }
 
+    // 短縮 QR の URL prefix。全部大文字にして QR の英数字モード (Byte より
+    // 高密度) を使う。ドメインは大文字小文字を区別しない。
+    const SHORT_QR_BASE = 'HTTPS://QRIINE.COM/A/';
+
+    // QR サイズ入力の注意表示 (10mm 未満は読み取りが不安定になりやすい)
+    function updateQrSizeWarn() {
+      const warn = document.getElementById('qrSizeWarn');
+      if (!warn) return;
+      const v = Number(document.getElementById('qrSize').value);
+      warn.style.display = (v && v < 10) ? 'inline' : 'none';
+    }
+
     // 1作品分の QR (canvas → img tag)。qrLogo は DOM から都度参照
     function buildQrImg(s, dims, art) {
+      updateQrSizeWarn();
+      const isQrOnly = s && s.paperMode === 'qr_only';
       let url = art.qr_url;
-      if (!url) return `<div style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};background:#eee;display:flex;align-items:center;`
-        + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
-      // paperMode='qr_only' の場合は URL に &caption=1 を追加して、index.html を
-      // caption mode で起動させる。紙キャプ用 QR とは別の QR コードになる。
-      if (s && s.paperMode === 'qr_only') {
+      let dataMode = 'Byte';
+      if (art.qr_code) {
+        // 短縮 QR (qr_codes/{code} を index.html が解決)。マス数が
+        // 65x65 → 25x25 に減り、小さいシールでも読み取りやすい。
+        // /C = caption mode 起動 (英数字モードで使える文字だけで表現)。
+        url = SHORT_QR_BASE + art.qr_code + (isQrOnly ? '/C' : '');
+        dataMode = 'Alphanumeric';
+      } else if (!url) {
+        return `<div style="width:${dims.qrSizeMm};height:${dims.qrSizeMm};background:#eee;display:flex;align-items:center;`
+          + `justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>`;
+      } else if (isQrOnly) {
+        // 旧 URL fallback: paperMode='qr_only' は &caption=1 を追加して
+        // index.html を caption mode で起動させる。
         url += (url.indexOf('?') !== -1 ? '&' : '?') + 'caption=1';
       }
       const logo = document.getElementById('qrLogo').value;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      const qr = qrcode(0, 'H');
-      qr.addData(url);
+      // 誤り訂正: ロゴを重ねるときだけ H (30% 復元)。ロゴなしは M で
+      // マス数を減らし、同じ物理サイズでもセルを大きく = 読み取りやすく。
+      const qr = qrcode(0, (logo === 'heart' || logo === 'like') ? 'H' : 'M');
+      qr.addData(url, dataMode);
       qr.make();
       const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
       canvas.width = size;
@@ -4845,8 +4870,14 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const ctx = canvas.getContext('2d');
       const qrImages = {};
       artworks.forEach(art => {
-        const qr = qrcode(0, 'H');
-        qr.addData(art.qr_url);
+        // 短縮 QR があればそれを英数字モードで、無ければ従来 URL を Byte で。
+        // 誤り訂正はロゴあり時のみ H (buildQrImg と同方針)。
+        const qr = qrcode(0, (logo === 'heart' || logo === 'like') ? 'H' : 'M');
+        if (art.qr_code) {
+          qr.addData(SHORT_QR_BASE + art.qr_code, 'Alphanumeric');
+        } else {
+          qr.addData(art.qr_url);
+        }
         qr.make();
         const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
         // ヘッダ高さは表示形式で変える: なし=0、1 行=0.15、2 行=0.24
@@ -5019,13 +5050,13 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
         artSnap.forEach(doc => {
           const d = doc.data();
           if (!d.artwork_id) return;
-          qrList.push({ artwork_id: d.artwork_id, qr_url: d.qr_url || '', status: (d.status || '').toString(), title: d.title || '' });
+          qrList.push({ artwork_id: d.artwork_id, qr_url: d.qr_url || '', qr_code: d.qr_code || '', status: (d.status || '').toString(), title: d.title || '' });
           if ((d.status || '').toString() === '1') artworks.push(d);
         });
         const cmp = (a, b) => (a.artwork_id || '').localeCompare(b.artwork_id || '');
         artworks.sort(cmp);
         qrList.sort(cmp);
-        const excludedCols = ['exCode','artworkId','artwork_id','security_key','image_url','qr_url','status','insta','x','facebook','web','createdAt','updatedAt','migratedAt','backfilledAt'];
+        const excludedCols = ['exCode','artworkId','artwork_id','security_key','image_url','qr_url','qr_code','status','insta','x','facebook','web','createdAt','updatedAt','migratedAt','backfilledAt'];
         const captionHeaders = artworks.length > 0
           ? Object.keys(artworks[0]).filter(h => h && !excludedCols.includes(h))
           : [];

@@ -583,6 +583,9 @@ async function finalizeExhibitionSetupImpl(request) {
         db.collection("artworks").doc(slot.docId)
           .set(slot.data, { merge: true }),
       );
+      writes.push(
+        db.collection("qr_codes").doc(slot.qrCode).set(slot.qrCodeData),
+      );
     }
     try {
       await Promise.all(writes);
@@ -1544,23 +1547,52 @@ exports.mintArtworkQrTokenFromGas = onRequest(
 const VISITOR_QR_BASE_URL = "https://qriine.com/";
 const ARTWORK_QR_DEFAULT_DAYS = 365;
 
+// 短縮 QR コード (qriine.com/A/{code})。
+// 印刷 QR の URL を短くして QR のマス数を減らし (65x65 → 25x25)、
+// 小さいシールでも読み取れるようにする (2026-07-12)。
+// - 文字種は QR 英数字モードで扱える大文字英数字から紛らわしい 0/O/1/I を
+//   除いた 32 種。10 文字 = 50bit で推測不能。
+// - qr_codes/{code} doc が ex/id/exp/sig を保持する。コードの所持 = 従来の
+//   「URL に sig が載っている」と同じ入場券モデルで、セキュリティ水準は不変。
+const QR_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateShortQrCode() {
+  const bytes = crypto.randomBytes(10);
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) {
+    s += QR_CODE_ALPHABET[bytes[i] % QR_CODE_ALPHABET.length];
+  }
+  return s;
+}
+
 // 作品スロット 1 件分の Firestore doc data + seed を生成する純粋ヘルパ。
 // addArtworkSlots (主催者の増分追加) と finalizeExhibitionSetup (セットアップ時の
 // 初期 seeding) で共用し、UI/経路で能力差が出ないようにする。
+// 呼び出し側は data と合わせて qr_codes/{qrCode} に qrCodeData を書き込むこと。
 function buildArtworkSlot(secret, exCode, seq, exp, organizerEmail, nowIso) {
   const wId = "w" + String(seq).padStart(3, "0");
   const sig = computeArtworkSig(secret, exCode, wId, exp);
   const qrUrl = VISITOR_QR_BASE_URL + "?ex=" + encodeURIComponent(exCode) +
     "&id=" + encodeURIComponent(wId) + "&exp=" + exp + "&sig=" + sig;
+  const qrCode = generateShortQrCode();
   return {
     wId: wId,
     docId: exCode + "_" + wId,
+    qrCode: qrCode,
+    qrCodeData: {
+      exCode: exCode,
+      artworkId: wId,
+      exp: exp,
+      sig: sig,
+      createdAt: nowIso,
+    },
     data: {
       exCode: exCode,
       artworkId: wId,
       artwork_id: wId,
       status: "0",
       qr_url: qrUrl,
+      qr_code: qrCode,
       security_key: crypto.randomBytes(6).toString("hex"),
       _published: false,
       organizerEmail: organizerEmail,
@@ -1636,6 +1668,7 @@ exports.addArtworkSlots = onCall(
           secret, exCode, base + i, exp, organizerEmail, nowIso,
         );
         tx.set(db.collection("artworks").doc(slot.docId), slot.data);
+        tx.set(db.collection("qr_codes").doc(slot.qrCode), slot.qrCodeData);
         created.push({
           artwork_id: slot.wId,
           qr_url: slot.data.qr_url,
@@ -1694,6 +1727,18 @@ async function purgeExhibitionInternal(exCode) {
   const lSnap = await db.collection("likes").where("exCode", "==", exCode).get();
   await Promise.all(lSnap.docs.map((d) => d.ref.delete()));
   stats.likes = lSnap.size;
+
+  // 短縮 QR コード (qr_codes)。作品を消したら参照も残さない。
+  try {
+    const qSnap = await db.collection("qr_codes")
+      .where("exCode", "==", exCode).get();
+    await Promise.all(qSnap.docs.map((d) => d.ref.delete()));
+    stats.qrCodes = qSnap.size;
+  } catch (e) {
+    logger.warn("purgeExhibitionInternal: qr_codes delete failed", {
+      exCode, error: e.message,
+    });
+  }
 
   // exhibitions
   try {
@@ -1933,6 +1978,7 @@ exports.submitArtwork = onCall(
       "security_key", "exCode", "artworkId", "artwork_id",
       "createdAt", "migratedAt", "backfilledAt", "updatedAt",
       "_published", "organizerEmail",
+      "qr_url", "qr_code",
     ]);
     const cleanFields = {};
     for (const k of Object.keys(fields)) {
