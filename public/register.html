@@ -2328,7 +2328,9 @@ ${artistMessage}
           res.artworks.forEach(art => list.appendChild(makeArtworkRow(art)));
         })
         .catch(err => {
-          document.getElementById('artworkList').innerHTML = '<div class="list-empty">' + friendlyError(err, '読み込み') + '</div>';
+          const list = document.getElementById('artworkList');
+          list.innerHTML = '<div class="list-empty"></div>';
+          list.firstChild.textContent = friendlyError(err, '読み込み');
         });
     }
 
@@ -2846,7 +2848,10 @@ ${artistMessage}
           if (confirmBtn) confirmBtn.disabled = false;
         })
         .catch(err => {
-          if (area) area.innerHTML = '<span style="color:#d93025;font-size:0.85em;">' + friendlyError(err, '処理') + '</span>';
+          if (area) {
+            area.innerHTML = '<span style="color:#d93025;font-size:0.85em;"></span>';
+            area.firstChild.textContent = friendlyError(err, '処理');
+          }
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         });

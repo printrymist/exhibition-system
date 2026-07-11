@@ -453,7 +453,8 @@
           '<button type="button" class="btn" onclick="clearShot()" style="margin-top:6px;font-size:0.8em;">添付を取り消す</button>';
       } catch (e) {
         _shotDataUrl = null;
-        prev.innerHTML = '<span style="color:#c62828;font-size:0.85em;">' + friendlyError(e, '画像の処理') + '</span>';
+        prev.innerHTML = '<span style="color:#c62828;font-size:0.85em;"></span>';
+        prev.firstChild.textContent = friendlyError(e, '画像の処理');
       }
     }
 
