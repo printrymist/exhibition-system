@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v28</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v29</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -340,7 +340,10 @@
     for (let i = 0; i < N; i++) bin[i] = (d0[i] - mn) / (mx - mn + 1e-9) > 0.5 ? 1 : 0;
     const comp = mlLargestComponent(bin, S, S);
     const frac = comp.count / N;
-    if (comp.count < 300 || frac > 0.985) return null;   // 掴めていない / 画面いっぱい → 従来検出へ
+    // 面積ゲート: 作品を撮った写真なら作品は画面の数%以上を占めるはず。
+    // 下限 5% は「作品が画面いっぱいで背景に浮く物体がなく、絵の中の模様を掴んだ」誤検出を弾く
+    // (42枚GTの正常例は 0.23〜0.60 に分布。誤検出例は 0.019)。上限は画面いっぱいの無意味なマスク。
+    if (comp.count < 300 || frac < 0.05 || frac > 0.985) return null;   // → 従来検出へ
     const m = comp.mask, sx = fullMat.cols / S, sy = fullMat.rows / S;
     const pts = [];
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
@@ -536,21 +539,61 @@
       const comp = mlLargestComponent(bin, S, S);
       const frac = comp.count / N;
       if (comp.count < 200) return null;
-      let x0 = S, x1 = 0, y0 = S, y1 = 0;
       const m = comp.mask;
+      // 辺決めは「マスク画素が1つでもある範囲 (外接矩形)」ではなく行/列の占有率で行う。
+      // 外接矩形はマスクに繋がった突起 (影・写り込み) 1本で辺ごと引っ張られる。
+      // 作品の本体がある行/列は占有率が高いので、代表幅 (90パーセンタイル) の半分以上
+      // 埋まっている行/列だけを作品と見なす → 突起だけの行/列は辺に影響しない。
+      const rowCnt = new Int32Array(S), colCnt = new Int32Array(S);
       for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-        if (!m[y * S + x]) continue;
-        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (m[y * S + x]) { rowCnt[y]++; colCnt[x]++; }
       }
-      const solidity = comp.count / Math.max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
-      // 正面補正済み空間では絵は軸平行 → マスクの外接矩形をそのまま枠に
+      const refWidth = (cnt) => {
+        const nz = [];
+        for (const v of cnt) if (v > 0) nz.push(v);
+        if (!nz.length) return 0;
+        nz.sort((a, b) => a - b);
+        return nz[Math.min(nz.length - 1, Math.floor(nz.length * 0.9))];
+      };
+      const rRef = refWidth(rowCnt), cRef = refWidth(colCnt);
+      let x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+      for (let y = 0; y < S; y++) if (rowCnt[y] >= rRef * 0.5) { if (y0 < 0) y0 = y; y1 = y; }
+      for (let x = 0; x < S; x++) if (colCnt[x] >= cRef * 0.5) { if (x0 < 0) x0 = x; x1 = x; }
+      if (x0 < 0 || y0 < 0) return null;
+      // 検品用 solidity は刈り込み「前」の外接矩形で数えること (42枚GTで実証)。
+      // 刈り込み後の箱で数えると、絵の中に潜った不定形マスクまで長方形らしく見えてしまい、
+      // 「潜り込みは solidity に現れる」という検品の前提が壊れる (潜り込み 5件→14件 に悪化した)。
+      // 刈り込みは辺の位置決め (突起無視) にだけ使う。
+      let bx0 = S, bx1 = 0, by0 = S, by1 = 0;
+      for (let y = 0; y < S; y++) { if (rowCnt[y]) { if (y < by0) by0 = y; if (y > by1) by1 = y; } }
+      for (let x = 0; x < S; x++) { if (colCnt[x]) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; } }
+      const solidity = comp.count / Math.max(1, (bx1 - bx0 + 1) * (by1 - by0 + 1));
+      // σ後の検品は刈り込み箱の外帯で行う
       const rect = { t: y0 * R.H / S, b: (y1 + 1) * R.H / S, l: x0 * R.W / S, r: (x1 + 1) * R.W / S };
       const sigAfter = mlSigmaOutside(R.mat.data, R.W, R.H, rect);
+      // 枠は軸平行の箱ではなく、マスク境界への辺フィットで作る (傾き対応)。
+      // 正面補正の基準は1回目の外周 (板や額) なので、絵がそれに対して回転して
+      // 置かれていると、補正空間でも絵は傾いたまま = 軸平行の箱では辺が斜めにずれる。
+      // 境界点は刈り込み箱の中だけから取る (突起は辺フィットに参加させない)。
+      const bpts = [];
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        if (!m[y * S + x]) continue;
+        if (x === x0 || y === y0 || x === x1 || y === y1 ||
+            !m[y * S + x - 1] || !m[y * S + x + 1] || !m[(y - 1) * S + x] || !m[(y + 1) * S + x]) {
+          bpts.push([x + 0.5, y + 0.5]);
+        }
+      }
+      let quad320 = null;
+      if (bpts.length >= 12) {
+        const mr = mlMinAreaRect(mlConvexHull(bpts));
+        if (mr) quad320 = mlFitQuadByEdges(bpts, mr) || mr;
+      }
+      if (!quad320) quad320 = [[x0, y0], [x1 + 1, y0], [x1 + 1, y1 + 1], [x0, y1 + 1]];
       const map = mlSquareToQuad(R.q);
       const FW = fullMat.cols, FH = fullMat.rows;
-      const quad = [[rect.l / R.W, rect.t / R.H], [rect.r / R.W, rect.t / R.H], [rect.r / R.W, rect.b / R.H], [rect.l / R.W, rect.b / R.H]]
-        .map(([u, v]) => map(Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v))))
-        .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) }));
+      const quad = orderCorners(quad320
+        .map(([qx, qy]) => map(Math.max(0, Math.min(1, qx / S)), Math.max(0, Math.min(1, qy / S))))
+        .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) })));
       return { quad, frac, solidity, sigAfter };
     } finally {
       R.mat.delete();
@@ -562,6 +605,105 @@
     if (!second || second.frac < 0.15 || second.frac > 0.92) return false;
     if (second.solidity >= 0.80) return true;
     return second.solidity >= 0.65 && second.sigAfter !== null && second.sigAfter <= 40;
+  }
+
+  // ===== 仕上げ: フル解像度エッジスナップ =====
+  // AI由来の四隅は 320×320 マスクの量子化を含む (1px@320 ≈ 元画像長辺の0.3%)。
+  // 42枚GTの失敗の過半がこの精度床由来の 1〜4% の縁ズレだったため、最後に元画像
+  // そのもので各辺を境界へ平行移動で吸着させる。
+  // 判定基準は「コントラストが最も強い場所」ではない (それだと絵の中の強い線や影に
+  // 引っ張られる)。作品の縁の性質そのもの =「すぐ外側の帯が均一 (マット/壁は無地) で、
+  // かつ内側と外側の色が変わる場所」をスコアにする。遠くの額/マット境界へ飛ばないよう
+  // 距離減衰を掛け、条件を満たす場所がなければ動かさない。
+  function snapEdgesFullRes(quadPts) {
+    if (!fullMat || !quadPts) return quadPts;
+    const q = orderCorners(quadPts);
+    const W = fullMat.cols, H = fullMat.rows, data = fullMat.data;
+    const long = Math.max(W, H);
+    const R = Math.max(8, Math.round(long * 0.025));           // 探索半径 = 長辺の2.5%
+    const gap = Math.max(2, Math.round(long * 0.004));         // 帯の厚み単位
+    const px = (x, y) => {
+      x = x < 0 ? 0 : (x >= W ? W - 1 : Math.round(x));
+      y = y < 0 ? 0 : (y >= H ? H - 1 : Math.round(y));
+      const i = (y * W + x) * 4;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+    const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
+    const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+    const lines = [];
+    for (let e = 0; e < 4; e++) {
+      const a = q[e], b = q[(e + 1) % 4];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 20) return quadPts;
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      let nx = -uy, ny = ux;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      if ((mx - cx) * nx + (my - cy) * ny < 0) { nx = -nx; ny = -ny; }  // 法線を外向きに
+      // 前計算: オフセット d の「辺に平行な1ライン」ごとに 平均色 と ライン内ばらつき
+      const nT = 48;
+      const lo = -R - 2 * gap, hi = R + 3 * gap;
+      const mean = [], sigma = [];
+      for (let d = lo; d <= hi; d++) {
+        let s0 = 0, s1 = 0, s2 = 0, q0 = 0, q1 = 0, q2 = 0;
+        for (let t = 0; t < nT; t++) {
+          const f = 0.1 + 0.8 * t / (nT - 1);   // 辺の両端10%は角の影響を避ける
+          const p = px(a.x + (b.x - a.x) * f + nx * d, a.y + (b.y - a.y) * f + ny * d);
+          s0 += p[0]; s1 += p[1]; s2 += p[2];
+          q0 += p[0] * p[0]; q1 += p[1] * p[1]; q2 += p[2] * p[2];
+        }
+        mean.push([s0 / nT, s1 / nT, s2 / nT]);
+        sigma.push(Math.sqrt(Math.max(0, (q0 + q1 + q2) / nT - (s0 * s0 + s1 * s1 + s2 * s2) / (nT * nT)) / 3));
+      }
+      const M = (d) => mean[d - lo], SG = (d) => sigma[d - lo];
+      // 境界候補 d のスコア:
+      //   外帯 = d+gap 〜 d+3gap が均一 (ライン内ばらつき小 + ライン間の色変化小)
+      //   内帯 = d-2gap 〜 d-gap と外帯の色が離れている
+      const scores = [];
+      for (let d = -R; d <= R; d++) {
+        let om = [0, 0, 0], on = 0, ospread = 0;
+        for (let k = d + gap; k <= d + 3 * gap; k++) {
+          const m = M(k); om[0] += m[0]; om[1] += m[1]; om[2] += m[2];
+          ospread += SG(k); on++;
+        }
+        om = om.map(v => v / on); ospread /= on;
+        let odev = 0;
+        for (let k = d + gap; k <= d + 3 * gap; k++) {
+          const m = M(k);
+          odev += Math.abs(m[0] - om[0]) + Math.abs(m[1] - om[1]) + Math.abs(m[2] - om[2]);
+        }
+        odev /= on;
+        let im = [0, 0, 0], inn = 0;
+        for (let k = d - 2 * gap; k <= d - gap; k++) {
+          const m = M(k); im[0] += m[0]; im[1] += m[1]; im[2] += m[2]; inn++;
+        }
+        im = im.map(v => v / inn);
+        const contrast = Math.abs(im[0] - om[0]) + Math.abs(im[1] - om[1]) + Math.abs(im[2] - om[2]);
+        scores.push(Math.max(0, contrast - 1.5 * (ospread + odev)));   // 外が均一でないほど減点
+      }
+      let bestD = 0, bestS = -1;
+      const sig2 = 2 * (R / 2) * (R / 2);
+      for (let d = -R; d <= R; d++) {
+        const sc = scores[d + R] * Math.exp(-(d * d) / sig2);  // 距離減衰
+        if (sc > bestS) { bestS = sc; bestD = d; }
+      }
+      if (scores[bestD + R] < 20) bestD = 0;                   // 縁らしい場所がなければ動かさない
+      lines.push({ px: mx + nx * bestD, py: my + ny * bestD, dx: ux, dy: uy });
+    }
+    const inter = (L1, L2) => {
+      const d = L1.dx * L2.dy - L1.dy * L2.dx;
+      if (Math.abs(d) < 1e-9) return null;
+      const t = ((L2.px - L1.px) * L2.dy - (L2.py - L1.py) * L2.dx) / d;
+      return { x: L1.px + t * L1.dx, y: L1.py + t * L1.dy };
+    };
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const p = inter(lines[(i + 3) % 4], lines[i]);
+      if (!p) return quadPts;
+      out.push(p);
+    }
+    // 安全弁: 想定を超えて動いた場合は吸着を信用しない
+    for (let i = 0; i < 4; i++) if (Math.hypot(out[i].x - q[i].x, out[i].y - q[i].y) > R * 2.5) return quadPts;
+    return out.map(p => ({ x: Math.max(0, Math.min(W, p.x)), y: Math.max(0, Math.min(H, p.y)) }));
   }
 
   // ===== 状態 =====
@@ -648,6 +790,10 @@
       try { second = await aiSecondPass(outer); } catch (e) { console.warn('2回目のAI検出でエラー。境目探索に切り替えます。', e); }
       if (secondPassAccepted(second)) {
         corners = second.quad;
+        // 【試して撤回】入れ子反復 (採用枠の中でもう一段 AI 検出): 板→マット→絵 の
+        // 三重入れ子を狙ったが、solidity+σ後 を両方要求する厳格ゲートでも「絵の中の
+        // 長方形っぽい領域」への潜り込みを止められず (42枚GTで合格1枚が 0.56%→34.9% に
+        // 大回帰)、狙った2枚には無効だった。再挑戦するなら別の判定軸が必要。
         setStatus('自動検出しました（AI・内側の絵まで検出）。ずれていたら辺の青四角で調整してください。', 'ok');
       } else {
         // 検品を通らなければ v22 までの動き: ルールで境目を探し、だめなら外周
@@ -661,6 +807,7 @@
           setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドするか「🎯 内側の絵」を試してください。', 'ok');
         }
       }
+      corners = snapEdgesFullRes(corners);   // 仕上げ: 元画像の解像度で辺を境界へ吸着
       redraw();
       updateMetrics();
       window.detectBusy = false;

@@ -1,0 +1,12 @@
+{
+  "name": "crop-eval",
+  "private": true,
+  "type": "module",
+  "description": "crop.html の自動検出を GT (crop-gt.json) に対して一括評価するハーネス",
+  "scripts": {
+    "eval": "node run.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}
