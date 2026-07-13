@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v30</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v31</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -280,27 +280,50 @@
 
   // minAreaRect は回転長方形止まり (キーストーンが直せない)。各辺の近くの境界点に
   // 直線をフィットし直して交点を取ると、遠近の付いた四角形になる。
-  function mlFitQuadByEdges(pts, rect) {
-    const lines = [];
-    for (let i = 0; i < 4; i++) {
-      const a = rect[i], b = rect[(i + 1) % 4];
-      const len = Math.hypot(b[0]-a[0], b[1]-a[1]); if (len < 1e-9) return null;
-      const ux = (b[0]-a[0])/len, uy = (b[1]-a[1])/len, nx = -uy, ny = ux;
-      const band = Math.max(4, len * 0.03);
-      const sel = [];
-      for (const p of pts) {
-        const du = (p[0]-a[0])*ux + (p[1]-a[1])*uy;
-        const dv = (p[0]-a[0])*nx + (p[1]-a[1])*ny;
-        if (du > len * 0.1 && du < len * 0.9 && Math.abs(dv) < band) sel.push(p);
-      }
-      if (sel.length < 8) { lines.push({ px: a[0], py: a[1], dx: ux, dy: uy }); continue; }
+  // フィットは外れ値除去つきで反復する: 板の上の小物がマスクに融合すると境界に
+  // 「こぶ」ができ、単純な一発フィットは辺ごと引っ張られて傾く (辺の点の多数派は
+  // 本物の直線上にあるので、遠い点を捨てて引き直せばこぶは自然に脱落する)。
+  function mlFitQuadByEdges(pts, rect, bands) {
+    // bands: 帯幅スケジュール。1手目 (生画像・小物のこぶあり) は広めから、
+    // 2手目以降 (正面補正済みでマスクが素直) は狭めから始めて精度を優先する。
+    bands = bands || [0.06, 0.03, 0.015];
+    const pcaFit = (sel) => {
       let mx = 0, my = 0;
       for (const p of sel) { mx += p[0]; my += p[1]; }
       mx /= sel.length; my /= sel.length;
       let sxx = 0, sxy = 0, syy = 0;
       for (const p of sel) { const dx = p[0]-mx, dy = p[1]-my; sxx += dx*dx; sxy += dx*dy; syy += dy*dy; }
       const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-      lines.push({ px: mx, py: my, dx: Math.cos(th), dy: Math.sin(th) });
+      return { px: mx, py: my, dx: Math.cos(th), dy: Math.sin(th) };
+    };
+    const lines = [];
+    for (let i = 0; i < 4; i++) {
+      const a = rect[i], b = rect[(i + 1) % 4];
+      const len = Math.hypot(b[0]-a[0], b[1]-a[1]); if (len < 1e-9) return null;
+      const ux = (b[0]-a[0])/len, uy = (b[1]-a[1])/len, nx = -uy, ny = ux;
+      // 辺方向の範囲内の点だけを対象に、帯幅を 6%→3%→1.5% と狭めながら
+      // 現在の線の周りで選び直してフィットを反復する
+      const cand = [];
+      for (const p of pts) {
+        const du = (p[0]-a[0])*ux + (p[1]-a[1])*uy;
+        if (du > len * 0.1 && du < len * 0.9) cand.push(p);
+      }
+      let line = { px: a[0], py: a[1], dx: ux, dy: uy };   // 初期線 = minAreaRect の辺
+      let ok = false;
+      for (const w of bands) {
+        const band = Math.max(3, len * w);
+        // 現在の線からの距離で選抜
+        const lnx = -line.dy, lny = line.dx;
+        const sel = [];
+        for (const p of cand) {
+          const dv = (p[0]-line.px)*lnx + (p[1]-line.py)*lny;
+          if (Math.abs(dv) < band) sel.push(p);
+        }
+        if (sel.length < 8) break;
+        line = pcaFit(sel);
+        ok = true;
+      }
+      lines.push(ok ? line : { px: a[0], py: a[1], dx: ux, dy: uy });
     }
     const inter = (L1, L2) => {
       const d = L1.dx * L2.dy - L1.dy * L2.dx;
@@ -586,7 +609,7 @@
       let quad320 = null;
       if (bpts.length >= 12) {
         const mr = mlMinAreaRect(mlConvexHull(bpts));
-        if (mr) quad320 = mlFitQuadByEdges(bpts, mr) || mr;
+        if (mr) quad320 = mlFitQuadByEdges(bpts, mr, [0.03, 0.015]) || mr;
       }
       if (!quad320) quad320 = [[x0, y0], [x1 + 1, y0], [x1 + 1, y1 + 1], [x0, y1 + 1]];
       const map = mlSquareToQuad(R.q);
@@ -594,7 +617,28 @@
       const quad = orderCorners(quad320
         .map(([qx, qy]) => map(Math.max(0, Math.min(1, qx / S)), Math.max(0, Math.min(1, qy / S))))
         .map(p => ({ x: Math.max(0, Math.min(FW, p.x)), y: Math.max(0, Math.min(FH, p.y)) })));
-      return { quad, frac, solidity, sigAfter };
+      // 新しい枠と元の枠のあいだ (ドーナツ状の領域) の色の乱れ。
+      // 正しい入れ子掘り (マット→絵) ならこの領域は無地のマット、
+      // 絵の中への潜り込みなら絵柄の続きが写るので乱れが大きくなる。
+      // σ後 (境界際の細い帯) と違って領域を丸ごと見るので、際だけ平坦な絵に騙されない。
+      const ringSigma = (() => {
+        const t = Math.max(0, Math.round(rect.t)), b2 = Math.min(R.H, Math.round(rect.b));
+        const l = Math.max(0, Math.round(rect.l)), r2 = Math.min(R.W, Math.round(rect.r));
+        const step = Math.max(1, Math.round(Math.min(R.W, R.H) / 150));
+        const d = R.mat.data;
+        const sample = [];
+        for (let y = 0; y < R.H; y += step) for (let x = 0; x < R.W; x += step) {
+          if (y >= t && y < b2 && x >= l && x < r2) continue;   // 新しい枠の中は見ない
+          const i = (y * R.W + x) * 4;
+          sample.push([d[i], d[i + 1], d[i + 2]]);
+        }
+        if (sample.length < 50) return null;
+        const med = (arr) => { const a2 = arr.slice().sort((u, v) => u - v); return a2[a2.length >> 1]; };
+        const mc = [0, 1, 2].map(ch => med(sample.map(p => p[ch])));
+        const dv = sample.map(p => (p[0] - mc[0]) ** 2 + (p[1] - mc[1]) ** 2 + (p[2] - mc[2]) ** 2);
+        return Math.sqrt(dv.reduce((s, v) => s + v, 0) / dv.length / 3);
+      })();
+      return { quad, frac, solidity, sigAfter, ringSigma };
     } finally {
       R.mat.delete();
     }
@@ -717,11 +761,15 @@
         }
       } else {
         // --- 通常スナップ: 近傍 ±R で縁らしさ最大の場所へ (距離減衰つき) ---
+        // 減衰は内外で非対称にする。検出の間違い方はほぼ常に「外側に掴みすぎ」なので、
+        // 内向きの修正は信じてよく、外向きの移動 (マット開口の影や額の線に引かれる) は
+        // 疑ってかかる (対称減衰では外の強い境界が近距離で勝ってしまう回帰が出た)。
         let bestS = -1, rawBest = 0;
-        const sig2 = 2 * (R / 2) * (R / 2);
+        const sig2In = 2 * (R / 2) * (R / 2);
+        const sig2Out = 2 * (R / 3) * (R / 3);
         for (let d = -R; d <= R; d++) {
           const raw = edgeScore(d);
-          const sc = raw * Math.exp(-(d * d) / sig2);
+          const sc = raw * Math.exp(-(d * d) / (d > 0 ? sig2Out : sig2In));
           if (sc > bestS) { bestS = sc; bestD = d; rawBest = raw; }
         }
         if (rawBest < 20) bestD = 0;                 // 縁らしい場所がなければ動かさない
@@ -851,10 +899,20 @@
       try { second = await aiSecondPass(outer); } catch (e) { console.warn('2回目のAI検出でエラー。境目探索に切り替えます。', e); }
       if (secondPassAccepted(second)) {
         corners = second.quad;
-        // 【試して撤回】入れ子反復 (採用枠の中でもう一段 AI 検出): 板→マット→絵 の
-        // 三重入れ子を狙ったが、solidity+σ後 を両方要求する厳格ゲートでも「絵の中の
-        // 長方形っぽい領域」への潜り込みを止められず (42枚GTで合格1枚が 0.56%→34.9% に
-        // 大回帰)、狙った2枚には無効だった。再挑戦するなら別の判定軸が必要。
+        // 3手目 (入れ子反復): 板→マット→絵 の三重入れ子では、2手目が掴むのは
+        // まだマット紙のことがある。採用枠の中でもう一段だけ同じ検出を試す。
+        // 採用条件の本体は ringSigma = 新旧の枠のあいだの領域が丸ごと無地であること。
+        // ※ 初回の試み (solidity+σ後の厳格化だけ) は「絵の中の四角い模様」への
+        //   潜り込みを止められず撤回した。σ後は境界際の細い帯しか見ないため、
+        //   際だけ平坦な絵に騙される。あいだの領域全体なら絵の続きが必ず写る。
+        try {
+          const third = await aiSecondPass(corners);
+          if (third && third.frac >= 0.15 && third.frac <= 0.92 &&
+              third.solidity >= 0.80 &&
+              third.ringSigma !== null && third.ringSigma <= 25) {
+            corners = third.quad;
+          }
+        } catch (e) { /* 反復失敗は無視して2手目の結果を使う */ }
         setStatus('自動検出しました（AI・内側の絵まで検出）。ずれていたら辺の青四角で調整してください。', 'ok');
       } else {
         // 検品を通らなければ v22 までの動き: ルールで境目を探し、だめなら外周
