@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v31</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v32</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -765,7 +765,8 @@
         // 内向きの修正は信じてよく、外向きの移動 (マット開口の影や額の線に引かれる) は
         // 疑ってかかる (対称減衰では外の強い境界が近距離で勝ってしまう回帰が出た)。
         let bestS = -1, rawBest = 0;
-        const sig2In = 2 * (R / 2) * (R / 2);
+        const sig2In = 2 * (R * 0.7) * (R * 0.7);   // 内向きは緩く: 強い本物の縁が内側の少し遠くに
+                                                     // あるとき、近い偽境界 (映り込み等) に負けない
         const sig2Out = 2 * (R / 3) * (R / 3);
         for (let d = -R; d <= R; d++) {
           const raw = edgeScore(d);
@@ -885,20 +886,19 @@
   // ===== 自動検出 (多候補生成 → 評価指標で最良を選択) =====
   // 複数手がかりで候補を出し、領域スコア S(Q) が最大の候補を採用。リファインは掛けない(✨ボタンで別途)。
   // AI 検出 (u2netp) を主役に、失敗時は従来の多候補生成 → 領域スコア選択に落ちる。
-  async function autoDetect() {
-    window.detectBusy = true;
-    lastOuterQuad = null;
-    setStatus('自動検出中…', 'info');
+  // 検出パイプライン本体。現在の imgEl / fullMat に対して1周実行し、結果を返す
+  // (UI には触らない — autoDetect と zoomRedetect の両方から呼ばれる)。
+  async function detectPipeline() {
     let ml = null;
     try { ml = await detectByML(); } catch (e) { console.warn('AI検出でエラー。従来検出に切り替えます。', e); }
     if (ml) {
       const outer = orderCorners(ml.quad);
-      lastOuterQuad = outer;   // 🎯 ボタンの起点として記憶
       // 2回目AI: 外周の中で絵そのものを掴み直す。検品 (solidity/σ後) を通れば採用
       let second = null;
       try { second = await aiSecondPass(outer); } catch (e) { console.warn('2回目のAI検出でエラー。境目探索に切り替えます。', e); }
+      let quad, msg;
       if (secondPassAccepted(second)) {
-        corners = second.quad;
+        quad = second.quad;
         // 3手目 (入れ子反復): 板→マット→絵 の三重入れ子では、2手目が掴むのは
         // まだマット紙のことがある。採用枠の中でもう一段だけ同じ検出を試す。
         // 採用条件の本体は ringSigma = 新旧の枠のあいだの領域が丸ごと無地であること。
@@ -906,31 +906,28 @@
         //   潜り込みを止められず撤回した。σ後は境界際の細い帯しか見ないため、
         //   際だけ平坦な絵に騙される。あいだの領域全体なら絵の続きが必ず写る。
         try {
-          const third = await aiSecondPass(corners);
+          const third = await aiSecondPass(quad);
           if (third && third.frac >= 0.15 && third.frac <= 0.92 &&
               third.solidity >= 0.80 &&
               third.ringSigma !== null && third.ringSigma <= 25) {
-            corners = third.quad;
+            quad = third.quad;
           }
         } catch (e) { /* 反復失敗は無視して2手目の結果を使う */ }
-        setStatus('自動検出しました（AI・内側の絵まで検出）。ずれていたら辺の青四角で調整してください。', 'ok');
+        msg = '自動検出しました（AI・内側の絵まで検出）。ずれていたら辺の青四角で調整してください。';
       } else {
         // 検品を通らなければ v22 までの動き: ルールで境目を探し、だめなら外周
         let inner = null;
         try { inner = refineInward(outer); } catch (e) { console.warn('内側の境目探索でエラー。外周の枠を使います。', e); }
         if (inner) {
-          corners = inner;
-          setStatus('自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。', 'ok');
+          quad = inner;
+          msg = '自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。';
         } else {
-          corners = outer;
-          setStatus('自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドするか「🎯 内側の絵」を試してください。', 'ok');
+          quad = outer;
+          msg = '自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドするか「🎯 内側の絵」を試してください。';
         }
       }
-      corners = snapEdgesFullRes(corners);   // 仕上げ: 元画像の解像度で辺を境界へ吸着
-      redraw();
-      updateMetrics();
-      window.detectBusy = false;
-      return;
+      quad = snapEdgesFullRes(quad);   // 仕上げ: 元画像の解像度で辺を境界へ吸着
+      return { quad, msg, kind: 'ok', outer };
     }
     const cands = generateCandidates();
     let best = null, bestScore = -1;
@@ -943,11 +940,130 @@
       if (c.score > bestScore) { bestScore = c.score; best = c; }
     }
     if (best && bestScore > 0) {
-      corners = best.quad;
-      setStatus('検出（' + best.src + '／スコア ' + bestScore + '・' + cands.length + '候補から選択）。ずれたら四隅ドラッグか「✨四隅を微調整」。', 'ok');
+      return { quad: best.quad, msg: '検出（' + best.src + '／スコア ' + bestScore + '・' + cands.length + '候補から選択）。ずれたら四隅ドラッグか「✨四隅を微調整」。', kind: 'ok', outer: null };
+    }
+    return { quad: null, msg: '自動検出できませんでした。四隅を手で合わせてから「✨四隅を微調整」を押してください。', kind: 'warn', outer: null };
+  }
+
+  // 枠の「辺の証拠」: 4辺それぞれの位置で、すぐ外側の帯が均一かつ内外の色が変わるか
+  // (= 本物の境界に乗っているか) を測り、平均する。ズーム再検出の新旧裁定に使う。
+  // 潜り込んだ枠は辺が絵柄の上に乗るので下がり、掴みすぎの枠は辺が無地の中に
+  // 浮くので下がる。正しい枠だけが4辺とも高く出る。
+  function quadBoundaryEvidence(quadPts) {
+    if (!fullMat || !quadPts) return 0;
+    const q = orderCorners(quadPts);
+    const W = fullMat.cols, H = fullMat.rows, data = fullMat.data;
+    const gap = Math.max(2, Math.round(Math.max(W, H) * 0.004));
+    const px = (x, y) => {
+      x = x < 0 ? 0 : (x >= W ? W - 1 : Math.round(x));
+      y = y < 0 ? 0 : (y >= H ? H - 1 : Math.round(y));
+      const i = (y * W + x) * 4;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+    const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
+    const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+    let minEv = Infinity;
+    for (let e = 0; e < 4; e++) {
+      const a = q[e], b = q[(e + 1) % 4];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 20) return 0;
+      const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+      let nx = -uy, ny = ux;
+      const mx2 = (a.x + b.x) / 2, my2 = (a.y + b.y) / 2;
+      if ((mx2 - cx) * nx + (my2 - cy) * ny < 0) { nx = -nx; ny = -ny; }
+      const nT = 32;
+      const lineMean = (d) => {
+        let s0 = 0, s1 = 0, s2 = 0;
+        for (let t = 0; t < nT; t++) {
+          const f = 0.1 + 0.8 * t / (nT - 1);
+          const p = px(a.x + (b.x - a.x) * f + nx * d, a.y + (b.y - a.y) * f + ny * d);
+          s0 += p[0]; s1 += p[1]; s2 += p[2];
+        }
+        return [s0 / nT, s1 / nT, s2 / nT];
+      };
+      const band = (k0, k1) => {
+        const ms = [];
+        for (let k = k0; k <= k1; k += Math.max(1, gap >> 1)) ms.push(lineMean(k));
+        const m = [0, 1, 2].map(ch => ms.reduce((s2, v) => s2 + v[ch], 0) / ms.length);
+        let dev = 0;
+        for (const v of ms) dev += Math.abs(v[0] - m[0]) + Math.abs(v[1] - m[1]) + Math.abs(v[2] - m[2]);
+        return { m, dev: dev / ms.length };
+      };
+      const out = band(gap, 3 * gap), inn = band(-2 * gap, -gap);
+      const contrast = Math.abs(inn.m[0] - out.m[0]) + Math.abs(inn.m[1] - out.m[1]) + Math.abs(inn.m[2] - out.m[2]);
+      // 集計は「最弱の辺」。平均だと 3辺が正しく1辺だけ浮いた枠が高く出てしまい、
+      // 4辺とも境界に乗った枠との差が出ない。問うべきは一番弱い辺が直ったかどうか。
+      minEv = Math.min(minEv, Math.max(0, contrast - 1.5 * out.dev));
+    }
+    return minEv;
+  }
+
+  // ===== 自動ズーム再検出 =====
+  // 1周目の検出枠の周りに余白を付けて切り出し、その部分画像に対して検出パイプラインを
+  // もう一度フルに実行する。壁・キャプションカード・机の小物などの撹乱要素が2周目には
+  // 存在しないので、「額の周りを手で切り落としてから検出し直す」のと同じ効果を自動で得る
+  // (同一写真の 元 1.85% / 切り落とし版 0.48% という対照実験がこの設計の根拠)。
+  async function zoomRedetect(r1) {
+    const xs = r1.quad.map(p => p.x), ys = r1.quad.map(p => p.y);
+    let l = Math.min(...xs), r = Math.max(...xs), t = Math.min(...ys), b = Math.max(...ys);
+    const w = r - l, h = b - t;
+    const W = fullMat.cols, H = fullMat.rows;
+    const areaFrac = (w * h) / (W * H);
+    // 既に画面の大部分なら2周目の意味がない。小さすぎる枠は誤検出の疑いがあり、
+    // それを土台に切り出すと本物の作品を失うのでやらない。
+    if (areaFrac > 0.55 || areaFrac < 0.08) return null;
+    const mx = w * 0.18, my = h * 0.18;
+    l = Math.max(0, Math.round(l - mx)); t = Math.max(0, Math.round(t - my));
+    r = Math.min(W, Math.round(r + mx)); b = Math.min(H, Math.round(b + my));
+    const cw = r - l, ch = b - t;
+    if (cw < 200 || ch < 200) return null;
+    // 部分画像を作って imgEl / fullMat を一時差し替え → パイプライン再実行 → 復元
+    const cnv = document.createElement('canvas');
+    cnv.width = cw; cnv.height = ch;
+    cnv.getContext('2d').drawImage(imgEl, l, t, cw, ch, 0, 0, cw, ch);
+    const roi = fullMat.roi(new cv.Rect(l, t, cw, ch));
+    const subMat = roi.clone();   // roi はビューなので連続メモリに複製
+    roi.delete();
+    const savedImg = imgEl, savedMat = fullMat;
+    imgEl = cnv; fullMat = subMat;
+    let r2 = null;
+    try {
+      r2 = await detectPipeline();
+    } finally {
+      imgEl = savedImg; fullMat = savedMat;
+      subMat.delete();
+    }
+    if (!r2 || !r2.quad) return null;
+    const quad = r2.quad.map(p => ({ x: p.x + l, y: p.y + t }));
+    // 受け入れ判定1: 2周目の枠が切り出しの3割未満しか占めないのは
+    // 「切り出しの中でさらに小さな塊へ潜った」疑いなので棄却して1周目を使う
+    const xs2 = quad.map(p => p.x), ys2 = quad.map(p => p.y);
+    const a2 = (Math.max(...xs2) - Math.min(...xs2)) * (Math.max(...ys2) - Math.min(...ys2));
+    if (a2 < cw * ch * 0.30) return null;
+    // 受け入れ判定2 (裁定): 4辺が本物の境界に乗っている度合いを新旧で比較し、
+    // 2周目が明確に勝るときだけ採用する。1周目が既に正しい写真では
+    // 2周目の枠は境界に乗れないので、ここで自然に棄却される。
+    const ev1 = quadBoundaryEvidence(r1.quad), ev2 = quadBoundaryEvidence(quad);
+    if (ev2 <= ev1 * 1.05 + 2) return null;
+    return { quad, msg: r2.msg, kind: r2.kind };
+  }
+
+  async function autoDetect() {
+    window.detectBusy = true;
+    lastOuterQuad = null;
+    setStatus('自動検出中…', 'info');
+    let r = await detectPipeline();
+    if (r.outer) lastOuterQuad = r.outer;   // 🎯 ボタンの起点 (1周目の外周)
+    if (r.quad) {
+      try {
+        const zr = await zoomRedetect(r);
+        if (zr && zr.quad) r = zr;
+      } catch (e) { console.warn('ズーム再検出でエラー。1周目の結果を使います。', e); }
+      corners = r.quad;
+      setStatus(r.msg, 'ok');
     } else {
       corners = insetRect();
-      setStatus('自動検出できませんでした。四隅を手で合わせてから「✨四隅を微調整」を押してください。', 'warn');
+      setStatus(r.msg, 'warn');
     }
     redraw();
     updateMetrics();
