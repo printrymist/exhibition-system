@@ -2029,38 +2029,40 @@
       updatePresetUsageBanner();  // 規定が公式 (preset:) なら保存ナッジを表示
     }
 
-    // selectTemplate / buildFieldsGridFromPreset / getSettings は UI 操作経由で
-    // 呼ばれるため、その時点では fetch は完了している (Firestore 認証や exhibition
-    // 取得より先に解決する小さな静的 JSON のため)。
     // 標準プリセット + 公式プリセット を同じ PRESETS object に統合 (selectTemplate 互換)。
     // 2 つの fetch がレース状態になっても両方が確実にマージされるように、
     // それぞれの完了時に PRESETS への代入ではなく Object.assign で追加していく。
+    // 起動時のテンプレ初期化 (loadAllData) は PRESETS_READY を待ってから行うこと。
+    // 展覧会データ (Firestore) が先に届くと selectTemplate が未ロードで空振りし、
+    // 初回プレビューが生成されないまま止まる。
     let PRESETS = {};
     let OFFICIAL_PRESETS = {};
     let OFFICIAL_SAMPLES = {};
-    fetch('data/caption-presets.json')
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(data => { Object.assign(PRESETS, data || {}); })
-      .catch(err => {
-        console.error('PRESETS load failed:', err);
-        alert(friendlyError(err, 'プリセットの読み込み'));
-      });
-    fetch('data/official-presets.json')
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(data => {
-        OFFICIAL_PRESETS = (data && data.templates) || {};
-        OFFICIAL_SAMPLES = (data && data.samples) || {};
-        Object.assign(PRESETS, OFFICIAL_PRESETS);
-      })
-      .catch(err => {
-        console.warn('OFFICIAL_PRESETS load failed:', err && err.message ? err.message : err);
-      });
+    const PRESETS_READY = Promise.allSettled([
+      fetch('data/caption-presets.json')
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(data => { Object.assign(PRESETS, data || {}); })
+        .catch(err => {
+          console.error('PRESETS load failed:', err);
+          alert(friendlyError(err, 'プリセットの読み込み'));
+        }),
+      fetch('data/official-presets.json')
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(data => {
+          OFFICIAL_PRESETS = (data && data.templates) || {};
+          OFFICIAL_SAMPLES = (data && data.samples) || {};
+          Object.assign(PRESETS, OFFICIAL_PRESETS);
+        })
+        .catch(err => {
+          console.warn('OFFICIAL_PRESETS load failed:', err && err.message ? err.message : err);
+        })
+    ]);
 
     document.addEventListener('DOMContentLoaded', () => {
       // おすすめフロー パネルの開閉状態を localStorage で記憶 (デフォルト = 開く)。
@@ -2688,11 +2690,16 @@
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
-          // 起動時はまず 'official_solo' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
-          // 自動保存ロジックは無いので、selectTemplate を呼んでも Firestore は触らない。
-          selectTemplate('official_solo', { commit: true });
-          // 保存済みテンプレ一覧を Firestore から取得 → 完了後に規定テンプレを自動適用
-          loadSavedTemplates().then(() => {
+          // テンプレ初期化はプリセット JSON の読み込み完了を待つ (PRESETS_READY)。
+          // 待たないと、展覧会データが先に届いたとき selectTemplate が PRESETS 未ロードで
+          // 空振りし、初回プレビューが生成されない (?ex= 付き遷移で発生していた不具合)。
+          PRESETS_READY.then(() => {
+            // 起動時はまず 'official_solo' で初期化 (フィールドグリッド既定 + プレビュー描画のため)。
+            // 自動保存ロジックは無いので、selectTemplate を呼んでも Firestore は触らない。
+            selectTemplate('official_solo', { commit: true });
+            // 保存済みテンプレ一覧を Firestore から取得 → 完了後に規定テンプレを自動適用
+            return loadSavedTemplates();
+          }).then(() => {
             if (data.captionTemplateId) {
               applyCaptionTemplateChoice(data.captionTemplateId);
             }
