@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v37</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v38</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -91,6 +91,7 @@
           </div>
         </div>
         <div id="status" class="status"></div>
+        <div id="aiStat" class="hint" style="margin-top:6px;"></div>
         <div id="cornerCheck" class="corner-check">
           <div class="cc-item"><canvas id="cc0" width="240" height="240"></canvas><span class="cc-label">左上</span></div>
           <div class="cc-item"><canvas id="cc1" width="240" height="240"></canvas><span class="cc-label">右上</span></div>
@@ -221,16 +222,30 @@
   // 手順: 顕著物体マスク → 最大連結成分 → 境界点 → 凸包 → minAreaRect →
   //       辺ごとに帯内の境界点へ直線フィット → 交点 = 遠近対応の四隅。
   const ML_SIZE = 320;   // u2netp の入力解像度 (モデル側で固定)
+  // AI の読込状態を画面に明示する (2026-07-17: 読込失敗が console にしか出ず、
+  // 簡易検出に黙って落ちてユーザーが劣化に気づけない事故が起きたため)。
+  const aiState = { ml: '読込中…', cn: '読込中…' };
+  function updateAiStat() {
+    const el = $('aiStat');
+    if (!el) return;
+    el.textContent = 'AI検出: ' + aiState.ml + ' ／ 四隅モデル: ' + aiState.cn;
+    const bad = aiState.ml.indexOf('失敗') >= 0 || aiState.cn.indexOf('失敗') >= 0;
+    el.style.color = bad ? '#b45309' : '';
+    el.style.fontWeight = bad ? '600' : '';
+  }
   const mlInit = (async () => {
     try {
-      if (typeof ort === 'undefined') return null;
+      if (typeof ort === 'undefined') throw new Error('推論エンジン (ort.wasm.min.js) が読み込まれていません');
       ort.env.wasm.wasmPaths = './';
       ort.env.wasm.numThreads = 1;
       const resp = await fetch('u2netp.onnx');
-      if (!resp.ok) throw new Error('model fetch ' + resp.status);
-      return await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
+      if (!resp.ok) throw new Error('モデル取得に失敗 (HTTP ' + resp.status + ')');
+      const sess = await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
+      aiState.ml = '利用可能'; updateAiStat();
+      return sess;
     } catch (e) {
       console.warn('AI検出を読み込めませんでした。従来検出のみで動作します。', e);
+      aiState.ml = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
       return null;
     }
   })();
@@ -244,12 +259,15 @@
   const CN_SIZE = 96, CN_WIN = 0.02;
   const cornerNetInit = (async () => {
     try {
-      if (typeof ort === 'undefined') return null;
+      if (typeof ort === 'undefined') throw new Error('推論エンジン (ort.wasm.min.js) が読み込まれていません');
       const resp = await fetch('corner_net_fine.onnx');
-      if (!resp.ok) throw new Error('model fetch ' + resp.status);
-      return await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
+      if (!resp.ok) throw new Error('モデル取得に失敗 (HTTP ' + resp.status + ')');
+      const sess = await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
+      aiState.cn = '利用可能'; updateAiStat();
+      return sess;
     } catch (e) {
       console.warn('四隅モデルを読み込めませんでした。ルール式のみで動作します。', e);
+      aiState.cn = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
       return null;
     }
   })();
@@ -1066,7 +1084,8 @@
       if (c.score > bestScore) { bestScore = c.score; best = c; }
     }
     if (best && bestScore > 0) {
-      return { quad: best.quad, msg: '検出（' + best.src + '／スコア ' + bestScore + '・' + cands.length + '候補から選択）。ずれたら四隅ドラッグか「✨四隅を微調整」。', kind: 'ok', outer: null };
+      const aiNote = aiState.ml === '利用可能' ? '' : '⚠ AIを使えていません（下の「AI検出:」欄を確認）。';
+      return { quad: best.quad, msg: aiNote + '検出（' + best.src + '／スコア ' + bestScore + '・' + cands.length + '候補から選択）。ずれたら四隅ドラッグか「✨四隅を微調整」。', kind: aiNote ? 'warn' : 'ok', outer: null };
     }
     return { quad: null, msg: '自動検出できませんでした。四隅を手で合わせてから「✨四隅を微調整」を押してください。', kind: 'warn', outer: null };
   }
@@ -1708,6 +1727,7 @@
   view.addEventListener('mousedown', onDown);
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
+  updateAiStat();
   view.addEventListener('touchstart', onDown, { passive: false });
   view.addEventListener('touchmove', onMove, { passive: false });
   view.addEventListener('touchend', onUp);
