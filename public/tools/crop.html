@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v39</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v40</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -241,10 +241,30 @@
   function updateAiStat() {
     const el = $('aiStat');
     if (!el) return;
-    el.textContent = 'AI検出: ' + aiState.ml + ' ／ 四隅モデル: ' + aiState.cn;
+    el.textContent = 'AI検出: ' + aiState.ml + ' ／ 四隅モデル: ' + aiState.cn
+      + (aiState.diag ? '
+' + aiState.diag : '');
+    el.style.whiteSpace = 'pre-line';
     const bad = aiState.ml.indexOf('失敗') >= 0 || aiState.cn.indexOf('失敗') >= 0;
     el.style.color = bad ? '#b45309' : '';
     el.style.fontWeight = bad ? '600' : '';
+  }
+  // 読込失敗時の自己診断: 何が取得できて何ができないかを画面に出す
+  // (コンソールを開かなくてもユーザーの環境で原因の層が分かるように)
+  async function probeFetch(url) {
+    try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? 'OK' : 'HTTP' + r.status; }
+    catch (e) { return 'NG(' + (e && e.name || '?') + ')'; }
+  }
+  let diagDone = false;
+  async function runFetchDiag() {
+    if (diagDone) return; diagDone = true;
+    const [h, j, o, o2] = await Promise.all([
+      probeFetch('crop.html'), probeFetch('ort.wasm.min.js'),
+      probeFetch('u2netp.onnx'), probeFetch('corner_net_fine.onnx'),
+    ]);
+    aiState.diag = '診断: html=' + h + ' / js=' + j + ' / AIモデル=' + o + ' / 四隅モデル=' + o2
+      + ' ／ ' + navigator.userAgent.replace(/^Mozilla\/[\d.]+ /, '').slice(0, 90);
+    updateAiStat();
   }
   const mlInit = (async () => {
     try {
@@ -258,6 +278,7 @@
     } catch (e) {
       console.warn('AI検出を読み込めませんでした。従来検出のみで動作します。', e);
       aiState.ml = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
+      runFetchDiag();
       return null;
     }
   })();
@@ -279,6 +300,7 @@
     } catch (e) {
       console.warn('四隅モデルを読み込めませんでした。ルール式のみで動作します。', e);
       aiState.cn = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
+      runFetchDiag();
       return null;
     }
   })();
