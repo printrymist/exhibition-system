@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v42</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v43</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -120,7 +120,7 @@
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">↺↻＝写真ごと 90° 回転（横向き・逆さまに撮れた写真を直せます）。✂＝周りに余計な物が写り込んだとき、先に残す範囲だけに切り落とします（検出が安定し、余白にも写り込みません）。白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。写真の下に並ぶ4枚＝四隅の拡大表示。触っても枠は動かないので、検出直後や調整後の確認にどうぞ。</p>
+        <p class="hint" style="margin-top:8px;">↺↻＝写真ごと 90° 回転（枠も一緒に回ります）。✂＝周りに余計な物が写り込んだとき、残す範囲だけに切り落とします（枠は保持。検出をやり直したいときは 🔍）。白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。写真の下に並ぶ4枚＝四隅の拡大表示。触っても枠は動かないので、検出直後や調整後の確認にどうぞ。</p>
       </div>
 
       <div>
@@ -1858,7 +1858,11 @@
   // ===== 写真を整える (回転・切り落とし) =====
   // 元画像を canvas に差し替える (canvas も drawImage / cv.imread の入力としてそのまま使える)。
   // 差し替え後は座標系が変わるので自動検出をやり直し、GT 記録は不可にする。
-  function replaceImage(cnv) {
+  // mapPt: 旧座標→新座標の変換。渡された場合、検出済みの枠は再検出せず
+  // 座標変換だけで追従させる (回転/切り落としのたびに再検出が走って
+  // 3〜4秒待たされ、調整済みの枠も捨てられていた — 2026-07-18 ユーザー指摘)。
+  // 検出し直したいときは「🔍 もう一度自動検出」。枠が無いときは従来どおり自動検出。
+  function replaceImage(cnv, mapPt) {
     imgEl = cnv;
     if (fullMat) fullMat.delete();
     fullMat = cv.imread(cnv);
@@ -1869,7 +1873,17 @@
     buildGrad();
     $('outWrap').style.display = 'none';
     layoutCanvas();
-    autoDetect();
+    if (mapPt && corners) {
+      const W = fullMat.cols, H = fullMat.rows;
+      const clampP = (p) => ({ x: Math.max(0, Math.min(W, p.x)), y: Math.max(0, Math.min(H, p.y)) });
+      corners = orderCorners(corners.map(mapPt).map(clampP));
+      if (lastOuterQuad) lastOuterQuad = orderCorners(lastOuterQuad.map(mapPt).map(clampP));
+      setStatus('枠も一緒に変換しました。検出し直すには「🔍 もう一度自動検出」。', 'info');
+      redraw();
+      updateMetrics();
+    } else {
+      autoDetect();
+    }
     gtCountUpdate();
   }
   function rotate90(cw) {
@@ -1881,7 +1895,8 @@
     ctx.translate(h / 2, w / 2);
     ctx.rotate((cw ? 90 : -90) * Math.PI / 180);
     ctx.drawImage(imgEl, -w / 2, -h / 2);
-    replaceImage(c);
+    // 90°回転の座標変換: 時計回り (x,y)→(h−y, x) / 反時計回り (x,y)→(y, w−x)
+    replaceImage(c, cw ? (p) => ({ x: h - p.y, y: p.x }) : (p) => ({ x: p.y, y: w - p.x }));
   }
   $('rotL').addEventListener('click', () => rotate90(false));
   $('rotR').addEventListener('click', () => rotate90(true));
@@ -1914,7 +1929,7 @@
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').drawImage(imgEl, l, t, w, h, 0, 0, w, h);
-    replaceImage(c);
+    replaceImage(c, (p) => ({ x: p.x - l, y: p.y - t }));
   });
   $('trimCancel').addEventListener('click', () => { exitTrim(); redraw(); });
 
