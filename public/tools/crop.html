@@ -288,8 +288,8 @@
       return sess;
     } catch (e) {
       console.warn('AI検出を読み込めませんでした。従来検出のみで動作します。', e);
-      aiState.ml = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
-      runFetchDiag();
+      if (location.protocol !== 'file:') { aiState.ml = '読込失敗 — ' + (e && e.message ? e.message : e); runFetchDiag(); }
+      updateAiStat();
       return null;
     }
   })();
@@ -310,8 +310,8 @@
       return sess;
     } catch (e) {
       console.warn('四隅モデルを読み込めませんでした。ルール式のみで動作します。', e);
-      aiState.cn = '読込失敗 — ' + (e && e.message ? e.message : e); updateAiStat();
-      runFetchDiag();
+      if (location.protocol !== 'file:') { aiState.cn = '読込失敗 — ' + (e && e.message ? e.message : e); runFetchDiag(); }
+      updateAiStat();
       return null;
     }
   })();
