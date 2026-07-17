@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v35</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v36</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -673,14 +673,18 @@
   // opts.noPeel: 剥がしモードを使わない。✨(手動微調整) 用 — ユーザーが置いた辺を
   // 「浮き辺」と誤認して深剥がしする暴走 (摂動評価で誤差8%超×9件) を防ぐ。
   // 自動検出パスは従来どおり剥がし有効。
+  // opts.scale: 探索半径・帯厚みの縮尺。微細パス (粗い吸着の後に scale=0.25 で
+  // かけ直す) 用 — マット窓のベベル影と絵の縁が ~10px 間隔で並ぶ微細構造では、
+  // 既定の帯厚 (長辺0.4%) が構造より粗く、影の線に吸着してしまう。
   function snapEdgesFullRes(quadPts, opts) {
     opts = opts || {};
     if (!fullMat || !quadPts) return quadPts;
     const q = orderCorners(quadPts);
     const W = fullMat.cols, H = fullMat.rows, data = fullMat.data;
     const long = Math.max(W, H);
-    const R = Math.max(8, Math.round(long * 0.025));           // 探索半径 = 長辺の2.5%
-    const gap = Math.max(2, Math.round(long * 0.004));         // 帯の厚み単位
+    const S = opts.scale || 1;
+    const R = Math.max(8, Math.round(long * 0.025 * S));       // 探索半径 = 長辺の2.5%×S
+    const gap = Math.max(2, Math.round(long * 0.004 * S));     // 帯の厚み単位
     const px = (x, y) => {
       x = x < 0 ? 0 : (x >= W ? W - 1 : Math.round(x));
       y = y < 0 ? 0 : (y >= H ? H - 1 : Math.round(y));
@@ -783,12 +787,22 @@
         const sig2In = 2 * (R * 0.7) * (R * 0.7);   // 内向きは緩く: 強い本物の縁が内側の少し遠くに
                                                      // あるとき、近い偽境界 (映り込み等) に負けない
         const sig2Out = 2 * (R / 3) * (R / 3);
-        for (let d = -R; d <= R; d++) {
+        // opts.inwardOnly (微細パス用): 外向きは帯厚1つまで。検出の間違い方は
+        // ほぼ常に「外側掴みすぎ」なので、磨き直しの外向き移動は原理的に疑わしい
+        // (050601011 で紙の縁→外の木枠へ 23px 逃げる回帰を実測)。
+        const dMax = opts.inwardOnly ? gap : R;
+        for (let d = -R; d <= dMax; d++) {
           const raw = edgeScore(d);
           const sc = raw * Math.exp(-(d * d) / (d > 0 ? sig2Out : sig2In));
           if (sc > bestS) { bestS = sc; bestD = d; rawBest = raw; }
         }
         if (rawBest < 20) bestD = 0;                 // 縁らしい場所がなければ動かさない
+        // opts.conservative (微細パス用): 「今の位置より決定的に縁らしい」ときだけ動く。
+        // 磨き直しで合格辺を僅かに壊す回帰 (v36a/b/c で 1% 線を跨ぐ 2枚) への対策。
+        if (opts.conservative && bestD !== 0) {
+          const raw0 = edgeScore(0);
+          if (rawBest < Math.max(25, raw0 * 1.3)) bestD = 0;
+        }
         // --- 帯またぎ判定 (暗帯限定): 選んだ縁のすぐ内側に同等の縁がもう1本あり、
         //     2本のあいだが「無地かつ両側より暗い細い帯」= ベベル影/額の黒バーの
         //     ときは内側の縁を採る。距離減衰では帯の厚み (長辺の1.5〜2%) ぶん
@@ -798,7 +812,7 @@
         //     「外側と同色の帯 (マット段差)」も同型のズレを生むが、白マット×
         //     白余白の作品で余白を食う誤爆と区別できないため対象にしない。
         if (rawBest >= 20) {
-          const maxBand = Math.round(long * 0.022);
+          const maxBand = Math.round(long * 0.022 * S);
           const lum = (m) => (m[0] + m[1] + m[2]) / 3;
           for (let d = bestD - 2 * gap; d >= Math.max(bestD - maxBand, -peelMax); d--) {
             const r2 = edgeScore(d);
@@ -825,16 +839,21 @@
       //     ※ 辺を区間に割って独立推定 → 直線フィット、という方式は区間統計が
       //       ノイジーで暴れ、42枚GTで回帰4枚を出したため不採用 (2026-07-13)。
       //       辺全体の統計は 48 サンプルあるので安定し、採用条件も改善マージン付き。
+      //     opts.noTilt: 微細パスでは傾き掃引をしない — 帯厚4px級では傾き統計が
+      //     ノイジーで、傾き×位置の組合せが縁から±50px級に振れる回帰を出した。
+      //     傾きは粗パスで確定済みという前提で、微細パスは位置の追い込みに徹する。
       let alpha = bestD, beta = 0;
       const base = edgeScore(bestD, 0);
       let bestSc = base;
       const dStep = Math.max(1, gap >> 1);
-      for (let bi = -8; bi <= 8; bi++) {
-        const bb = bi * gap;
-        if (bb === 0) continue;
-        for (let dd = bestD - 2 * gap; dd <= bestD + 2 * gap; dd += dStep) {
-          const sc = edgeScore(dd, bb);
-          if (sc > bestSc) { bestSc = sc; alpha = dd; beta = bb; }
+      if (!opts.noTilt) {
+        for (let bi = -8; bi <= 8; bi++) {
+          const bb = bi * gap;
+          if (bb === 0) continue;
+          for (let dd = bestD - 2 * gap; dd <= bestD + 2 * gap; dd += dStep) {
+            const sc = edgeScore(dd, bb);
+            if (sc > bestSc) { bestSc = sc; alpha = dd; beta = bb; }
+          }
         }
       }
       if (bestSc < base * 1.1 || base < 15) { alpha = bestD; beta = 0; }  // 明確に良くなる時だけ
@@ -1104,7 +1123,9 @@
         const zr = await zoomRedetect(r);
         if (zr && zr.quad) r = zr;
       } catch (e) { console.warn('ズーム再検出でエラー。1周目の結果を使います。', e); }
-      corners = r.quad;
+      // 微細パス (ベベル影 vs 絵の縁) は裁定の後にかける。detectPipeline 内 (裁定の前) に
+      // 入れると ev 比較の対象が変わり、ズーム採否が反転して回帰が出た (v36a/b で実測)。
+      corners = snapEdgesFullRes(r.quad, { noPeel: true, noTilt: true, scale: 0.25, conservative: true, inwardOnly: true });
       setStatus(r.msg, 'ok');
     } else {
       corners = insetRect();
@@ -1787,6 +1808,7 @@
   $('refine').addEventListener('click', () => {
     if (!corners || !fullMat) return;
     corners = snapEdgesFullRes(corners, { noPeel: true });
+    corners = snapEdgesFullRes(corners, { noPeel: true, noTilt: true, scale: 0.25, conservative: true, inwardOnly: true });
     setStatus('四隅を実際のエッジに吸着させました。', 'ok');
     redraw();
     updateMetrics();
