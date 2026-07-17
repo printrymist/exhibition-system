@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v40</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v41</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -225,6 +225,18 @@
   // AI の読込状態を画面に明示する (2026-07-17: 読込失敗が console にしか出ず、
   // 簡易検出に黙って落ちてユーザーが劣化に気づけない事故が起きたため)。
   const aiState = { ml: '読込中…', cn: '読込中…' };
+  // file:// 直開きでは fetch が全面禁止で AI が一切動かない。2026-07-18 に
+  // 「ローカルの crop.html を直接開いていて AI が動かず、簡易検出を評価していた」
+  // 事故が起きたため、開き方そのものを画面で明示する。
+  if (location.protocol === 'file:') {
+    aiState.ml = aiState.cn = '利用不可 — このページはPC内のファイルとして直接開かれています';
+    setTimeout(() => {
+      const el = $('aiStat');
+      if (el) el.insertAdjacentHTML('afterend',
+        '<div class="status warn show" style="margin-top:6px;">⚠ ファイル直開き (file://) のため AI を使えません。' +
+        '<a href="https://qriine.com/tools/crop.html">https://qriine.com/tools/crop.html</a> を開いてください。</div>');
+    }, 0);
+  }
   // モデル取得: 失敗したらキャッシュを迂回して一度だけ取り直す (壊れたキャッシュ対策)
   async function fetchModel(name) {
     try {
