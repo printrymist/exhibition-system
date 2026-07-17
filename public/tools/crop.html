@@ -242,8 +242,7 @@
     const el = $('aiStat');
     if (!el) return;
     el.textContent = 'AI検出: ' + aiState.ml + ' ／ 四隅モデル: ' + aiState.cn
-      + (aiState.diag ? '
-' + aiState.diag : '');
+      + (aiState.diag ? '\n' + aiState.diag : '');
     el.style.whiteSpace = 'pre-line';
     const bad = aiState.ml.indexOf('失敗') >= 0 || aiState.cn.indexOf('失敗') >= 0;
     el.style.color = bad ? '#b45309' : '';
