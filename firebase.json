@@ -28,7 +28,7 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(html|js|json|css)",
+        "source": "**/*.@(html|js|json|css|mjs|wasm|onnx)",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, max-age=0" }
         ]

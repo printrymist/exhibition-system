@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v38</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v39</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -225,6 +225,19 @@
   // AI の読込状態を画面に明示する (2026-07-17: 読込失敗が console にしか出ず、
   // 簡易検出に黙って落ちてユーザーが劣化に気づけない事故が起きたため)。
   const aiState = { ml: '読込中…', cn: '読込中…' };
+  // モデル取得: 失敗したらキャッシュを迂回して一度だけ取り直す (壊れたキャッシュ対策)
+  async function fetchModel(name) {
+    try {
+      const r = await fetch(name);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r;
+    } catch (e) {
+      console.warn(name + ' の取得に失敗、キャッシュ迂回で再試行します。', e);
+      const r2 = await fetch(name + '?r=' + Date.now(), { cache: 'no-store' });
+      if (!r2.ok) throw new Error('モデル取得に失敗 (HTTP ' + r2.status + ')');
+      return r2;
+    }
+  }
   function updateAiStat() {
     const el = $('aiStat');
     if (!el) return;
@@ -238,8 +251,7 @@
       if (typeof ort === 'undefined') throw new Error('推論エンジン (ort.wasm.min.js) が読み込まれていません');
       ort.env.wasm.wasmPaths = './';
       ort.env.wasm.numThreads = 1;
-      const resp = await fetch('u2netp.onnx');
-      if (!resp.ok) throw new Error('モデル取得に失敗 (HTTP ' + resp.status + ')');
+      const resp = await fetchModel('u2netp.onnx');
       const sess = await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
       aiState.ml = '利用可能'; updateAiStat();
       return sess;
@@ -260,8 +272,7 @@
   const cornerNetInit = (async () => {
     try {
       if (typeof ort === 'undefined') throw new Error('推論エンジン (ort.wasm.min.js) が読み込まれていません');
-      const resp = await fetch('corner_net_fine.onnx');
-      if (!resp.ok) throw new Error('モデル取得に失敗 (HTTP ' + resp.status + ')');
+      const resp = await fetchModel('corner_net_fine.onnx');
       const sess = await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
       aiState.cn = '利用可能'; updateAiStat();
       return sess;
@@ -432,8 +443,15 @@
   }
 
   async function detectByML() {
-    // モデル読込が済んでいなければ 12 秒だけ待ち、間に合わなければ今回は従来検出で進める
-    const session = await Promise.race([mlInit, new Promise(r => setTimeout(() => r(null), 12000))]);
+    // モデル読込が済んでいなければ待つ (最大45秒・経過表示)。以前は12秒で黙って
+    // 従来検出に見切っていたが、遅い回線では毎回 AI 無しになる事故が起きるため。
+    let session = null;
+    for (let waited = 0; waited < 45000; waited += 500) {
+      session = await Promise.race([mlInit, new Promise(r => setTimeout(() => r(undefined), 500))]);
+      if (session !== undefined) break;   // 読込完了 (成功 session / 失敗 null)
+      if (waited >= 1500 && waited % 2000 < 500) setStatus('AIを読み込んでいます… (' + Math.round(waited/1000) + '秒)', 'info');
+    }
+    if (session === undefined) session = null;
     if (!session || !imgEl || !fullMat) return null;
     const S = ML_SIZE, N = S * S;
     const cnv = document.createElement('canvas'); cnv.width = S; cnv.height = S;
