@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v41</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v42</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -281,7 +281,10 @@
     try {
       if (typeof ort === 'undefined') throw new Error('推論エンジン (ort.wasm.min.js) が読み込まれていません');
       ort.env.wasm.wasmPaths = './';
-      ort.env.wasm.numThreads = 1;
+      // COOP/COEP 配信下 (crossOriginIsolated) ではマルチスレッド推論が使える。
+      // 条件を満たさない環境 (file:// 等) では自動で 1 スレッドに落ちる。
+      ort.env.wasm.numThreads = (self.crossOriginIsolated && navigator.hardwareConcurrency)
+        ? Math.min(4, navigator.hardwareConcurrency) : 1;
       const resp = await fetchModel('u2netp.onnx');
       const sess = await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
       aiState.ml = '利用可能'; updateAiStat();
