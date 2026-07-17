@@ -49,6 +49,11 @@
   .metrics .mm { color:#94a3b8; }
   .metrics .sc { display:inline-block; min-width:34px; text-align:right; font-weight:700; }
   .metrics .hi { color:#4ade80; } .metrics .mid { color:#fbbf24; } .metrics .lo { color:#f87171; }
+  .corner-check { display:none; gap:8px; margin-top:10px; }
+  .corner-check .cc-item { flex:1; min-width:0; text-align:center; }
+  .corner-check canvas { width:100%; aspect-ratio:1/1; display:block; border:1px solid var(--line);
+    border-radius:8px; background:#222; }
+  .corner-check .cc-label { font-size:11px; color:var(--sub); }
   select { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:#fff; }
   #outWrap img { max-width:100%; border-radius:8px; border:1px solid var(--line); }
   .badge { font-size:11px; padding:2px 7px; border-radius:20px; background:#eef2fb; color:var(--accent2); }
@@ -58,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v32</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v33</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -86,6 +91,12 @@
           </div>
         </div>
         <div id="status" class="status"></div>
+        <div id="cornerCheck" class="corner-check">
+          <div class="cc-item"><canvas id="cc0" width="240" height="240"></canvas><span class="cc-label">左上</span></div>
+          <div class="cc-item"><canvas id="cc1" width="240" height="240"></canvas><span class="cc-label">右上</span></div>
+          <div class="cc-item"><canvas id="cc2" width="240" height="240"></canvas><span class="cc-label">右下</span></div>
+          <div class="cc-item"><canvas id="cc3" width="240" height="240"></canvas><span class="cc-label">左下</span></div>
+        </div>
         <div id="metrics" class="metrics" style="display:none;"></div>
         <div class="row" id="gtRow" style="margin-top:8px;">
           <button id="recordGt">📌 これを正解として記録</button>
@@ -108,7 +119,7 @@
           <button id="reset">四隅をリセット</button>
           <button id="newImg">別の写真</button>
         </div>
-        <p class="hint" style="margin-top:8px;">↺↻＝写真ごと 90° 回転（横向き・逆さまに撮れた写真を直せます）。✂＝周りに余計な物が写り込んだとき、先に残す範囲だけに切り落とします（検出が安定し、余白にも写り込みません）。白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。</p>
+        <p class="hint" style="margin-top:8px;">↺↻＝写真ごと 90° 回転（横向き・逆さまに撮れた写真を直せます）。✂＝周りに余計な物が写り込んだとき、先に残す範囲だけに切り落とします（検出が安定し、余白にも写り込みません）。白い丸＝四隅を個別に調整（拡大鏡つき）。青い四角＝辺の中点を掴むと、その辺が平行のまま内外にスライド（作品サイズに寄せるのに便利）。<b>Shift を押しながらドラッグすると 1/5 の速さになり、微調整が効きます</b>。🎯＝枠が台紙・マット・額で止まっているとき、その内側の絵を狙い直します（戻すには🔍）。写真の下に並ぶ4枚＝四隅の拡大表示。触っても枠は動かないので、検出直後や調整後の確認にどうぞ。</p>
       </div>
 
       <div>
@@ -1414,8 +1425,39 @@
     return { sup: sup.map(v => Math.round(v*100)), mean: Math.round(mean*100), min: Math.round(mn*100) };
   }
 
+  // ===== 四隅の確認サムネイル (見るだけ・触っても枠は動かない) =====
+  // 検出直後や手で調整した後に、4隅が作品の角に乗っているかをドラッグなしで確認するための表示。
+  // 窓は画像長辺の10% (一発OK許容誤差の1% がサムネ幅の1/10として見える倍率)。
+  const ccCanvases = [0, 1, 2, 3].map(i => $('cc' + i));
+  function updateCornerThumbs() {
+    const wrap = $('cornerCheck');
+    if (!corners || !fullMat || !imgEl) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'flex';
+    const half = Math.max(fullMat.cols, fullMat.rows) * 0.05;
+    for (let i = 0; i < 4; i++) {
+      const c = ccCanvases[i], ctx = c.getContext('2d');
+      const p = corners[i];
+      const k = c.width / (half * 2);
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(imgEl, p.x - half, p.y - half, half * 2, half * 2, 0, 0, c.width, c.height);
+      // この角で交わる枠の2辺を投影して描く (角の点だけより辺のズレが見える)
+      const toX = (v) => (v - (p.x - half)) * k, toY = (v) => (v - (p.y - half)) * k;
+      const prev = corners[(i + 3) % 4], next = corners[(i + 1) % 4];
+      ctx.strokeStyle = 'rgba(43,125,233,0.9)'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(toX(prev.x), toY(prev.y));
+      ctx.lineTo(toX(p.x), toY(p.y));
+      ctx.lineTo(toX(next.x), toY(next.y));
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(toX(p.x), toY(p.y), 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.strokeStyle = '#2b7de9'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
   function scls(v){ return v>=70?'hi':(v>=40?'mid':'lo'); }
   function updateMetrics() {
+    updateCornerThumbs();
     const el = $('metrics');
     if (!corners || !fullMat) { el.style.display = 'none'; return; }
     const m = computeMetrics(corners);
