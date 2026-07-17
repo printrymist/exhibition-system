@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v36</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v37</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -234,6 +234,68 @@
       return null;
     }
   })();
+
+  // ===== 四隅精密モデル (corner_net_fine.onnx・自前学習) =====
+  // 隅の周辺パッチ (窓=長辺の±2% を96px) から「真の角へのオフセット」を回帰する。
+  // 84枚GTで学習/検証 (学習=春陽会側42枚・検証=辻個展42枚の完全分離)。
+  // 検証セットで隅誤差中央値 0.48%→0.19% (ルール式スナップ後に2回適用)。
+  // 窓±0.7%以内の「最後の磨き」専用。予測が飽和 (ノルム>0.9) した隅 =
+  // 学習範囲外のズレなので動かさない。読み込み失敗時はルール式のみで動作。
+  const CN_SIZE = 96, CN_WIN = 0.02;
+  const cornerNetInit = (async () => {
+    try {
+      if (typeof ort === 'undefined') return null;
+      const resp = await fetch('corner_net_fine.onnx');
+      if (!resp.ok) throw new Error('model fetch ' + resp.status);
+      return await ort.InferenceSession.create(await resp.arrayBuffer(), { executionProviders: ['wasm'] });
+    } catch (e) {
+      console.warn('四隅モデルを読み込めませんでした。ルール式のみで動作します。', e);
+      return null;
+    }
+  })();
+
+  async function refineCornersByNet(quadPts, iters) {
+    const sess = await cornerNetInit;
+    if (!sess || !fullMat || !imgEl || !quadPts) return quadPts;
+    const long = Math.max(fullMat.cols, fullMat.rows);
+    const half = long * CN_WIN;
+    const out = orderCorners(quadPts).map(p => ({ x: p.x, y: p.y }));
+    const cnv = document.createElement('canvas');
+    cnv.width = CN_SIZE; cnv.height = CN_SIZE;
+    const ctx = cnv.getContext('2d', { willReadFrequently: true });
+    for (let it = 0; it < (iters || 2); it++) {
+      const data = new Float32Array(4 * 3 * CN_SIZE * CN_SIZE);
+      for (let i = 0; i < 4; i++) {
+        ctx.save();
+        ctx.clearRect(0, 0, CN_SIZE, CN_SIZE);
+        // TL型へ回転正規化。学習時の np.rot90(patch, k=i) は見た目で反時計回り
+        // i*90°。canvas の rotate は時計回りが正なので符号を反転する。
+        ctx.translate(CN_SIZE / 2, CN_SIZE / 2);
+        ctx.rotate(-i * Math.PI / 2);
+        ctx.drawImage(imgEl, out[i].x - half, out[i].y - half, half * 2, half * 2,
+                      -CN_SIZE / 2, -CN_SIZE / 2, CN_SIZE, CN_SIZE);
+        ctx.restore();
+        const px = ctx.getImageData(0, 0, CN_SIZE, CN_SIZE).data;
+        const base = i * 3 * CN_SIZE * CN_SIZE, N = CN_SIZE * CN_SIZE;
+        for (let p = 0; p < N; p++) {
+          data[base + p]         = px[p * 4]     / 127.5 - 1;
+          data[base + N + p]     = px[p * 4 + 1] / 127.5 - 1;
+          data[base + 2 * N + p] = px[p * 4 + 2] / 127.5 - 1;
+        }
+      }
+      const res = await sess.run({ patches: new ort.Tensor('float32', data, [4, 3, CN_SIZE, CN_SIZE]) });
+      const off = res.offsets.data;
+      for (let i = 0; i < 4; i++) {
+        let ox = off[i * 2], oy = off[i * 2 + 1];
+        if (Math.hypot(ox, oy) > 0.9) continue;   // 飽和 = 学習範囲外、動かさない
+        // 学習時の正規化 (x,y)→(y,-x)×i の逆 = 同変換を (4-i) 回
+        for (let k = 0; k < (4 - i) % 4; k++) { const t = ox; ox = oy; oy = -t; }
+        out[i].x = Math.max(0, Math.min(fullMat.cols, out[i].x + ox * half));
+        out[i].y = Math.max(0, Math.min(fullMat.rows, out[i].y + oy * half));
+      }
+    }
+    return out;
+  }
 
   function mlLargestComponent(bin, w, h) {
     const lab = new Int32Array(w * h).fill(-1);
@@ -1126,6 +1188,7 @@
       // 微細パス (ベベル影 vs 絵の縁) は裁定の後にかける。detectPipeline 内 (裁定の前) に
       // 入れると ev 比較の対象が変わり、ズーム採否が反転して回帰が出た (v36a/b で実測)。
       corners = snapEdgesFullRes(r.quad, { noPeel: true, noTilt: true, scale: 0.25, conservative: true, inwardOnly: true });
+      try { corners = await refineCornersByNet(corners, 2); } catch (e) { console.warn('四隅モデルの適用に失敗。ルール式の結果を使います。', e); }
       setStatus(r.msg, 'ok');
     } else {
       corners = insetRect();
@@ -1805,10 +1868,11 @@
   // ✨ = 自動検出の仕上げ段と同じ判定 (外帯が均一×内外の色差 + 暗帯またぎ) で吸着。
   // 旧4象限モデルは「別の本物の境界 (額の縁・マット二重縁)」へ飛ぶ弱点があった。
   // 摂動評価 (GT±2.5%×252試行): 一発OK 129→138 / 誤差4%超 44→14 / 暴走ゼロ。
-  $('refine').addEventListener('click', () => {
+  $('refine').addEventListener('click', async () => {
     if (!corners || !fullMat) return;
     corners = snapEdgesFullRes(corners, { noPeel: true });
     corners = snapEdgesFullRes(corners, { noPeel: true, noTilt: true, scale: 0.25, conservative: true, inwardOnly: true });
+    try { corners = await refineCornersByNet(corners, 2); } catch (e) { console.warn('四隅モデルの適用に失敗。ルール式の結果を使います。', e); }
     setStatus('四隅を実際のエッジに吸着させました。', 'ok');
     redraw();
     updateMetrics();
