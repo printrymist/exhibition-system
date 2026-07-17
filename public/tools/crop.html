@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v33</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v34</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -785,6 +785,36 @@
           if (sc > bestS) { bestS = sc; bestD = d; rawBest = raw; }
         }
         if (rawBest < 20) bestD = 0;                 // 縁らしい場所がなければ動かさない
+        // --- 帯またぎ判定 (暗帯限定): 選んだ縁のすぐ内側に同等の縁がもう1本あり、
+        //     2本のあいだが「無地かつ両側より暗い細い帯」= ベベル影/額の黒バーの
+        //     ときは内側の縁を採る。距離減衰では帯の厚み (長辺の1.5〜2%) ぶん
+        //     近い偽縁 (帯の外側の輪郭) が勝ってしまうための追加裁定。
+        //     帯の無地判定は「対抗馬のすぐ外側の狭い帯」で行う (bestD 側まで
+        //     伸ばすと bestD 自身の境界ボケを拾って発動できない)。
+        //     「外側と同色の帯 (マット段差)」も同型のズレを生むが、白マット×
+        //     白余白の作品で余白を食う誤爆と区別できないため対象にしない。
+        if (rawBest >= 20) {
+          const maxBand = Math.round(long * 0.022);
+          const lum = (m) => (m[0] + m[1] + m[2]) / 3;
+          for (let d = bestD - 2 * gap; d >= Math.max(bestD - maxBand, -peelMax); d--) {
+            const r2 = edgeScore(d);
+            if (r2 < Math.max(25, rawBest * 0.7)) continue;
+            const strip = band(d + gap, Math.min(d + 2 * gap, bestD - gap));
+            const beyond = band(bestD + gap, bestD + 3 * gap);
+            const innerSide = band(d - 3 * gap, d - gap);
+            const darker = lum(strip.m) < Math.min(lum(beyond.m), lum(innerSide.m)) - 20;
+            if (strip.uni < 22 && darker) {   // 22: 艶のある黒バーの反射ぶんを許容 (実測 18.4)
+              // 対抗馬の近傍でスコア最大の位置に置く (剥がしモードと同じ峰探し)
+              let peak = d, ps = r2;
+              for (let k = d - 1; k >= Math.max(d - 4 * gap, -peelMax); k--) {
+                const s2 = edgeScore(k);
+                if (s2 > ps) { ps = s2; peak = k; }
+              }
+              bestD = peak;
+            }
+            break;  // 最初の対抗馬だけ検討 (さらに内側へ連鎖して絵に食い込まない)
+          }
+        }
       }
       // --- 傾き合わせ: 位置 (bestD 近傍) × 傾き の2次元で辺全体のスコアを掃引し、
       //     「傾けたほうが明確に縁らしい (スコア 1.1 倍以上)」ときだけ傾きを採用する。
