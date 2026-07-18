@@ -55,7 +55,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v3</span></h1>
+  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v4</span></h1>
   <div class="sub">同じ作品を横に一歩ずつ移動しながら撮った写真を重ね、映り込みの少ない部分を選んで「切り出し済みの作品画像」に合成します。</div>
 </header>
 
@@ -67,6 +67,9 @@
       <input id="file" type="file" accept="image/*" multiple style="display:none">
     </div>
     <p class="hint" style="margin:10px 0 0;">撮り方のコツ: 1 枚は正面から。残りは<b>横に一歩ずつ移動</b>して、映り込みの位置が写真ごとに変わるように撮ります（その場でカメラを振るだけでは映り込みは動きません）。作品が枠に収まっていれば、立ち位置のずれは自動で追従するので、思い切って動いて大丈夫です。</p>
+    <label style="display:inline-flex; align-items:center; gap:7px; margin-top:12px; font-size:13px; cursor:pointer;">
+      <input type="checkbox" id="checkMode"> 📱 現場チェック — 撮った直後に「この撮り方で足りているか」だけを判定（低解像度・軽量。仕上げは後で PC で）
+    </label>
     <div id="cvLoading" class="loading">画像処理エンジンを準備中…（ローカル同梱・ネット接続不要）</div>
   </div>
 
@@ -87,6 +90,11 @@
 
   <div class="card" id="outCard" style="display:none;">
     <h2>③ 結果 <span id="elapsed" class="muted"></span></h2>
+    <div id="verdictBox" style="display:none; padding:12px 14px; border-radius:10px; margin-bottom:12px; font-size:13px; line-height:1.7;"></div>
+    <div id="verdictMapRow" style="display:none; margin-bottom:12px;">
+      <canvas id="verdictMap" style="max-width:380px; width:100%; border-radius:8px; border:1px solid var(--line); display:block;"></canvas>
+      <div class="hint" style="margin-top:4px;">赤 = どの写真でも明るいままの部分（映り込みが重なっていて除去できない見込み）</div>
+    </div>
     <div class="row">
       <span class="muted">表示:</span>
       <button id="vFused" class="seg-btn active">合成後</button>
@@ -123,6 +131,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const MAXDIM = 2400;      // 読み込み時の処理解像度 (長辺)
+  const CHECK_DIM = 1000;   // 現場チェックモードの読み込み解像度 (長辺)
   const RECT_MAXDIM = 1800; // 切り出し後の出力解像度 (長辺)
   const DETECT_DIM = 900;   // 四角形検出用の縮小解像度 (長辺)
   const MAP_COLORS = ['#555555', '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0891b2', '#b45309'];
@@ -161,6 +170,14 @@
   fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles(fileInput.files); });
   $('newImgs').addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
 
+  // 現場チェックモード (localStorage に記憶)
+  const checkModeEl = $('checkMode');
+  try { checkModeEl.checked = localStorage.getItem('reflect_check_mode') === '1'; } catch (e) {}
+  checkModeEl.addEventListener('change', () => {
+    try { localStorage.setItem('reflect_check_mode', checkModeEl.checked ? '1' : '0'); } catch (e) {}
+  });
+  const isCheckMode = () => checkModeEl.checked;
+
   function setStatus(kind, msg) {
     const el = $('status');
     if (!msg) { el.className = 'status'; el.textContent = ''; return; }
@@ -193,7 +210,7 @@
       let img;
       try { img = await loadImageFile(f); }
       catch (e) { setStatus('warn', f.name + ' を読み込めませんでした。'); continue; }
-      const scale = Math.min(1, MAXDIM / Math.max(img.naturalWidth, img.naturalHeight));
+      const scale = Math.min(1, (isCheckMode() ? CHECK_DIM : MAXDIM) / Math.max(img.naturalWidth, img.naturalHeight));
       const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
       const cnv = document.createElement('canvas');
       cnv.width = w; cnv.height = h;
@@ -210,6 +227,11 @@
     photos.forEach((p, i) => { if (p.rectScore !== null && p.rectScore < best) { best = p.rectScore; baseIdx = i; } });
     renderThumbs();
     renderBaseStage(true);
+    if (isCheckMode()) {
+      // 現場チェック: 枠は自動のまま、すぐ判定まで走る (直したいときは枠修正後に再実行)
+      await tick();
+      runFusion();
+    }
   }
 
   function clearPhotos() {
@@ -787,6 +809,29 @@
         sel[p] = best; counts[best]++;
       }
 
+      // 撮り方の合否判定材料:
+      //  improvement = 基準からどれだけ明るさを取り除けたか (平均)
+      //  unhelped    = 基準で明るいのに、どの写真でも暗くならなかった画素 (= 映り込みが重なったまま)
+      const unhelped = new Uint8Array(total);
+      let sImp = 0, nUn = 0;
+      {
+        const samp = [];
+        for (let p = 0; p < total; p += 397) samp.push(grays[0][p]);
+        samp.sort((a, b) => a - b);
+        const med = samp[samp.length >> 1];
+        const thB = med + 25;
+        for (let p = 0; p < total; p++) {
+          const gb = grays[0][p];
+          const o = p * 4;
+          const gf = 0.299 * fused[o] + 0.587 * fused[o + 1] + 0.114 * fused[o + 2];
+          const d = gb - gf;
+          sImp += d;
+          if (gb > thB && d < 4) { unhelped[p] = 1; nUn++; }
+        }
+      }
+      const improvement = sImp / total;
+      const unhelpedFrac = nUn / total;
+
       // 結果描画
       const vF = $('viewFused'), vB = $('viewBase'), vM = $('viewMap');
       [vF, vB, vM].forEach(c => { c.width = rs.w; c.height = rs.h; });
@@ -822,6 +867,7 @@
       $('elapsed').textContent = '(' + sec + ' 秒)';
       $('outCard').style.display = 'block';
       showView('vFused');
+      renderVerdict({ improvement, unhelpedFrac, unhelped, rs, excludedCount: excluded.length });
       if (excluded.length) {
         setStatus('warn', excluded.join('・') + ' は基準に重ねられなかったため除外して合成しました。');
       } else {
@@ -831,7 +877,10 @@
       window.reflectDebug = { n: photos.length, used: aligned.length, baseIdx, counts, excluded: excluded.slice(),
         W: rs.w, H: rs.h, sec: parseFloat(sec), align: alignDiags,
         quads: photos.map(p => p.quad), rectScores: photos.map(p => p.rectScore),
-        gains: aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain) };
+        gains: aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain),
+        improvement: Math.round(improvement * 100) / 100,
+        unhelpedFrac: Math.round(unhelpedFrac * 1000) / 1000,
+        checkMode: isCheckMode() };
     } catch (e) {
       console.error(e);
       setStatus('warn', '処理中に問題が起きました。写真を選び直して再度お試しください。（詳細はブラウザのコンソールに記録されています）');
@@ -839,6 +888,58 @@
       toDelete.forEach(m => { try { m.delete(); } catch (e) {} });
       $('run').disabled = false;
       window.reflectBusy = false;
+    }
+  }
+
+  // ===== 撮り方の合否判定 (現場チェック) =====
+  // 「明るいまま変化なし」には作品自体の明るい部分 (紙・マット) も含まれ、機械だけでは
+  // 映り込みと区別できない。そこで赤マップを見せて最終判断は人に返す分業にする。
+  // しきい値は実写 3 セット + 合成テストで校正 (2026-07-18)。
+  const UNHELPED_WARN = 0.05; // 明るいまま残る画素がこの割合を超えたら赤マップ提示
+  const IMP_LOW = 1.5;        // 平均改善量がこれ未満なら「映り込みが動いていない」
+  function renderVerdict(v) {
+    const box = $('verdictBox'), mapRow = $('verdictMapRow');
+    if (!isCheckMode()) { box.style.display = 'none'; mapRow.style.display = 'none'; return; }
+    const warns = [];
+    if (v.excludedCount > 0) {
+      warns.push('位置合わせできない写真が ' + v.excludedCount + ' 枚ありました。ぶれていないか、作品全体が写っているかを確認して、その位置からもう 1 枚撮ってください。');
+    }
+    if (v.improvement < IMP_LOW && v.unhelpedFrac > 0.02) {
+      warns.push('写真間で映り込みがほとんど動いていません。その場で角度を変えるのではなく、<b>体ごと横に一歩</b>移動して撮り足してください。');
+    } else if (v.unhelpedFrac > UNHELPED_WARN) {
+      warns.push('下の赤色は「どの写真でも明るいまま」の部分です。<b>作品自体が明るい部分（紙・マットなど）が赤いのは問題ありません</b>。照明や窓などの<b>映り込みが赤く残っているなら</b>、横への移動をもう一歩大きくして 1〜2 枚撮り足してください。');
+    }
+    box.style.display = 'block';
+    if (warns.length === 0) {
+      box.style.background = '#e8f6ee'; box.style.color = 'var(--ok)';
+      box.innerHTML = '<b style="font-size:15px;">✓ この撮り方で足りています</b><br>この場は移動して OK です。仕上げは後で PC で行ってください（このチェックは低解像度の仮判定です。下の「合成後」も一目確認を）。';
+      mapRow.style.display = 'none';
+      return;
+    }
+    box.style.background = '#fef3e2'; box.style.color = 'var(--warn)';
+    box.innerHTML = '<b style="font-size:15px;">⚠ 確認してください</b><br>' + warns.join('<br>')
+      + '<br>仕上がりの見込みは下の「合成後」プレビューで確認できます。映り込みが残っているようなら、この場で撮り足すのが確実です。';
+    // 救援不能域を赤で重ねた小マップ
+    if (v.unhelpedFrac > 0.01) {
+      const vm = $('verdictMap');
+      const ov = document.createElement('canvas');
+      ov.width = v.rs.w; ov.height = v.rs.h;
+      const od = ov.getContext('2d').createImageData(v.rs.w, v.rs.h);
+      for (let p = 0; p < v.unhelped.length; p++) {
+        if (v.unhelped[p]) { const o = p * 4; od.data[o] = 255; od.data[o + 3] = 150; }
+      }
+      ov.getContext('2d').putImageData(od, 0, 0);
+      vm.width = v.rs.w; vm.height = v.rs.h;
+      const g = vm.getContext('2d');
+      g.drawImage($('viewBase'), 0, 0);
+      g.globalAlpha = 0.35;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, vm.width, vm.height);
+      g.globalAlpha = 1;
+      g.drawImage(ov, 0, 0);
+      mapRow.style.display = 'block';
+    } else {
+      mapRow.style.display = 'none';
     }
   }
 
