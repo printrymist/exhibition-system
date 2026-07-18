@@ -52,7 +52,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v1</span></h1>
+  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v2</span></h1>
   <div class="sub">同じ作品を少しずつ立ち位置を変えて撮った写真を重ね、映り込みの少ない部分だけを選んで 1 枚に合成します。</div>
 </header>
 
@@ -102,7 +102,9 @@
     <h2>このツールについて</h2>
     <p class="hint">
       額のガラスやアクリルの映り込みは、撮る位置を変えると作品に対して動きます。
-      このツールは複数の写真をぴったり重ね合わせ、部分ごとに「一番くっきり写っている写真」（= 映り込みで白くかすんでいない写真）の画素を選んで 1 枚に合成します。
+      このツールは複数の写真をぴったり重ね合わせ（作品の絵柄の対応点と、額の四隅の両方を使って位置合わせ・検証します）、
+      映り込みは「光の足し算」で必ず明るくなることを利用して、部分ごとに「一番暗く写っている写真」の候補から一番くっきりした画素を選んで 1 枚に合成します。
+      合成は検出した額の内側だけに行い、壁やキャプションは基準の写真のまま残します。
       作品が長方形であることを利用して、最も正面に近い写真を自動で基準に選びます。<br>
       苦手なもの: 全部の写真で同じ場所にある映り込み（動いていないので除去できません）、部屋全体が明るいことによる一様な白かすみ（輪郭がないので検出できません）。
       照明や窓など<b>輪郭のある映り込みが写真ごとに動いている</b>状況が得意です。<br>
@@ -309,9 +311,12 @@
     return [bySum[0], byDiff[3], bySum[3], byDiff[0]]; // TL, TR, BR, BL
   }
 
-  // ===== 位置合わせ =====
-  // 特徴点 (ORB) + ホモグラフィ。失敗時は検出済み四角形どうしの対応にフォールバック。
-  function alignByOrb(baseGray, otherGray, otherMat, outSize) {
+  // ===== 位置合わせ (v2) =====
+  // ORB 対応点は作品の絵柄部分に集中しがち (額のガラス面は映り込みしか写らず、壁は特徴なし)。
+  // 小領域だけで推定したホモグラフィは額・壁で大きく歪むため、検出済みの額の四隅を
+  // 「全域アンカー」として対応点に加えて推定する。推定後は四隅の一致で検証し、
+  // 合わない写真は除外する (ずれたまま合成してゴーストを作るくらいなら使わない)。
+  function orbMatchPairs(baseGray, otherGray) {
     let orb;
     try { orb = new cv.ORB(3000); } catch (e) { orb = new cv.ORB(); }
     const kp1 = new cv.KeyPointVector(), des1 = new cv.Mat();
@@ -331,32 +336,119 @@
       arr.sort((a, b) => a.distance - b.distance);
       const top = arr.slice(0, 100);
       if (top.length < 12) throw new Error('対応点不足');
-      const flatBase = [], flatOther = [];
+      const base = [], other = [];
       for (const m of top) {
         const p1 = kp1.get(m.queryIdx).pt, p2 = kp2.get(m.trainIdx).pt;
-        flatBase.push(p1.x, p1.y); flatOther.push(p2.x, p2.y);
+        base.push([p1.x, p1.y]); other.push([p2.x, p2.y]);
       }
-      const mBase = cv.matFromArray(top.length, 1, cv.CV_32FC2, flatBase);
-      const mOther = cv.matFromArray(top.length, 1, cv.CV_32FC2, flatOther);
-      clean.push(mBase, mOther);
-      const H = cv.findHomography(mOther, mBase, cv.RANSAC, 3);
-      clean.push(H);
-      if (H.empty()) throw new Error('ホモグラフィ算出失敗');
-      return warpWithMask(otherMat, H, outSize);
+      return { base, other };
     } finally {
       clean.forEach(m => { try { m.delete(); } catch (e) {} });
     }
   }
 
-  function alignByQuad(baseQuad, otherQuad, otherMat, outSize) {
-    if (!baseQuad || !otherQuad) throw new Error('四角形未検出');
+  function quadArea(q) {
+    let s = 0;
+    for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4]; s += a.x * b.y - b.x * a.y; }
+    return Math.abs(s) / 2;
+  }
+  function quadsCompatible(q1, q2) {
+    if (!q1 || !q2) return false;
+    const r = quadArea(q1) / quadArea(q2);
+    return r > 0.4 && r < 2.5;
+  }
+
+  function applyH(H, x, y) {
+    const d = H.data64F;
+    const w = d[6] * x + d[7] * y + d[8];
+    return [(d[0] * x + d[1] * y + d[2]) / w, (d[3] * x + d[4] * y + d[5]) / w];
+  }
+
+  function estimateH(pairs, baseQuad, otherQuad, diag) {
+    const useQuad = quadsCompatible(baseQuad, otherQuad);
+    const flatBase = [], flatOther = [];
+    for (let i = 0; i < pairs.base.length; i++) {
+      flatBase.push(pairs.base[i][0], pairs.base[i][1]);
+      flatOther.push(pairs.other[i][0], pairs.other[i][1]);
+    }
+    if (useQuad) for (let i = 0; i < 4; i++) {
+      flatBase.push(baseQuad[i].x, baseQuad[i].y);
+      flatOther.push(otherQuad[i].x, otherQuad[i].y);
+    }
+    const n = flatBase.length / 2;
+    const mBase = cv.matFromArray(n, 1, cv.CV_32FC2, flatBase);
+    const mOther = cv.matFromArray(n, 1, cv.CV_32FC2, flatOther);
+    const inl = new cv.Mat();
+    const H = cv.findHomography(mOther, mBase, cv.RANSAC, 3, inl);
+    if (diag) { diag.matches = pairs.base.length; diag.quadAnchor = useQuad; diag.inliers = cv.countNonZero(inl); }
+    mBase.delete(); mOther.delete(); inl.delete();
+    if (H.empty()) { H.delete(); throw new Error('ホモグラフィ算出失敗'); }
+    return H;
+  }
+
+  function quadProjErr(H, otherQuad, baseQuad) {
+    let s = 0;
+    for (let i = 0; i < 4; i++) {
+      const xy = applyH(H, otherQuad[i].x, otherQuad[i].y);
+      s += Math.hypot(xy[0] - baseQuad[i].x, xy[1] - baseQuad[i].y);
+    }
+    return s / 4;
+  }
+  function medianReprojErr(H, pairs) {
+    const ds = [];
+    for (let i = 0; i < pairs.base.length; i++) {
+      const xy = applyH(H, pairs.other[i][0], pairs.other[i][1]);
+      ds.push(Math.hypot(xy[0] - pairs.base[i][0], xy[1] - pairs.base[i][1]));
+    }
+    ds.sort((a, b) => a - b);
+    return ds[ds.length >> 1];
+  }
+
+  function quadOnlyH(baseQuad, otherQuad) {
     const flat = q => q.reduce((a, p) => (a.push(p.x, p.y), a), []);
     const mSrc = cv.matFromArray(4, 1, cv.CV_32FC2, flat(otherQuad));
     const mDst = cv.matFromArray(4, 1, cv.CV_32FC2, flat(baseQuad));
     const H = cv.getPerspectiveTransform(mSrc, mDst);
-    const out = warpWithMask(otherMat, H, outSize);
-    mSrc.delete(); mDst.delete(); H.delete();
-    return out;
+    mSrc.delete(); mDst.delete();
+    return H;
+  }
+
+  // 額の四隅の平均ずれ許容 (px, 処理解像度)。
+  // 額の面と絵の面には数 cm の奥行き差があり、1 枚のホモグラフィでは両方を同時に
+  // ぴったりは合わせられない (角度差のある写真では数〜十数 px の食い違いが本質的に残る)。
+  // 絵の部分の精度は対応点 RANSAC (3px) で確保されるので、四隅は「破綻検出」として
+  // 緩めに見る: TOL_STRICT 以内なら文句なし、TOL_MAX 以内は許容、超えたら不合格。
+  const QUAD_TOL_STRICT = 12;
+  const QUAD_TOL_MAX = 35;
+  // 写真 1 枚ぶんの H を決める。検証に通らなければ throw (呼び側で除外)
+  function alignOne(baseGray, otherGray, baseQuad, otherQuad, diag) {
+    let pairs = null;
+    try { pairs = orbMatchPairs(baseGray, otherGray); }
+    catch (e) { diag.orbError = String(e && e.message || e); }
+    if (pairs) {
+      const H = estimateH(pairs, baseQuad, otherQuad, diag);
+      if (baseQuad && otherQuad) {
+        const err = quadProjErr(H, otherQuad, baseQuad);
+        diag.cornerErr = Math.round(err * 10) / 10;
+        if (err <= QUAD_TOL_STRICT) { diag.method = 'orb+quad'; return H; }
+        if (err <= QUAD_TOL_MAX) { diag.method = 'orb+quad(loose)'; return H; }
+        H.delete();
+        // 対応点由来の H が額の枠と大きく食い違う → 枠だけで合わせ、対応点の中央値で検証
+        const Hq = quadOnlyH(baseQuad, otherQuad);
+        const md = medianReprojErr(Hq, pairs);
+        diag.quadMedianReproj = Math.round(md * 10) / 10;
+        if (md <= 12) { diag.method = 'quad'; return Hq; }
+        Hq.delete();
+        throw new Error('位置合わせの検証に不合格');
+      }
+      diag.method = 'orb';
+      return H;
+    }
+    if (baseQuad && otherQuad && quadsCompatible(baseQuad, otherQuad)) {
+      diag.method = 'quad';
+      return quadOnlyH(baseQuad, otherQuad);
+    }
+    throw new Error('位置合わせ不能');
   }
 
   function warpWithMask(otherMat, H, outSize) {
@@ -372,20 +464,63 @@
     return { warped, mask };
   }
 
-  // ===== 合成 =====
-  // 各写真のくっきり度 = |ラプラシアン| をぼかして安定化したもの。
-  // 基準写真を優先し、他の写真は「基準より明確にくっきり」のときだけ採用する
-  // (露出ムラや位置ずれ由来のパッチワークを防ぐ)。
-  function magnitudeMap(rgbaMat) {
+  // ===== 合成 (v2) =====
+  // 映り込みは「光の足し算」なので、露出を写真間で合わせた上で
+  // 「各画素の一番暗い値に近い写真」を候補にし、その中で一番くっきりした画素を採用する。
+  // (旧方式の「一番くっきり」単独は、暗いガラス面では映り込み自体が一番くっきりして
+  //  いるため映り込みを残す選択をしてしまう)
+  // 合成は検出した額の内側だけに限定し、壁・キャプションは基準写真のまま。
+  function sharpAndGray(rgbaMat) {
     const gray = new cv.Mat(), lap = new cv.Mat();
     cv.cvtColor(rgbaMat, gray, cv.COLOR_RGBA2GRAY);
     cv.Laplacian(gray, lap, cv.CV_32F, 3, 1, 0, cv.BORDER_DEFAULT);
     const d = lap.data32F;
     for (let i = 0; i < d.length; i++) d[i] = Math.abs(d[i]);
     cv.GaussianBlur(lap, lap, new cv.Size(0, 0), 3, 3, cv.BORDER_DEFAULT);
-    const out = new Float32Array(lap.data32F);
+    const mag = new Float32Array(lap.data32F);
+    const g = new Uint8Array(gray.data);
     gray.delete(); lap.delete();
-    return out;
+    return { mag, gray: g };
+  }
+
+  // 額の内側 (少し内寄せ) を 1、外を 0 とするマスク。額未検出なら null = 全域を合成対象
+  function quadDomainMask(quad, W, H) {
+    if (!quad) return null;
+    const cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
+    const cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.beginPath();
+    quad.forEach((p, i) => {
+      const x = cx + (p.x - cx) * 0.985, y = cy + (p.y - cy) * 0.985;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    });
+    g.closePath(); g.fill();
+    const data = g.getImageData(0, 0, W, H).data;
+    const m = new Uint8Array(W * H);
+    for (let p = 0; p < m.length; p++) m[p] = data[p * 4 + 3] ? 1 : 0;
+    return m;
+  }
+
+  // 露出合わせ: 基準の明度 ≈ a × 写真の明度 + b を最小二乗で求める (外れ値は粗く除外)
+  function fitGain(gBase, gOther, mask, domain, total) {
+    let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let p = 0; p < total; p += 101) {
+      if (mask && !mask[p]) continue;
+      if (domain && !domain[p]) continue;
+      const x = gOther[p], y = gBase[p];
+      if (Math.abs(x - y) > 60) continue;
+      n++; sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    if (n < 300) return { a: 1, b: 0 };
+    const den = n * sxx - sx * sx;
+    if (Math.abs(den) < 1e-6) return { a: 1, b: 0 };
+    let a = (n * sxy - sx * sy) / den;
+    let b = (sy - a * sx) / n;
+    if (!(a > 0.7 && a < 1.4)) { a = 1; b = 0; }
+    return { a, b };
   }
 
   $('run').addEventListener('click', runFusion);
@@ -397,6 +532,7 @@
     const t0 = performance.now();
     excluded = [];
     const toDelete = [];
+    const alignDiags = [];
     try {
       const base = photos[baseIdx];
       const outSize = new cv.Size(base.mat.cols, base.mat.rows);
@@ -415,12 +551,19 @@
         const otherGray = new cv.Mat();
         cv.cvtColor(p.mat, otherGray, cv.COLOR_RGBA2GRAY);
         let res = null;
-        try { res = alignByOrb(baseGray, otherGray, p.mat, outSize); }
-        catch (e) {
-          console.warn('ORB位置合わせ失敗: 写真' + (i + 1), e);
-          try { res = alignByQuad(base.quad, p.quad, p.mat, outSize); }
-          catch (e2) { console.warn('四角形位置合わせも失敗: 写真' + (i + 1), e2); }
+        const diag = { photo: i + 1 };
+        let Hm = null;
+        try {
+          Hm = alignOne(baseGray, otherGray, base.quad, p.quad, diag);
+          res = warpWithMask(p.mat, Hm, outSize);
+        } catch (e) {
+          console.warn('位置合わせ失敗: 写真' + (i + 1), e);
+          diag.method = 'excluded';
+          diag.error = String(e && e.message || e);
+        } finally {
+          if (Hm) { try { Hm.delete(); } catch (e) {} }
         }
+        alignDiags.push(diag);
         otherGray.delete();
         if (res) {
           toDelete.push(res.warped, res.mask);
@@ -437,23 +580,43 @@
       setStatus('info', '合成中…');
       await tick();
 
-      const mags = [], masks = [], srcs = [];
+      const domain = quadDomainMask(base.quad, W, Hh);
+      const maps = [], masks = [], srcs = [];
       for (const a of aligned) {
-        mags.push(magnitudeMap(a.mat));
+        maps.push(sharpAndGray(a.mat));
         masks.push(a.mask ? new Uint8Array(a.mask.data) : null);
         srcs.push(a.mat.data);
         await tick();
       }
-
       const n = aligned.length, total = W * Hh;
+      const gains = aligned.map((a, i) =>
+        i === 0 ? { a: 1, b: 0 } : fitGain(maps[0].gray, maps[i].gray, masks[i], domain, total));
+
       const sel = new Uint8Array(total);
       const fused = new Uint8ClampedArray(total * 4);
       const counts = new Array(n).fill(0);
-      const baseMag = mags[0];
+      const MARGIN = 14; // 「一番暗い値」からの許容幅 (明度)
       for (let p = 0; p < total; p++) {
-        let best = 0, need = baseMag[p] * 1.2 + 2, bm = -1;
-        for (let i = 1; i < n; i++) {
-          if (masks[i][p] && mags[i][p] > need && mags[i][p] > bm) { best = i; bm = mags[i][p]; }
+        let best = 0;
+        if (!domain || domain[p]) {
+          // 有効写真の露出補正後の明度から基準値を求める (4枚以上あれば2番目に暗い値で頑健化)
+          let m1 = Infinity, m2 = Infinity, nv = 0;
+          for (let i = 0; i < n; i++) {
+            if (i > 0 && masks[i] && !masks[i][p]) continue;
+            nv++;
+            const g = gains[i].a * maps[i].gray[p] + gains[i].b;
+            if (g < m1) { m2 = m1; m1 = g; } else if (g < m2) m2 = g;
+          }
+          const ref = (nv >= 4 ? m2 : m1) + MARGIN;
+          let bm = -1;
+          for (let i = 1; i < n; i++) {
+            if (masks[i] && !masks[i][p]) continue;
+            const g = gains[i].a * maps[i].gray[p] + gains[i].b;
+            if (g > ref) continue;
+            if (maps[i].mag[p] > bm) { bm = maps[i].mag[p]; best = i; }
+          }
+          const baseIn = maps[0].gray[p] <= ref;
+          if (bm < 0 || (baseIn && maps[0].mag[p] * 1.15 + 2 >= bm)) best = 0;
         }
         sel[p] = best; counts[best]++;
         const s = srcs[best], o = p * 4;
@@ -502,7 +665,9 @@
         setStatus('ok', '合成が完了しました。下の「② 結果」で見比べてください。');
       }
       $('outCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      window.reflectDebug = { n: photos.length, used: aligned.length, baseIdx, counts, excluded: excluded.slice(), W, H: Hh, sec: parseFloat(sec) };
+      window.reflectDebug = { n: photos.length, used: aligned.length, baseIdx, counts, excluded: excluded.slice(), W, H: Hh, sec: parseFloat(sec),
+        align: alignDiags, quads: photos.map(p => p.quad), rectScores: photos.map(p => p.rectScore),
+        gains, domain: !!domain };
     } catch (e) {
       console.error(e);
       setStatus('warn', '処理中に問題が起きました。写真を選び直して再度お試しください。（詳細はブラウザのコンソールに記録されています）');
