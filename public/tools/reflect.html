@@ -713,8 +713,52 @@
         otherGray.delete();
       }
       P.delete();
+
+      // ぶれ・ピンぼけ判定: くっきり度 (|ラプラシアン| 平均) をグループ内で相対比較。
+      // 絶対しきい値は作品によって桁が違うため使えないが、同じ作品を写した写真同士なら
+      // 「1 枚だけ著しく低い = ぶれ/ピント外し」と判定できる (全枚が同程度にぶれた場合は検出不能)。
+      const sharpOf = (grayMat) => {
+        const l = new cv.Mat();
+        cv.Laplacian(grayMat, l, cv.CV_32F, 3, 1, 0, cv.BORDER_DEFAULT);
+        const d = l.data32F;
+        let s = 0;
+        for (let k = 0; k < d.length; k += 2) s += Math.abs(d[k]);
+        l.delete();
+        return s / (d.length / 2);
+      };
+      const gms = [rectBaseGray];
+      for (let i = 1; i < aligned.length; i++) {
+        const gm = new cv.Mat();
+        cv.cvtColor(aligned[i].mat, gm, cv.COLOR_RGBA2GRAY);
+        gms.push(gm);
+      }
+      const sharps = gms.map(sharpOf);
+      for (let i = 1; i < aligned.length; i++) {
+        const dg = alignDiags.find(d => d.photo === aligned[i].photoIdx + 1);
+        if (dg) dg.sharp = Math.round(sharps[i] * 100) / 100;
+      }
+      const sortedSharp = sharps.slice().sort((a, b) => a - b);
+      const medSharp = sortedSharp.length % 2 ? sortedSharp[sortedSharp.length >> 1]
+        : (sortedSharp[sortedSharp.length / 2 - 1] + sortedSharp[sortedSharp.length / 2]) / 2;
+      const BLUR_RATIO = 0.6;
+      const blurred = [];
+      for (let i = aligned.length - 1; i >= 1; i--) {
+        if (sharps[i] < medSharp * BLUR_RATIO) {
+          blurred.unshift('写真' + (aligned[i].photoIdx + 1));
+          const dg = alignDiags.find(d => d.photo === aligned[i].photoIdx + 1);
+          if (dg) { dg.method = 'excluded(blur)'; }
+          gms[i].delete();
+          gms.splice(i, 1);
+          aligned.splice(i, 1);
+          sharps.splice(i, 1);
+        }
+      }
+      const baseBlurSuspect = sharps[0] < medSharp * BLUR_RATIO;
+      const baseSharp = sharps[0];
+
       if (aligned.length < 2) {
-        setStatus('warn', 'どの写真も基準に重ねられませんでした。同じ作品を写した写真か、ぶれていないかをご確認ください。');
+        setStatus('warn', 'どの写真も基準に重ねられませんでした（ぶれ・ピンぼけ含む）。撮り直した写真でお試しください。');
+        gms.slice(1).forEach(g => { try { g.delete(); } catch (e) {} });
         return;
       }
 
@@ -736,8 +780,7 @@
         gm0.convertTo(baseF, cv.CV_32F, 1, 0);
         toDelete.push(baseF);
         for (let i = 1; i < n; i++) {
-          const gm = new cv.Mat();
-          cv.cvtColor(aligned[i].mat, gm, cv.COLOR_RGBA2GRAY);
+          const gm = gms[i];
           const g8 = new Uint8Array(gm.data);
           const gain = fitGain(grays[0], g8, aligned[i].mask ? new Uint8Array(aligned[i].mask.data) : null, total);
           aligned[i].gain = gain;
@@ -867,9 +910,14 @@
       $('elapsed').textContent = '(' + sec + ' 秒)';
       $('outCard').style.display = 'block';
       showView('vFused');
-      renderVerdict({ improvement, unhelpedFrac, unhelped, rs, excludedCount: excluded.length });
-      if (excluded.length) {
-        setStatus('warn', excluded.join('・') + ' は基準に重ねられなかったため除外して合成しました。');
+      renderVerdict({ improvement, unhelpedFrac, unhelped, rs, excludedCount: excluded.length,
+        blurred, baseBlurSuspect });
+      const warnMsgs = [];
+      if (excluded.length) warnMsgs.push(excluded.join('・') + ' は基準に重ねられなかったため除外しました。');
+      if (blurred.length) warnMsgs.push(blurred.join('・') + ' はぶれ・ピンぼけの疑いがあるため除外しました。');
+      if (baseBlurSuspect) warnMsgs.push('基準写真にもぶれ・ピンぼけの疑いがあります。⭐を別の写真に変えて再実行することをおすすめします。');
+      if (warnMsgs.length) {
+        setStatus('warn', warnMsgs.join(' '));
       } else {
         setStatus('ok', '合成が完了しました。下の「③ 結果」で見比べてください。');
       }
@@ -880,6 +928,8 @@
         gains: aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain),
         improvement: Math.round(improvement * 100) / 100,
         unhelpedFrac: Math.round(unhelpedFrac * 1000) / 1000,
+        baseSharp: Math.round(baseSharp * 100) / 100,
+        blurred: blurred.slice(), baseBlurSuspect,
         checkMode: isCheckMode() };
     } catch (e) {
       console.error(e);
@@ -901,8 +951,14 @@
     const box = $('verdictBox'), mapRow = $('verdictMapRow');
     if (!isCheckMode()) { box.style.display = 'none'; mapRow.style.display = 'none'; return; }
     const warns = [];
+    if (v.blurred && v.blurred.length) {
+      warns.push(v.blurred.join('・') + ' が<b>ぶれ・ピンぼけの疑い</b>です。その位置からもう 1 枚撮ってください。');
+    }
+    if (v.baseBlurSuspect) {
+      warns.push('基準の写真がぶれている疑いがあります。正面からもう 1 枚撮り直すのが確実です。');
+    }
     if (v.excludedCount > 0) {
-      warns.push('位置合わせできない写真が ' + v.excludedCount + ' 枚ありました。ぶれていないか、作品全体が写っているかを確認して、その位置からもう 1 枚撮ってください。');
+      warns.push('位置合わせできない写真が ' + v.excludedCount + ' 枚ありました。作品全体が写っているかを確認して、その位置からもう 1 枚撮ってください。');
     }
     if (v.improvement < IMP_LOW && v.unhelpedFrac > 0.02) {
       warns.push('写真間で映り込みがほとんど動いていません。その場で角度を変えるのではなく、<b>体ごと横に一歩</b>移動して撮り足してください。');
