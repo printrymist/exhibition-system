@@ -51,25 +51,48 @@
   .legend { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:12px; color:var(--sub); }
   .legend .chip { display:inline-flex; align-items:center; gap:5px; }
   .legend .sw { width:13px; height:13px; border-radius:3px; display:inline-block; border:1px solid rgba(0,0,0,.15); }
+  /* 一括モード */
+  .strip { display:flex; flex-wrap:wrap; gap:2px; align-items:center; }
+  .strip .s-thumb { width:86px; border-radius:6px; overflow:hidden; border-top:4px solid #ccc; position:relative; }
+  .strip .s-thumb canvas { width:100%; display:block; }
+  .strip .s-thumb .s-num { position:absolute; left:2px; top:4px; font-size:10px; color:#fff;
+    background:rgba(0,0,0,.55); padding:0 4px; border-radius:6px; }
+  .strip .s-gap { width:26px; height:64px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; border-radius:6px; font-size:15px; color:#bbb; user-select:none; }
+  .strip .s-gap:hover { background:#f0f6ff; }
+  .strip .s-gap.split { color:var(--accent2); font-weight:700; }
+  .bres { display:flex; flex-wrap:wrap; gap:12px; }
+  .bres .b-card { width:180px; border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .bres .b-card canvas { width:100%; border-radius:6px; display:block; background:#222; }
+  .bres .b-title { font-size:12px; margin-top:6px; font-weight:700; }
+  .bres .b-sub { font-size:11px; color:var(--sub); line-height:1.5; }
+  .bres .b-warn { font-size:11px; color:var(--warn); line-height:1.5; }
+  .bres .b-row { display:flex; gap:6px; margin-top:6px; }
+  .bres .b-row button { padding:4px 8px; font-size:12px; border-radius:7px; }
+  .progress { height:8px; border-radius:5px; background:#eee; overflow:hidden; margin-top:8px; }
+  .progress > div { height:100%; background:var(--accent); width:0%; transition:width .3s; }
 </style>
 </head>
 <body>
 <header>
-  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v4</span></h1>
-  <div class="sub">同じ作品を横に一歩ずつ移動しながら撮った写真を重ね、映り込みの少ない部分を選んで「切り出し済みの作品画像」に合成します。</div>
+  <h1>作品写真 反射除去 <span class="badge">プロトタイプ v5</span></h1>
+  <div class="sub">同じ作品を上下左右に大きくずらしながら撮った写真を重ね、映り込みの少ない部分を選んで「切り出し済みの作品画像」に合成します。</div>
 </header>
 
 <div class="wrap">
   <div class="card" id="loadCard">
+    <div class="row" style="margin-bottom:12px;">
+      <span class="muted">使い方:</span>
+      <button class="seg-btn mode-btn" data-mode="single">1 作品ずつ</button>
+      <button class="seg-btn mode-btn" data-mode="check">📱 現場チェック</button>
+      <button class="seg-btn mode-btn" data-mode="batch">📦 一括処理</button>
+    </div>
     <div id="drop" class="drop">
-      <p style="margin:0 0 6px;"><strong>同じ作品の写真を 3〜5 枚選ぶ</strong> — クリック、またはここにドラッグ＆ドロップ</p>
+      <p style="margin:0 0 6px;" id="dropLabel"><strong>同じ作品の写真を 3〜5 枚選ぶ</strong> — クリック、またはここにドラッグ＆ドロップ</p>
       <p class="hint" style="margin:0;">画像はブラウザ内だけで処理され、どこにも送信されません（プロトタイプ）</p>
       <input id="file" type="file" accept="image/*" multiple style="display:none">
     </div>
-    <p class="hint" style="margin:10px 0 0;">撮り方のコツ: 1 枚は正面から。残りは<b>上下左右に大きくずらして 1 枚ずつ</b>（左右は一歩、上下はしゃがむ／伸び上がる）。映り込みの位置が写真ごとに変わるのが目的です（その場でカメラを振るだけでは映り込みは動きません）。カメラは作品の中心に向けたままで OK。作品が枠に収まっていれば、立ち位置のずれは自動で追従するので、思い切って動いて大丈夫です。</p>
-    <label style="display:inline-flex; align-items:center; gap:7px; margin-top:12px; font-size:13px; cursor:pointer;">
-      <input type="checkbox" id="checkMode"> 📱 現場チェック — 撮った直後に「この撮り方で足りているか」だけを判定（低解像度・軽量。仕上げは後で PC で）
-    </label>
+    <p class="hint" id="modeHint" style="margin:10px 0 0;"></p>
     <div id="cvLoading" class="loading">画像処理エンジンを準備中…（ローカル同梱・ネット接続不要）</div>
   </div>
 
@@ -85,6 +108,25 @@
     <div class="row" style="margin-top:12px;">
       <button id="run" class="primary">▶ 反射除去して切り出す</button>
       <button id="newImgs">別の写真</button>
+    </div>
+  </div>
+
+  <div class="card" id="batchCard" style="display:none;">
+    <h2>① グループ分けの確認</h2>
+    <p class="hint">撮った順に並べ、写真の中身が変わったところで自動的に区切っています（色の帯 = 同じ作品のグループ）。区切りがずれていたら、写真と写真のあいだの「｜／・」をタップして切り替えてください。1〜2 枚しかないグループは反射除去なしの「切り出しのみ」で仕上げます。</p>
+    <div id="strip" class="strip"></div>
+    <div id="batchStatus" class="status"></div>
+    <div class="row" style="margin-top:12px;">
+      <button id="batchRun" class="primary">▶ 一括処理を開始</button>
+      <button id="batchNew">別の写真</button>
+      <span id="batchProgressText" class="muted"></span>
+    </div>
+    <div class="progress" id="batchProgress" style="display:none;"><div></div></div>
+
+    <h2 class="later" id="bresTitle" style="display:none;">② 結果 <span id="batchElapsed" class="muted"></span></h2>
+    <div id="bres" class="bres"></div>
+    <div class="row" style="margin-top:12px;">
+      <button id="zipAll" class="primary" style="display:none;">⬇ まとめて ZIP で保存</button>
     </div>
   </div>
 
@@ -119,7 +161,8 @@
       額のガラスやアクリルの映り込みは、撮る位置を変えると作品に対して動きます。
       このツールは、指定した枠で全写真を同じ「正面から見た長方形」に補正してからぴったり重ね、
       映り込みは「光の足し算」で必ず明るくなることを利用して、部分ごとに「一番暗く写っている写真」を選んで 1 枚に合成します。
-      どの写真から採るかの判定は広い面 (映り込みのベール) の尺度で行うため、サインなどの細い線が写真ごとに切り替わって二重になることはありません。<br>
+      どの写真から採るかの判定は広い面 (映り込みのベール) の尺度で行うため、サインなどの細い線が写真ごとに切り替わって二重になることはありません。
+      ぶれ・ピンぼけの疑いがある写真は自動で除外します。<br>
       苦手なもの: 全部の写真で同じ場所にある映り込み（動いていないので除去できません — ずらす幅が小さいとこうなります）、
       部屋全体が明るいことによる一様な白かすみ。照明や窓など<b>輪郭のある映り込みが写真ごとに動いている</b>状況が得意です。<br>
       画像処理はすべてこのページ内（お使いの端末の中）で行われ、写真はどこにも送信されません。
@@ -137,10 +180,35 @@
   const MAP_COLORS = ['#555555', '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0891b2', '#b45309'];
 
   let cvReady = false;
-  let photos = [];   // { name, mat(RGBA), srcCanvas, quad, rectScore, adoptPct }
+  let photos = [];   // 個別モード: { name, mat(RGBA), srcCanvas, quad, rectScore, adoptPct }
   let baseIdx = -1;
-  let excluded = [];
   window.reflectBusy = false;
+
+  // ===== モード (localStorage に記憶) =====
+  let mode = 'single';
+  try {
+    mode = localStorage.getItem('reflect_mode') ||
+      (localStorage.getItem('reflect_check_mode') === '1' ? 'check' : 'single');
+  } catch (e) {}
+  function setMode(m) {
+    mode = m;
+    try { localStorage.setItem('reflect_mode', m); } catch (e) {}
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    $('dropLabel').innerHTML = m === 'batch'
+      ? '<strong>展覧会ぶんの写真をまとめて選ぶ</strong>（撮った順のまま・最大 200 枚）— クリック、またはドラッグ＆ドロップ'
+      : '<strong>同じ作品の写真を 3〜5 枚選ぶ</strong> — クリック、またはここにドラッグ＆ドロップ';
+    $('modeHint').innerHTML = {
+      single: '撮り方のコツ: 1 枚は正面から。残りは<b>上下左右に大きくずらして 1 枚ずつ</b>（左右は一歩、上下はしゃがむ／伸び上がる）。映り込みの位置が写真ごとに変わるのが目的です（その場でカメラを振るだけでは映り込みは動きません）。カメラは作品の中心に向けたままで OK。作品が枠に収まっていれば、立ち位置のずれは自動で追従するので、思い切って動いて大丈夫です。',
+      check: '会場で撮った直後に「この撮り方で足りているか」だけを判定します（低解像度・軽量）。写真を選ぶと自動で判定まで走ります。仕上げは後で PC の「1 作品ずつ」または「一括処理」で。',
+      batch: '会場で撮ってきた写真を<b>撮った順のまま全部</b>選んでください。同じ作品の写真を自動でグループ分けし、全作品を順に処理して、切り出し済み画像を ZIP でまとめて保存できます。処理中は放置で OK です。',
+    }[m];
+    $('workCard').style.display = 'none';
+    $('batchCard').style.display = 'none';
+    $('outCard').style.display = 'none';
+  }
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.addEventListener('click', () => setMode(b.dataset.mode)));
+  const isCheckMode = () => mode === 'check';
 
   // ===== OpenCV 準備 (ローカル同梱・ネット依存なし) =====
   (function poll() {
@@ -165,21 +233,21 @@
   drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
   drop.addEventListener('drop', (e) => {
     e.preventDefault(); drop.classList.remove('hover');
-    if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) routeFiles(e.dataTransfer.files);
   });
-  fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFiles(fileInput.files); });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) routeFiles(fileInput.files); });
   $('newImgs').addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+  $('batchNew').addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
 
-  // 現場チェックモード (localStorage に記憶)
-  const checkModeEl = $('checkMode');
-  try { checkModeEl.checked = localStorage.getItem('reflect_check_mode') === '1'; } catch (e) {}
-  checkModeEl.addEventListener('change', () => {
-    try { localStorage.setItem('reflect_check_mode', checkModeEl.checked ? '1' : '0'); } catch (e) {}
-  });
-  const isCheckMode = () => checkModeEl.checked;
+  function routeFiles(fileList) {
+    if (!cvReady) { alert('画像処理エンジンの準備がまだ終わっていません。数秒待って再度お試しください。'); return; }
+    if (mode === 'batch') batchLoad(fileList);
+    else loadFiles(fileList);
+  }
 
-  function setStatus(kind, msg) {
-    const el = $('status');
+  function setStatus(kind, msg) { setStatusOn('status', kind, msg); }
+  function setStatusOn(id, kind, msg) {
+    const el = $(id);
     if (!msg) { el.className = 'status'; el.textContent = ''; return; }
     el.className = 'status show ' + kind;
     el.textContent = msg;
@@ -195,29 +263,34 @@
     });
   }
 
+  // File → { name, mat, srcCanvas, quad, rectScore }
+  async function fileToPhoto(f, dim) {
+    const img = await loadImageFile(f);
+    const scale = Math.min(1, dim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const cnv = document.createElement('canvas');
+    cnv.width = w; cnv.height = h;
+    cnv.getContext('2d').drawImage(img, 0, 0, w, h);
+    const mat = cv.imread(cnv);
+    const det = detectQuadScore(mat);
+    return { name: f.name, mat, srcCanvas: cnv, quad: det.quad, rectScore: det.score, adoptPct: null };
+  }
+
   async function loadFiles(fileList) {
-    if (!cvReady) { alert('画像処理エンジンの準備がまだ終わっていません。数秒待って再度お試しください。'); return; }
     const files = Array.from(fileList).filter(f => /^image\//.test(f.type));
     if (files.length < 2) { alert('同じ作品の写真を 2 枚以上（推奨 3〜5 枚）まとめて選んでください。'); return; }
-    if (files.length > 8) { alert('写真は 8 枚までにしてください。'); return; }
+    if (files.length > 8) { alert('このモードでは写真は 8 枚までにしてください（展覧会ぶんをまとめて処理するときは「📦 一括処理」へ）。'); return; }
 
     clearPhotos();
     $('workCard').style.display = 'block';
+    $('batchCard').style.display = 'none';
     $('outCard').style.display = 'none';
     setStatus('info', '写真を読み込んでいます…');
 
+    const dim = isCheckMode() ? CHECK_DIM : MAXDIM;
     for (const f of files) {
-      let img;
-      try { img = await loadImageFile(f); }
-      catch (e) { setStatus('warn', f.name + ' を読み込めませんでした。'); continue; }
-      const scale = Math.min(1, (isCheckMode() ? CHECK_DIM : MAXDIM) / Math.max(img.naturalWidth, img.naturalHeight));
-      const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
-      const cnv = document.createElement('canvas');
-      cnv.width = w; cnv.height = h;
-      cnv.getContext('2d').drawImage(img, 0, 0, w, h);
-      const mat = cv.imread(cnv);
-      const det = detectQuadScore(mat);
-      photos.push({ name: f.name, mat, srcCanvas: cnv, quad: det.quad, rectScore: det.score, adoptPct: null });
+      try { photos.push(await fileToPhoto(f, dim)); }
+      catch (e) { setStatus('warn', f.name + ' を読み込めませんでした。'); }
       await tick();
     }
     if (photos.length < 2) { setStatus('warn', '読み込めた写真が 2 枚未満です。写真を選び直してください。'); return; }
@@ -228,7 +301,6 @@
     renderThumbs();
     renderBaseStage(true);
     if (isCheckMode()) {
-      // 現場チェック: 枠は自動のまま、すぐ判定まで走る (直したいときは枠修正後に再実行)
       await tick();
       runFusion();
     }
@@ -236,7 +308,7 @@
 
   function clearPhotos() {
     photos.forEach(p => { if (p.mat) p.mat.delete(); });
-    photos = []; baseIdx = -1; excluded = [];
+    photos = []; baseIdx = -1;
   }
 
   function renderThumbs() {
@@ -292,7 +364,6 @@
     baseView.height = Math.round(p.mat.rows * stageScale);
     const g = baseView.getContext('2d');
     g.drawImage(p.srcCanvas, 0, 0, baseView.width, baseView.height);
-    // 枠外を暗く
     g.save();
     g.fillStyle = 'rgba(0,0,0,0.45)';
     g.beginPath();
@@ -348,7 +419,7 @@
     renderBaseStage(false);
     e.preventDefault();
   });
-  const endDrag = (e) => { if (dragCorner >= 0) { dragCorner = -1; } };
+  const endDrag = () => { if (dragCorner >= 0) { dragCorner = -1; } };
   baseView.addEventListener('pointerup', endDrag);
   baseView.addEventListener('pointercancel', endDrag);
 
@@ -416,8 +487,6 @@
   }
 
   // ===== 全体位置合わせ (写真 → 基準座標系) =====
-  // ORB 対応点は絵柄部分に集中しがちなので、検出済みの額の四隅があれば全域アンカーとして
-  // 加えて推定する。推定後は四隅の一致で破綻を検出 (額面/絵面の奥行き差ぶんは許容)。
   function orbMatchPairs(baseGray, otherGray, nfeat) {
     let orb;
     try { orb = new cv.ORB(nfeat || 3000); } catch (e) { orb = new cv.ORB(); }
@@ -564,7 +633,6 @@
     return { w: Math.max(64, Math.round(W * s)), h: Math.max(64, Math.round(H * s)) };
   }
 
-  // 基準の枠 → 出力長方形の透視変換 P
   function rectifyTransform(baseQuad, rw, rh) {
     const mSrc = cv.matFromArray(4, 1, cv.CV_32FC2,
       baseQuad.reduce((a, p) => (a.push(p.x, p.y), a), []));
@@ -589,9 +657,11 @@
     return { mat: out, mask };
   }
 
+  function matToImageData(mat) {
+    return new ImageData(new Uint8ClampedArray(mat.data), mat.cols, mat.rows);
+  }
+
   // ===== 切り出し後の細密位置合わせ (アフィン) =====
-  // 補正後は「ほぼ重なっている」はずなので、残りのずれを ORB + ロバスト推定で取る。
-  // 映り込み由来の対応点は写真ごとに動きが違うため RANSAC で外れる。
   function refineAffine(rectBaseGray, rectOtherGray, diag) {
     let pairs = null;
     try { pairs = orbMatchPairs(rectBaseGray, rectOtherGray, 1500); }
@@ -608,7 +678,6 @@
     mBase.delete(); mOther.delete();
     if (!A || A.empty()) { if (A) A.delete(); return null; }
     const d = A.data64F;
-    // 補正後同士なのでほぼ恒等変換のはず。大きい補正は誤推定とみなして捨てる
     if (Math.abs(d[0] - 1) > 0.12 || Math.abs(d[4] - 1) > 0.12 ||
         Math.abs(d[1]) > 0.12 || Math.abs(d[3]) > 0.12 ||
         Math.abs(d[2]) > 80 || Math.abs(d[5]) > 80) { A.delete(); return null; }
@@ -616,12 +685,7 @@
     return A;
   }
 
-  // ===== 合成 (v3: ベール尺度の判定 + 局所整合ゲート) =====
-  // ・映り込みは光の足し算 → 露出を合わせた上で「ぼかした明度が一番暗い写真」寄りに重み付け。
-  //   判定を広い面 (ベール) の尺度で行うので、サイン等の細い線が画素単位で写真ごとに
-  //   切り替わって二重になったり太ったりしない (線は必ずどれか 1 枚から丸ごと採られる)。
-  // ・局所整合ゲート: 基準との差が「明暗の片寄り」でなく「構造のずれ」の写真は、
-  //   その場所では採用しない (位置ずれの持ち込み防止)。
+  // ===== 露出合わせ =====
   function fitGain(gBase, gOther, mask, total) {
     let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
     for (let p = 0; p < total; p += 101) {
@@ -639,19 +703,18 @@
     return { a, b };
   }
 
-  $('run').addEventListener('click', runFusion);
-
-  async function runFusion() {
-    if (window.reflectBusy || photos.length < 2) return;
-    const base = photos[baseIdx];
-    if (!base.quad) { setStatus('warn', '切り出し枠を指定してください。'); return; }
-    window.reflectBusy = true;
-    $('run').disabled = true;
-    const t0 = performance.now();
-    excluded = [];
+  // ===== 中核: 複数写真 → 反射抑制つき切り出し合成 =====
+  // UI に触らない。list の mat は呼び出し側の所有 (削除しない)。
+  // 戻り: { ok, rs, fusedID, baseID, mapID, counts, usedPhotoIdx, alignDiags, excluded,
+  //         blurred, baseBlurSuspect, baseSharp, improvement, unhelpedFrac, unhelped, gains }
+  async function fusePhotos(list, bIdx, opts) {
+    const onStatus = (opts && opts.onStatus) || (() => {});
+    const needMap = !opts || opts.needMap !== false;
     const toDelete = [];
     const alignDiags = [];
+    const excluded = [];
     try {
+      const base = list[bIdx];
       const baseGray = new cv.Mat();
       cv.cvtColor(base.mat, baseGray, cv.COLOR_RGBA2GRAY);
       toDelete.push(baseGray);
@@ -660,21 +723,20 @@
       const rs = rectSizeFromQuad(q);
       const P = rectifyTransform(q, rs.w, rs.h);
       const Parr = Array.from(P.data64F);
+      P.delete();
 
-      // 基準を切り出し
       const rectBase = warpToRect(base.mat, Parr, rs.w, rs.h, false);
       toDelete.push(rectBase.mat);
       const rectBaseGray = new cv.Mat();
       cv.cvtColor(rectBase.mat, rectBaseGray, cv.COLOR_RGBA2GRAY);
       toDelete.push(rectBaseGray);
 
-      // 他の写真: 全体 H → 切り出し → 細密合わせ
-      const aligned = [{ photoIdx: baseIdx, mat: rectBase.mat, mask: null }];
-      for (let i = 0; i < photos.length; i++) {
-        if (i === baseIdx) continue;
-        setStatus('info', '位置合わせ中… (写真' + (i + 1) + ')');
+      const aligned = [{ photoIdx: bIdx, mat: rectBase.mat, mask: null }];
+      for (let i = 0; i < list.length; i++) {
+        if (i === bIdx) continue;
+        onStatus('位置合わせ中… (写真' + (i + 1) + ')');
         await tick();
-        const p = photos[i];
+        const p = list[i];
         const otherGray = new cv.Mat();
         cv.cvtColor(p.mat, otherGray, cv.COLOR_RGBA2GRAY);
         const diag = { photo: i + 1 };
@@ -685,7 +747,6 @@
           rect = warpToRect(p.mat, M, rs.w, rs.h, true);
           const frac = cv.countNonZero(rect.mask) / (rs.w * rs.h);
           if (frac < 0.6) throw new Error('重なりが小さすぎます');
-          // 細密合わせ
           const rg = new cv.Mat();
           cv.cvtColor(rect.mat, rg, cv.COLOR_RGBA2GRAY);
           const A = refineAffine(rectBaseGray, rg, diag);
@@ -712,11 +773,8 @@
         alignDiags.push(diag);
         otherGray.delete();
       }
-      P.delete();
 
-      // ぶれ・ピンぼけ判定: くっきり度 (|ラプラシアン| 平均) をグループ内で相対比較。
-      // 絶対しきい値は作品によって桁が違うため使えないが、同じ作品を写した写真同士なら
-      // 「1 枚だけ著しく低い = ぶれ/ピント外し」と判定できる (全枚が同程度にぶれた場合は検出不能)。
+      // ぶれ・ピンぼけ判定 (グループ内相対)
       const sharpOf = (grayMat) => {
         const l = new cv.Mat();
         cv.Laplacian(grayMat, l, cv.CV_32F, 3, 1, 0, cv.BORDER_DEFAULT);
@@ -730,6 +788,7 @@
       for (let i = 1; i < aligned.length; i++) {
         const gm = new cv.Mat();
         cv.cvtColor(aligned[i].mat, gm, cv.COLOR_RGBA2GRAY);
+        toDelete.push(gm);
         gms.push(gm);
       }
       const sharps = gms.map(sharpOf);
@@ -746,8 +805,7 @@
         if (sharps[i] < medSharp * BLUR_RATIO) {
           blurred.unshift('写真' + (aligned[i].photoIdx + 1));
           const dg = alignDiags.find(d => d.photo === aligned[i].photoIdx + 1);
-          if (dg) { dg.method = 'excluded(blur)'; }
-          gms[i].delete();
+          if (dg) dg.method = 'excluded(blur)';
           gms.splice(i, 1);
           aligned.splice(i, 1);
           sharps.splice(i, 1);
@@ -757,16 +815,14 @@
       const baseSharp = sharps[0];
 
       if (aligned.length < 2) {
-        setStatus('warn', 'どの写真も基準に重ねられませんでした（ぶれ・ピンぼけ含む）。撮り直した写真でお試しください。');
-        gms.slice(1).forEach(g => { try { g.delete(); } catch (e) {} });
-        return;
+        return { ok: false, reason: 'どの写真も基準に重ねられませんでした（ぶれ・ピンぼけ含む）。撮り直した写真でお試しください。',
+          alignDiags, excluded, blurred };
       }
 
-      setStatus('info', '合成中…');
+      onStatus('合成中…');
       await tick();
 
       const n = aligned.length, total = rs.w * rs.h;
-      // 各写真の明度・ぼかし明度・基準との差 (ベール/構造の分離)
       const grays = [], blurs = [], masks = [], srcs = [], sds = [], ads = [];
       {
         const gm0 = rectBaseGray;
@@ -800,7 +856,7 @@
           ads.push(new Float32Array(af.data32F));
           masks.push(new Uint8Array(aligned[i].mask.data));
           srcs.push(aligned[i].mat.data);
-          gm.delete(); bm.delete(); gf.delete(); df.delete(); af.delete();
+          bm.delete(); gf.delete(); df.delete(); af.delete();
           await tick();
         }
       }
@@ -810,10 +866,9 @@
       const counts = new Array(n).fill(0);
       const EXPT = new Float32Array(256);
       for (let k = 0; k < 256; k++) EXPT[k] = Math.exp(-k / 6);
-      const STRUCT_TOL = 12; // 構造ずれの許容 (明度)
+      const STRUCT_TOL = 12;
       const gainsArr = aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain);
       for (let p = 0; p < total; p++) {
-        // ベール明度 (ぼかし + 露出補正後)
         let vmin = Infinity;
         for (let i = 0; i < n; i++) {
           if (i > 0 && !masks[i][p]) continue;
@@ -822,7 +877,7 @@
           if (v < vmin) vmin = v;
         }
         const v0 = blurs[0][p];
-        if (v0 < vmin) vmin = v0; // 基準は常に候補
+        if (v0 < vmin) vmin = v0;
         let r = 0, g = 0, b = 0, wsum = 0, bestW = -1, best = 0;
         for (let i = 0; i < n; i++) {
           let w;
@@ -852,9 +907,7 @@
         sel[p] = best; counts[best]++;
       }
 
-      // 撮り方の合否判定材料:
-      //  improvement = 基準からどれだけ明るさを取り除けたか (平均)
-      //  unhelped    = 基準で明るいのに、どの写真でも暗くならなかった画素 (= 映り込みが重なったまま)
+      // 撮り方の合否判定材料
       const unhelped = new Uint8Array(total);
       let sImp = 0, nUn = 0;
       {
@@ -872,36 +925,71 @@
           if (gb > thB && d < 4) { unhelped[p] = 1; nUn++; }
         }
       }
-      const improvement = sImp / total;
-      const unhelpedFrac = nUn / total;
 
-      // 結果描画
-      const vF = $('viewFused'), vB = $('viewBase'), vM = $('viewMap');
-      [vF, vB, vM].forEach(c => { c.width = rs.w; c.height = rs.h; });
-      vF.getContext('2d').putImageData(new ImageData(fused, rs.w, rs.h), 0, 0);
-      cv.imshow(vB, aligned[0].mat);
-      const mapData = new Uint8ClampedArray(total * 4);
-      const cols = aligned.map(a => hexToRgb(MAP_COLORS[a.photoIdx % MAP_COLORS.length]));
-      for (let p = 0; p < total; p++) {
-        const c = cols[sel[p]], o = p * 4;
-        mapData[o] = c[0]; mapData[o + 1] = c[1]; mapData[o + 2] = c[2]; mapData[o + 3] = 255;
+      let mapID = null;
+      if (needMap) {
+        const mapData = new Uint8ClampedArray(total * 4);
+        const cols = aligned.map(a => hexToRgb(MAP_COLORS[a.photoIdx % MAP_COLORS.length]));
+        for (let p = 0; p < total; p++) {
+          const c = cols[sel[p]], o = p * 4;
+          mapData[o] = c[0]; mapData[o + 1] = c[1]; mapData[o + 2] = c[2]; mapData[o + 3] = 255;
+        }
+        mapID = new ImageData(mapData, rs.w, rs.h);
       }
-      vM.getContext('2d').putImageData(new ImageData(mapData, rs.w, rs.h), 0, 0);
+
+      return {
+        ok: true, rs,
+        fusedID: new ImageData(fused, rs.w, rs.h),
+        baseID: matToImageData(aligned[0].mat),
+        mapID,
+        counts, usedPhotoIdx: aligned.map(a => a.photoIdx),
+        alignDiags, excluded, blurred, baseBlurSuspect,
+        baseSharp: Math.round(baseSharp * 100) / 100,
+        improvement: sImp / total,
+        unhelpedFrac: nUn / total,
+        unhelped,
+        gains: aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain),
+      };
+    } finally {
+      toDelete.forEach(m => { try { m.delete(); } catch (e) {} });
+    }
+  }
+
+  // ===== 個別モードの実行 =====
+  $('run').addEventListener('click', runFusion);
+
+  async function runFusion() {
+    if (window.reflectBusy || photos.length < 2) return;
+    const base = photos[baseIdx];
+    if (!base.quad) { setStatus('warn', '切り出し枠を指定してください。'); return; }
+    window.reflectBusy = true;
+    $('run').disabled = true;
+    const t0 = performance.now();
+    try {
+      const r = await fusePhotos(photos, baseIdx, { onStatus: (m) => setStatus('info', m) });
+      if (!r.ok) { setStatus('warn', r.reason); return; }
+
+      const vF = $('viewFused'), vB = $('viewBase'), vM = $('viewMap');
+      [vF, vB, vM].forEach(c => { c.width = r.rs.w; c.height = r.rs.h; });
+      vF.getContext('2d').putImageData(r.fusedID, 0, 0);
+      vB.getContext('2d').putImageData(r.baseID, 0, 0);
+      if (r.mapID) vM.getContext('2d').putImageData(r.mapID, 0, 0);
 
       photos.forEach(p => p.adoptPct = null);
+      const total = r.rs.w * r.rs.h;
       const legend = $('legend');
       legend.innerHTML = '';
-      aligned.forEach((a, i) => {
-        const pct = counts[i] / total * 100;
-        photos[a.photoIdx].adoptPct = pct;
+      r.usedPhotoIdx.forEach((pi, i) => {
+        const pct = r.counts[i] / total * 100;
+        photos[pi].adoptPct = pct;
         const chip = document.createElement('span');
         chip.className = 'chip';
         const sw = document.createElement('span');
         sw.className = 'sw';
-        sw.style.background = MAP_COLORS[a.photoIdx % MAP_COLORS.length];
+        sw.style.background = MAP_COLORS[pi % MAP_COLORS.length];
         chip.appendChild(sw);
         chip.appendChild(document.createTextNode(
-          '写真' + (a.photoIdx + 1) + (a.photoIdx === baseIdx ? '（基準）' : '') + ': ' + pct.toFixed(1) + '%'));
+          '写真' + (pi + 1) + (pi === baseIdx ? '（基準）' : '') + ': ' + pct.toFixed(1) + '%'));
         legend.appendChild(chip);
       });
       renderThumbs();
@@ -910,43 +998,36 @@
       $('elapsed').textContent = '(' + sec + ' 秒)';
       $('outCard').style.display = 'block';
       showView('vFused');
-      renderVerdict({ improvement, unhelpedFrac, unhelped, rs, excludedCount: excluded.length,
-        blurred, baseBlurSuspect });
+      renderVerdict({ improvement: r.improvement, unhelpedFrac: r.unhelpedFrac, unhelped: r.unhelped,
+        rs: r.rs, excludedCount: r.excluded.length, blurred: r.blurred, baseBlurSuspect: r.baseBlurSuspect });
       const warnMsgs = [];
-      if (excluded.length) warnMsgs.push(excluded.join('・') + ' は基準に重ねられなかったため除外しました。');
-      if (blurred.length) warnMsgs.push(blurred.join('・') + ' はぶれ・ピンぼけの疑いがあるため除外しました。');
-      if (baseBlurSuspect) warnMsgs.push('基準写真にもぶれ・ピンぼけの疑いがあります。⭐を別の写真に変えて再実行することをおすすめします。');
-      if (warnMsgs.length) {
-        setStatus('warn', warnMsgs.join(' '));
-      } else {
-        setStatus('ok', '合成が完了しました。下の「③ 結果」で見比べてください。');
-      }
+      if (r.excluded.length) warnMsgs.push(r.excluded.join('・') + ' は基準に重ねられなかったため除外しました。');
+      if (r.blurred.length) warnMsgs.push(r.blurred.join('・') + ' はぶれ・ピンぼけの疑いがあるため除外しました。');
+      if (r.baseBlurSuspect) warnMsgs.push('基準写真にもぶれ・ピンぼけの疑いがあります。⭐を別の写真に変えて再実行することをおすすめします。');
+      if (warnMsgs.length) setStatus('warn', warnMsgs.join(' '));
+      else setStatus('ok', '合成が完了しました。下の「③ 結果」で見比べてください。');
       $('outCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      window.reflectDebug = { n: photos.length, used: aligned.length, baseIdx, counts, excluded: excluded.slice(),
-        W: rs.w, H: rs.h, sec: parseFloat(sec), align: alignDiags,
+      window.reflectDebug = { n: photos.length, used: r.usedPhotoIdx.length, baseIdx, counts: r.counts,
+        excluded: r.excluded.slice(), W: r.rs.w, H: r.rs.h, sec: parseFloat(sec), align: r.alignDiags,
         quads: photos.map(p => p.quad), rectScores: photos.map(p => p.rectScore),
-        gains: aligned.map((a, i) => i === 0 ? { a: 1, b: 0 } : a.gain),
-        improvement: Math.round(improvement * 100) / 100,
-        unhelpedFrac: Math.round(unhelpedFrac * 1000) / 1000,
-        baseSharp: Math.round(baseSharp * 100) / 100,
-        blurred: blurred.slice(), baseBlurSuspect,
-        checkMode: isCheckMode() };
+        gains: r.gains,
+        improvement: Math.round(r.improvement * 100) / 100,
+        unhelpedFrac: Math.round(r.unhelpedFrac * 1000) / 1000,
+        baseSharp: r.baseSharp,
+        blurred: r.blurred.slice(), baseBlurSuspect: r.baseBlurSuspect,
+        checkMode: isCheckMode(), mode };
     } catch (e) {
       console.error(e);
       setStatus('warn', '処理中に問題が起きました。写真を選び直して再度お試しください。（詳細はブラウザのコンソールに記録されています）');
     } finally {
-      toDelete.forEach(m => { try { m.delete(); } catch (e) {} });
       $('run').disabled = false;
       window.reflectBusy = false;
     }
   }
 
   // ===== 撮り方の合否判定 (現場チェック) =====
-  // 「明るいまま変化なし」には作品自体の明るい部分 (紙・マット) も含まれ、機械だけでは
-  // 映り込みと区別できない。そこで赤マップを見せて最終判断は人に返す分業にする。
-  // しきい値は実写 3 セット + 合成テストで校正 (2026-07-18)。
-  const UNHELPED_WARN = 0.05; // 明るいまま残る画素がこの割合を超えたら赤マップ提示
-  const IMP_LOW = 1.5;        // 平均改善量がこれ未満なら「映り込みが動いていない」
+  const UNHELPED_WARN = 0.05;
+  const IMP_LOW = 1.5;
   function renderVerdict(v) {
     const box = $('verdictBox'), mapRow = $('verdictMapRow');
     if (!isCheckMode()) { box.style.display = 'none'; mapRow.style.display = 'none'; return; }
@@ -975,7 +1056,6 @@
     box.style.background = '#fef3e2'; box.style.color = 'var(--warn)';
     box.innerHTML = '<b style="font-size:15px;">⚠ 確認してください</b><br>' + warns.join('<br>')
       + '<br>仕上がりの見込みは下の「合成後」プレビューで確認できます。映り込みが残っているようなら、この場で撮り足すのが確実です。';
-    // 救援不能域を赤で重ねた小マップ
     if (v.unhelpedFrac > 0.01) {
       const vm = $('verdictMap');
       const ov = document.createElement('canvas');
@@ -1003,6 +1083,389 @@
     return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
   }
 
+  // ===== 一括モード =====
+  // bFiles: { file, name, thumb (canvas 96px), gray (480px Mat 8UC1 → ORB用), des (Mat), kp }
+  let bFiles = [];
+  let splits = new Set();   // i ∈ splits なら 写真 i と i+1 の間で区切る
+  let simVals = [];         // 隣接ペアの一致数 (診断用)
+  let batchResults = [];    // { name, blob, url, w, h, warns[], count, files[] }
+  const SIM_MATCH_MIN = 17; // 隣接写真の幾何整合一致 (RANSACインライア) がこれ未満なら別の作品 (実写15枚で校正: 境界12以下/同一22以上)
+
+  async function batchLoad(fileList) {
+    const files = Array.from(fileList).filter(f => /^image\//.test(f.type));
+    if (files.length < 2) { alert('写真を 2 枚以上まとめて選んでください。'); return; }
+    if (files.length > 200) { alert('一度に処理できるのは 200 枚までです。'); return; }
+    batchClear();
+    $('batchCard').style.display = 'block';
+    $('workCard').style.display = 'none';
+    $('outCard').style.display = 'none';
+    $('bresTitle').style.display = 'none';
+    $('zipAll').style.display = 'none';
+    $('bres').innerHTML = '';
+
+    // 名前順 = 撮影順
+    files.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    setStatusOn('batchStatus', 'info', '写真を読み込んでいます… (0/' + files.length + ')');
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      let img;
+      try { img = await loadImageFile(f); }
+      catch (e) { continue; }
+      const s = 480 / Math.max(img.naturalWidth, img.naturalHeight);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const rgba = cv.imread(c);
+      const gray = new cv.Mat();
+      cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+      rgba.delete();
+      const th = document.createElement('canvas');
+      const ts = 96 / c.width;
+      th.width = 96; th.height = Math.round(c.height * ts);
+      th.getContext('2d').drawImage(c, 0, 0, th.width, th.height);
+      bFiles.push({ file: f, name: f.name, thumb: th, gray });
+      if (i % 5 === 4) {
+        setStatusOn('batchStatus', 'info', '写真を読み込んでいます… (' + (i + 1) + '/' + files.length + ')');
+        await tick();
+      }
+    }
+
+    // 隣接類似でグループ境界を推定。一致「数」だけでは別作品でも多く出る
+    // (壁・額の模様が汎用的に一致する) ため、幾何整合する一致 (RANSAC インライア) で測る:
+    // 同じ作品なら一致点が 1 つのホモグラフィに乗る。別の作品なら乗らない。
+    setStatusOn('batchStatus', 'info', 'グループ分けを判定しています…');
+    await tick();
+    let orb;
+    try { orb = new cv.ORB(500); } catch (e) { orb = new cv.ORB(); }
+    for (const bf of bFiles) {
+      const kp = new cv.KeyPointVector(), des = new cv.Mat(), none = new cv.Mat();
+      orb.detectAndCompute(bf.gray, none, kp, des);
+      bf.des = des;
+      bf.kpts = [];
+      for (let k = 0; k < kp.size(); k++) { const pt = kp.get(k).pt; bf.kpts.push([pt.x, pt.y]); }
+      kp.delete(); none.delete();
+    }
+    orb.delete();
+    simVals = [];
+    const bf2 = new cv.BFMatcher(cv.NORM_HAMMING, true);
+    for (let i = 0; i < bFiles.length - 1; i++) {
+      let inliers = 0, matched = 0;
+      const A = bFiles[i], B = bFiles[i + 1];
+      if (A.des.rows >= 8 && B.des.rows >= 8) {
+        const dm = new cv.DMatchVector();
+        bf2.match(A.des, B.des, dm);
+        const arr = [];
+        for (let k = 0; k < dm.size(); k++) { const m = dm.get(k); if (m.distance < 80) arr.push(m); }
+        dm.delete();
+        arr.sort((a, b) => a.distance - b.distance);
+        const top = arr.slice(0, 150);
+        matched = top.length;
+        if (matched >= 12) {
+          const f1 = [], f2 = [];
+          for (const m of top) {
+            f1.push(A.kpts[m.queryIdx][0], A.kpts[m.queryIdx][1]);
+            f2.push(B.kpts[m.trainIdx][0], B.kpts[m.trainIdx][1]);
+          }
+          const m1 = cv.matFromArray(matched, 1, cv.CV_32FC2, f1);
+          const m2 = cv.matFromArray(matched, 1, cv.CV_32FC2, f2);
+          const inl = new cv.Mat();
+          const H = cv.findHomography(m1, m2, cv.RANSAC, 10, inl); // 背景に奥行きがあっても同一作品ペアを拾えるよう緩め
+          if (!H.empty()) inliers = cv.countNonZero(inl);
+          H.delete(); m1.delete(); m2.delete(); inl.delete();
+        }
+      }
+      simVals.push({ m: matched, inl: inliers });
+      if (inliers < SIM_MATCH_MIN) splits.add(i);
+    }
+    bf2.delete();
+    bFiles.forEach(bf => { bf.des.delete(); bf.des = null; bf.kpts = null; bf.gray.delete(); bf.gray = null; });
+
+    renderStrip();
+    const g = groupsFromSplits();
+    setStatusOn('batchStatus', 'info', bFiles.length + ' 枚を ' + g.length + ' グループに分けました。区切りを確認して「一括処理を開始」を押してください。');
+  }
+
+  function batchClear() {
+    bFiles.forEach(bf => { if (bf.gray) bf.gray.delete(); if (bf.des) bf.des.delete(); });
+    batchResults.forEach(r => { if (r.url) URL.revokeObjectURL(r.url); });
+    bFiles = []; splits = new Set(); simVals = []; batchResults = [];
+  }
+
+  function groupsFromSplits() {
+    const groups = [];
+    let start = 0;
+    for (let i = 0; i < bFiles.length; i++) {
+      if (i === bFiles.length - 1 || splits.has(i)) {
+        groups.push({ start, end: i });
+        start = i + 1;
+      }
+    }
+    return groups;
+  }
+
+  function renderStrip() {
+    const strip = $('strip');
+    strip.innerHTML = '';
+    const groups = groupsFromSplits();
+    const groupOf = new Array(bFiles.length);
+    groups.forEach((g, gi) => { for (let i = g.start; i <= g.end; i++) groupOf[i] = gi; });
+    bFiles.forEach((bf, i) => {
+      const d = document.createElement('div');
+      d.className = 's-thumb';
+      d.style.borderTopColor = MAP_COLORS[(groupOf[i] + 1) % MAP_COLORS.length];
+      d.appendChild(bf.thumb);
+      const num = document.createElement('span');
+      num.className = 's-num';
+      num.textContent = '作品' + (groupOf[i] + 1);
+      d.appendChild(num);
+      strip.appendChild(d);
+      if (i < bFiles.length - 1) {
+        const gap = document.createElement('div');
+        gap.className = 's-gap' + (splits.has(i) ? ' split' : '');
+        gap.textContent = splits.has(i) ? '｜' : '・';
+        gap.title = splits.has(i) ? 'ここで区切っています (タップでつなぐ)' : 'タップでここに区切りを入れる';
+        gap.addEventListener('click', () => {
+          if (splits.has(i)) splits.delete(i); else splits.add(i);
+          renderStrip();
+        });
+        strip.appendChild(gap);
+      }
+    });
+  }
+
+  $('batchRun').addEventListener('click', runBatch);
+
+  async function runBatch() {
+    if (window.reflectBusy || bFiles.length === 0) return;
+    window.reflectBusy = true;
+    $('batchRun').disabled = true;
+    const t0 = performance.now();
+    const groups = groupsFromSplits();
+    const prog = $('batchProgress');
+    prog.style.display = 'block';
+    batchResults.forEach(r => { if (r.url) URL.revokeObjectURL(r.url); });
+    batchResults = [];
+    $('bres').innerHTML = '';
+    $('bresTitle').style.display = 'block';
+    $('zipAll').style.display = 'none';
+    try {
+      for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
+        const files = [];
+        for (let i = g.start; i <= g.end; i++) files.push(bFiles[i].file);
+        $('batchProgressText').textContent = '作品 ' + (gi + 1) + '/' + groups.length + ' を処理中… (' + files.length + ' 枚)';
+        prog.firstElementChild.style.width = (gi / groups.length * 100) + '%';
+        await tick();
+        const res = await processGroup(files, (m) => {
+          $('batchProgressText').textContent = '作品 ' + (gi + 1) + '/' + groups.length + ': ' + m;
+        });
+        res.index = gi;
+        batchResults.push(res);
+        renderBatchResult(res, files);
+        await tick();
+      }
+      prog.firstElementChild.style.width = '100%';
+      const sec = ((performance.now() - t0) / 1000).toFixed(0);
+      $('batchElapsed').textContent = '(' + groups.length + ' 作品 / ' + sec + ' 秒)';
+      $('batchProgressText').textContent = '完了';
+      const nWarn = batchResults.filter(r => r.warns.length).length;
+      setStatusOn('batchStatus', nWarn ? 'warn' : 'ok',
+        '一括処理が完了しました。' + (nWarn ? '⚠ が付いた ' + nWarn + ' 作品は「開いて直す」で個別に調整できます。' : 'すべて問題なく処理できました。'));
+      if (batchResults.some(r => r.blob)) $('zipAll').style.display = 'inline-block';
+      window.reflectBatchDebug = { groups: groups.length, simVals: simVals.slice(),
+        results: batchResults.map(r => ({ name: r.name, count: r.count, warns: r.warns, w: r.w, h: r.h })) };
+    } catch (e) {
+      console.error(e);
+      setStatusOn('batchStatus', 'warn', '一括処理中に問題が起きました。（詳細はブラウザのコンソールに記録されています）');
+    } finally {
+      $('batchRun').disabled = false;
+      window.reflectBusy = false;
+    }
+  }
+
+  // 1 グループ処理: 3 枚以上 = 反射除去合成 / 1〜2 枚 = 切り出しのみ (2枚は合成も試す)
+  async function processGroup(files, onStatus) {
+    const list = [];
+    const warns = [];
+    try {
+      for (const f of files) {
+        try { list.push(await fileToPhoto(f, MAXDIM)); }
+        catch (e) { warns.push(f.name + ' を読み込めませんでした'); }
+      }
+      if (list.length === 0) return { name: 'error', blob: null, warns: ['写真を読み込めませんでした'], count: 0 };
+
+      let bIdx = 0, best = Infinity;
+      list.forEach((p, i) => { if (p.rectScore !== null && p.rectScore < best) { best = p.rectScore; bIdx = i; } });
+      const stem = list[bIdx].name.replace(/\.[^.]+$/, '');
+      let outID = null, suffix = '';
+
+      if (!list[bIdx].quad) {
+        list[bIdx].quad = defaultQuad(list[bIdx].mat.cols, list[bIdx].mat.rows);
+        warns.push('枠を自動検出できませんでした（写真ほぼ全体で切り出し）。「開いて直す」で枠を指定すると改善します');
+      }
+
+      if (list.length === 1) {
+        const q = orderCorners(list[0].quad);
+        const rs = rectSizeFromQuad(q);
+        const P = rectifyTransform(q, rs.w, rs.h);
+        const rect = warpToRect(list[0].mat, Array.from(P.data64F), rs.w, rs.h, false);
+        P.delete();
+        outID = matToImageData(rect.mat);
+        rect.mat.delete();
+        suffix = '_切り出し';
+        warns.push('1 枚だけのため反射除去なし（切り出しのみ）');
+      } else {
+        const r = await fusePhotos(list, bIdx, { onStatus, needMap: false });
+        if (!r.ok) {
+          // 合成不能 → 基準だけ切り出し
+          const q = orderCorners(list[bIdx].quad);
+          const rs = rectSizeFromQuad(q);
+          const P = rectifyTransform(q, rs.w, rs.h);
+          const rect = warpToRect(list[bIdx].mat, Array.from(P.data64F), rs.w, rs.h, false);
+          P.delete();
+          outID = matToImageData(rect.mat);
+          rect.mat.delete();
+          suffix = '_切り出し';
+          warns.push('写真を重ねられなかったため反射除去なし（基準のみ切り出し）');
+        } else {
+          outID = r.fusedID;
+          suffix = '_反射除去';
+          if (r.excluded.length) warns.push(r.excluded.join('・') + ' は位置合わせ不能で除外');
+          if (r.blurred.length) warns.push(r.blurred.join('・') + ' はぶれ疑いで除外');
+          if (r.baseBlurSuspect) warns.push('基準写真にぶれの疑い');
+          if (list.length === 2) warns.push('2 枚のみ（3 枚以上あると除去力が上がります）');
+        }
+      }
+
+      const c = document.createElement('canvas');
+      c.width = outID.width; c.height = outID.height;
+      c.getContext('2d').putImageData(outID, 0, 0);
+      const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+      return { name: stem + suffix + '.png', blob, url: URL.createObjectURL(blob),
+        w: outID.width, h: outID.height, warns, count: files.length, canvas: c, files };
+    } finally {
+      list.forEach(p => { try { p.mat.delete(); } catch (e) {} });
+    }
+  }
+
+  function renderBatchResult(res, files) {
+    const box = $('bres');
+    const card = document.createElement('div');
+    card.className = 'b-card';
+    if (res.canvas) {
+      const th = document.createElement('canvas');
+      const s = 164 / res.w;
+      th.width = 164; th.height = Math.round(res.h * s);
+      th.getContext('2d').drawImage(res.canvas, 0, 0, th.width, th.height);
+      card.appendChild(th);
+    }
+    const t = document.createElement('div');
+    t.className = 'b-title';
+    t.textContent = (res.warns.length ? '⚠ ' : '✓ ') + '作品' + (res.index + 1) + ' (' + res.count + '枚)';
+    card.appendChild(t);
+    if (res.warns.length) {
+      const w = document.createElement('div');
+      w.className = 'b-warn';
+      w.textContent = res.warns.join(' / ');
+      card.appendChild(w);
+    }
+    const row = document.createElement('div');
+    row.className = 'b-row';
+    if (res.blob) {
+      const dl = document.createElement('button');
+      dl.textContent = '⬇ 保存';
+      dl.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = res.url; a.download = res.name; a.click();
+      });
+      row.appendChild(dl);
+    }
+    const fix = document.createElement('button');
+    fix.textContent = '開いて直す';
+    fix.addEventListener('click', () => {
+      setMode('single');
+      loadFiles(res.files || files);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    row.appendChild(fix);
+    card.appendChild(row);
+    box.appendChild(card);
+  }
+
+  // ===== ZIP (無圧縮・自前生成 — PNG は圧縮済みなので store で十分) =====
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(u8) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function makeZip(entries) { // [{name, data:Uint8Array}]
+    const enc = new TextEncoder();
+    const parts = [], central = [];
+    let offset = 0;
+    for (const e of entries) {
+      const nameB = enc.encode(e.name);
+      const crc = crc32(e.data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);        // version
+      lh.setUint16(6, 0x0800, true);    // UTF-8 filename
+      lh.setUint16(8, 0, true);         // store
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, e.data.length, true);
+      lh.setUint32(22, e.data.length, true);
+      lh.setUint16(26, nameB.length, true);
+      parts.push(lh.buffer, nameB, e.data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint32(16, crc, true);
+      ch.setUint32(20, e.data.length, true);
+      ch.setUint32(24, e.data.length, true);
+      ch.setUint16(28, nameB.length, true);
+      ch.setUint32(42, offset, true);
+      central.push({ buf: ch.buffer, nameB });
+      offset += 30 + nameB.length + e.data.length;
+    }
+    const cparts = [];
+    let csize = 0;
+    for (const c of central) { cparts.push(c.buf, c.nameB); csize += 46 + c.nameB.length; }
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(8, entries.length, true);
+    eocd.setUint16(10, entries.length, true);
+    eocd.setUint32(12, csize, true);
+    eocd.setUint32(16, offset, true);
+    return new Blob([...parts, ...cparts, eocd.buffer], { type: 'application/zip' });
+  }
+
+  $('zipAll').addEventListener('click', async () => {
+    const entries = [];
+    for (const r of batchResults) {
+      if (!r.blob) continue;
+      const buf = new Uint8Array(await r.blob.arrayBuffer());
+      entries.push({ name: String(r.index + 1).padStart(2, '0') + '_' + r.name, data: buf });
+    }
+    if (!entries.length) return;
+    const zip = makeZip(entries);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zip);
+    a.download = '作品写真_反射除去.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  });
+
   // ===== 結果ビュー切り替え =====
   const VIEWS = { vFused: 'viewFused', vBase: 'viewBase', vMap: 'viewMap' };
   Object.keys(VIEWS).forEach(id => $(id).addEventListener('click', () => showView(id)));
@@ -1013,7 +1476,7 @@
     });
   }
 
-  // ===== 保存 =====
+  // ===== 保存 (個別モード) =====
   $('download').addEventListener('click', () => {
     const stem = (photos[baseIdx] && photos[baseIdx].name || 'result').replace(/\.[^.]+$/, '');
     $('viewFused').toBlob((blob) => {
@@ -1024,6 +1487,8 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     }, 'image/png');
   });
+
+  setMode(mode);
 </script>
 </body>
 </html>
