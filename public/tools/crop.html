@@ -63,7 +63,7 @@
 </head>
 <body>
 <header>
-  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v43</span></h1>
+  <h1>作品写真 自動切り出し <span class="badge">プロトタイプ v44</span></h1>
   <div class="sub">写真の中の作品を自動で見つけて、正面から見た長方形に補正します。ずれたら四隅をドラッグで直せます。</div>
 </header>
 
@@ -103,6 +103,15 @@
           <button id="recordGt">📌 これを正解として記録</button>
           <button id="exportGt">📋 正解を書き出し</button>
           <span id="gtCount" class="muted"></span>
+        </div>
+        <div class="row" id="vaultRow" style="margin-top:6px;">
+          <label class="muted" style="font-size:12px;">撮影セット名 <input id="vaultSet" type="text" placeholder="例: ギャラリーモーニング" style="width:13em;"></label>
+          <button id="vaultOpen">🗃 学習用保管庫</button>
+          <span id="vaultCount" class="muted"></span>
+        </div>
+        <div id="vaultPanel" style="display:none; margin-top:8px; border:1px solid #dde3ef; border-radius:8px; padding:10px;">
+          <p class="hint" style="margin-top:0;">📌 で記録した写真は、正解の四隅といっしょに画像そのものもこのブラウザ内に保存されます (学習用)。セットごとに ZIP で書き出すと、そのまま学習・評価に使えます。</p>
+          <div id="vaultBody"></div>
         </div>
         <div class="row" style="margin-top:10px;">
           <button id="rotL">↺ 左に回す</button>
@@ -1023,6 +1032,7 @@
   let dragIndex = -1;
   let dragEdge = -1, edgeState = null;   // 辺スライド (平行移動)
   let currentFileName = '';   // 読み込んだ写真のファイル名 (GT 記録キー)
+  let currentFile = null;     // 読み込んだ元 File (保管庫へ元バイトのまま保存する用)
   let lastOuterQuad = null;   // 直近の自動検出が出した AI 外周枠 (🎯 の起点)
   let trimMode = false, trimRect = null, trimDrag = null;  // ✂ 切り落としモード (trimRect は画像座標 {l,t,r,b})
   let imageEdited = false;    // 回転・切り落とし後 true。GT は加工後画像を別名保存してそれに対して記録する
@@ -1048,6 +1058,7 @@
     if (!cvReady) { alert('画像処理エンジンの準備がまだ終わっていません。数秒待って再度お試しください。'); return; }
     if (!/^image\//.test(file.type)) { alert('画像ファイルを選んでください。'); return; }
     currentFileName = file.name || '';
+    currentFile = file;   // 保管庫 (学習用) に元バイトのまま保存するための参照
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
@@ -1087,13 +1098,20 @@
   // 検出パイプライン本体。現在の imgEl / fullMat に対して1周実行し、結果を返す
   // (UI には触らない — autoDetect と zoomRedetect の両方から呼ばれる)。
   async function detectPipeline() {
+    // 評価ハーネス用の診断フック: 各段の枠と検品値を記録する (UI には影響しない)。
+    // zoomRedetect が部分画像で再実行するため、実行ごとに配列へ積む (1周目=フル座標)。
+    const dbg = {};
+    (window.__cropRuns = window.__cropRuns || []).push(dbg);
+    const dq = (q) => q ? q.map(p => [Math.round(p.x), Math.round(p.y)]) : null;
     let ml = null;
     try { ml = await detectByML(); } catch (e) { console.warn('AI検出でエラー。従来検出に切り替えます。', e); }
     if (ml) {
       const outer = orderCorners(ml.quad);
+      dbg.outer = dq(outer);
       // 2回目AI: 外周の中で絵そのものを掴み直す。検品 (solidity/σ後) を通れば採用
       let second = null;
       try { second = await aiSecondPass(outer); } catch (e) { console.warn('2回目のAI検出でエラー。境目探索に切り替えます。', e); }
+      if (second) dbg.second = { quad: dq(second.quad), frac: second.frac, solidity: second.solidity, sigAfter: second.sigAfter, ringSigma: second.ringSigma, accepted: secondPassAccepted(second) };
       let quad, msg;
       if (secondPassAccepted(second)) {
         quad = second.quad;
@@ -1105,6 +1123,7 @@
         //   際だけ平坦な絵に騙される。あいだの領域全体なら絵の続きが必ず写る。
         try {
           const third = await aiSecondPass(quad);
+          if (third) dbg.third = { quad: dq(third.quad), frac: third.frac, solidity: third.solidity, ringSigma: third.ringSigma };
           if (third && third.frac >= 0.15 && third.frac <= 0.92 &&
               third.solidity >= 0.80 &&
               third.ringSigma !== null && third.ringSigma <= 25) {
@@ -1116,6 +1135,7 @@
         // 検品を通らなければ v22 までの動き: ルールで境目を探し、だめなら外周
         let inner = null;
         try { inner = refineInward(outer); } catch (e) { console.warn('内側の境目探索でエラー。外周の枠を使います。', e); }
+        dbg.inner = dq(inner);
         if (inner) {
           quad = inner;
           msg = '自動検出しました（AI・絵の縁まで検出）。ずれていたら辺の青四角をスライドして直してください。';
@@ -1124,7 +1144,9 @@
           msg = '自動検出しました（AI）。台紙や額ごと囲んだときは、辺の青四角を内側へスライドするか「🎯 内側の絵」を試してください。';
         }
       }
+      dbg.beforeSnap = dq(quad);
       quad = snapEdgesFullRes(quad);   // 仕上げ: 元画像の解像度で辺を境界へ吸着
+      dbg.final = dq(quad);
       return { quad, msg, kind: 'ok', outer };
     }
     const cands = generateCandidates();
@@ -1985,25 +2007,38 @@
     const has = key && gtStore()[key];
     $('gtCount').textContent = (has ? 'この写真: 記録済み / ' : '') + (n ? '合計 ' + n + ' 枚' : '未記録');
   }
-  $('recordGt').addEventListener('click', () => {
+  $('recordGt').addEventListener('click', async () => {
     if (!corners || !fullMat) { alert('写真を読み込んで四隅を合わせてください。'); return; }
     if (!currentFileName) { alert('ファイル名が取得できませんでした。'); return; }
-    let key = currentFileName, savedNow = false;
+    let key = currentFileName, savedNow = false, blob = currentFile;
     if (imageEdited) {
+      // 加工後は canvas 再保存が正解の対象。ダウンロードと保管庫は同一バイトにする
+      const dataUrl = imgEl.toDataURL('image/jpeg', 0.95);
+      blob = dataUrlToBlob(dataUrl);
       if (!editedSavedName) {
         editedSavedName = currentFileName.replace(/\.[^.]+$/, '') + '_edit' + editSeq + '.jpg';
-        downloadData(imgEl.toDataURL('image/jpeg', 0.95), editedSavedName);  // 加工後の imgEl は canvas
+        downloadData(dataUrl, editedSavedName);
         savedNow = true;
       }
       key = editedSavedName;
     }
     const store = gtStore();
-    store[key] = { corners: corners.map(p => [Math.round(p.x), Math.round(p.y)]), w: fullMat.cols, h: fullMat.rows };
+    const rec = { corners: corners.map(p => [Math.round(p.x), Math.round(p.y)]), w: fullMat.cols, h: fullMat.rows };
+    store[key] = rec;
     localStorage.setItem('crop_gt', JSON.stringify(store));
-    setStatus(savedNow
+    let vaultNote = '';
+    try {
+      if (blob) {
+        await vaultPut({ name: key, blob, w: rec.w, h: rec.h, corners: rec.corners,
+                         set: ($('vaultSet').value || '').trim() || '未分類', savedAt: Date.now() });
+        vaultNote = '画像も学習用保管庫に保存しました。';
+      }
+    } catch (e) { console.warn('保管庫への保存に失敗:', e); vaultNote = '（画像の保管庫保存には失敗。詳細はコンソール）'; }
+    setStatus((savedNow
       ? '加工後の画像を「' + key + '」として保存し、この四隅をその正解として記録しました。保存した画像は元の写真と同じ場所に置いてください。'
-      : 'この四隅を「' + key + '」の正解として記録しました。', 'ok');
+      : 'この四隅を「' + key + '」の正解として記録しました。') + vaultNote, 'ok');
     gtCountUpdate();
+    vaultCountUpdate();
   });
   $('exportGt').addEventListener('click', () => {
     const store = gtStore();
@@ -2011,6 +2046,169 @@
     const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'crop-gt.json'; a.click();
   });
+
+  // ===== 学習用保管庫 (IndexedDB) =====
+  // 📌 で記録した写真を「元画像バイト + 正解四隅 + セット名」のまま端末内に貯める。
+  // 学習・評価はセット単位の ZIP (画像 + crop-gt.json + vault-sets.json) で持ち出す。
+  function dataUrlToBlob(dataUrl) {
+    const [head, b64] = dataUrl.split(',');
+    const mime = (head.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: mime });
+  }
+  function vaultDb() {
+    return new Promise((res, rej) => {
+      const rq = indexedDB.open('crop_vault', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('samples', { keyPath: 'name' });
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function vaultTx(mode, fn) {
+    const db = await vaultDb();
+    try {
+      return await new Promise((res, rej) => {
+        const tx = db.transaction('samples', mode);
+        const out = fn(tx.objectStore('samples'));
+        tx.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
+        tx.onerror = () => rej(tx.error);
+      });
+    } finally { db.close(); }
+  }
+  const vaultPut = (rec) => vaultTx('readwrite', st => st.put(rec));
+  const vaultDel = (name) => vaultTx('readwrite', st => st.delete(name));
+  const vaultAll = () => vaultTx('readonly', st => st.getAll());
+  async function vaultCountUpdate() {
+    try {
+      const all = await vaultAll();
+      $('vaultCount').textContent = all.length ? '保管庫 ' + all.length + ' 枚' : '';
+    } catch (e) { /* IndexedDB 不可の環境では黙って空欄 */ }
+  }
+  $('vaultSet').value = localStorage.getItem('crop_vault_set') || '';
+  $('vaultSet').addEventListener('change', () => localStorage.setItem('crop_vault_set', $('vaultSet').value));
+  $('vaultOpen').addEventListener('click', async () => {
+    const panel = $('vaultPanel');
+    if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    await vaultRender();
+  });
+  async function vaultRender() {
+    const body = $('vaultBody');
+    let all;
+    try { all = await vaultAll(); } catch (e) {
+      body.textContent = 'このブラウザでは保管庫を使えませんでした。'; return;
+    }
+    if (!all.length) { body.textContent = 'まだ保管された写真はありません。📌 で記録すると貯まります。'; return; }
+    all.sort((a, b) => (a.set || '').localeCompare(b.set || '') || (a.savedAt || 0) - (b.savedAt || 0));
+    const bySet = new Map();
+    for (const r of all) {
+      const s = r.set || '未分類';
+      if (!bySet.has(s)) bySet.set(s, []);
+      bySet.get(s).push(r);
+    }
+    body.textContent = '';
+    for (const [set, recs] of bySet) {
+      const h = document.createElement('div');
+      h.style.cssText = 'display:flex; align-items:center; gap:10px; margin:8px 0 4px;';
+      const title = document.createElement('b');
+      title.textContent = set + '（' + recs.length + ' 枚）';
+      const btn = document.createElement('button');
+      btn.textContent = '🗜 このセットを ZIP で書き出し';
+      btn.addEventListener('click', () => vaultZip(set, recs));
+      h.append(title, btn);
+      body.appendChild(h);
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px;';
+      for (const r of recs) {
+        const cell = document.createElement('div');
+        cell.style.cssText = 'width:96px; font-size:10px; text-align:center;';
+        const im = document.createElement('img');
+        im.style.cssText = 'width:96px; height:72px; object-fit:cover; border-radius:4px; display:block;';
+        im.src = URL.createObjectURL(r.blob);
+        im.onload = () => URL.revokeObjectURL(im.src);
+        const nm = document.createElement('div');
+        nm.textContent = r.name;
+        nm.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+        nm.title = r.name;
+        const del = document.createElement('button');
+        del.textContent = '削除';
+        del.style.cssText = 'font-size:10px; padding:1px 6px;';
+        del.addEventListener('click', async () => {
+          if (!confirm('「' + r.name + '」を保管庫から削除しますか？（記録済みの正解座標はそのまま残ります）')) return;
+          await vaultDel(r.name);
+          await vaultRender();
+          vaultCountUpdate();
+        });
+        cell.append(im, nm, del);
+        grid.appendChild(cell);
+      }
+      body.appendChild(grid);
+    }
+  }
+
+  // 依存なしの ZIP 生成 (無圧縮 store 方式。JPEG は再圧縮の意味がない)
+  function crc32(u8, seed) {
+    let c = seed ^ -1;
+    for (let i = 0; i < u8.length; i++) {
+      c ^= u8[i];
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+    return (c ^ -1) >>> 0;
+  }
+  function zipBuild(files) { // files: [{name, u8}]
+    const enc = new TextEncoder();
+    const parts = [], central = [];
+    let offset = 0;
+    const num = (n, bytes) => { const a = new Uint8Array(bytes); for (let i = 0; i < bytes; i++) a[i] = (n >>> (8 * i)) & 0xff; return a; };
+    for (const f of files) {
+      const nameU8 = enc.encode(f.name);
+      const crc = crc32(f.u8, 0);
+      const head = [num(0x04034b50, 4), num(20, 2), num(0x0800, 2), num(0, 2), num(0, 2), num(0, 2),
+                    num(crc, 4), num(f.u8.length, 4), num(f.u8.length, 4), num(nameU8.length, 2), num(0, 2), nameU8];
+      central.push({ nameU8, crc, size: f.u8.length, offset });
+      for (const p of head) { parts.push(p); offset += p.length; }
+      parts.push(f.u8); offset += f.u8.length;
+    }
+    const cdStart = offset;
+    for (const c of central) {
+      const rec = [num(0x02014b50, 4), num(20, 2), num(20, 2), num(0x0800, 2), num(0, 2), num(0, 2), num(0, 2),
+                   num(c.crc, 4), num(c.size, 4), num(c.size, 4), num(c.nameU8.length, 2), num(0, 2), num(0, 2),
+                   num(0, 2), num(0, 2), num(0, 4), num(c.offset, 4), c.nameU8];
+      for (const p of rec) { parts.push(p); offset += p.length; }
+    }
+    const cdSize = offset - cdStart;
+    parts.push(num(0x06054b50, 4), num(0, 2), num(0, 2), num(central.length, 2), num(central.length, 2),
+               num(cdSize, 4), num(cdStart, 4), num(0, 2));
+    return new Blob(parts, { type: 'application/zip' });
+  }
+  async function vaultZip(set, recs) {
+    try {
+      setStatus('ZIP を作成中…（' + recs.length + ' 枚）', 'info');
+      const files = [];
+      const gtJson = {}, setsJson = {};
+      for (const r of recs) {
+        files.push({ name: r.name, u8: new Uint8Array(await r.blob.arrayBuffer()) });
+        gtJson[r.name] = { corners: r.corners, w: r.w, h: r.h };
+        setsJson[r.name] = r.set || '未分類';
+      }
+      const enc = new TextEncoder();
+      files.push({ name: 'crop-gt.json', u8: enc.encode(JSON.stringify(gtJson, null, 2)) });
+      files.push({ name: 'vault-sets.json', u8: enc.encode(JSON.stringify(setsJson, null, 2)) });
+      const blob = zipBuild(files);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'crop-training-' + set.replace(/[\\/:*?"<>|]/g, '_') + '.zip';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      setStatus('「' + set + '」' + recs.length + ' 枚を ZIP に書き出しました。', 'ok');
+    } catch (e) {
+      console.error(e);
+      setStatus('ZIP の作成に失敗しました。写真の枚数が多い場合はセットを分けてお試しください。', 'warn');
+    }
+  }
+  vaultCountUpdate();
 
   // ===== 切り出し (homography) =====
   $('crop').addEventListener('click', () => {
