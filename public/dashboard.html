@@ -422,6 +422,9 @@
     function startDashboard() {
       let artworks = [];
       let likes = [];
+      // 統計処理の開始日時 (analytics の④で設定)。これより前のいいね
+      // (搬入・キャプション確認時のテスト操作) は集計から除外する。空なら全件通す。
+      let openingAt = '';
       const seenLikeIds = new Set();
       let firstLikeSnapshot = true;
 
@@ -435,6 +438,9 @@
             window.sandboxBadge.render('sandboxBadge', exData, 'operator');
           }
           evaluateEndedBanner(exData);
+          // analytics 側で開始日時を変更したらライブに反映する。
+          openingAt = exData.opening_at || '';
+          renderAll();
         } else {
           document.getElementById('exName').textContent = exVal + ' (展覧会未登録)';
           document.getElementById('endedBanner').classList.remove('show');
@@ -474,10 +480,16 @@
       }
 
       function renderAll(newCommentIds) {
+        // 開始日時より前のいいね (テスト操作) を除外してから集計する。
+        // analytics と同じ純粋関数を使い、2 画面で数字が一致するようにする。
+        const shown = window.DashboardMetrics
+          ? window.DashboardMetrics.filterByOpeningAt(likes, openingAt)
+          : likes;
+
         // 参加者数 = isLike=true を1回以上記録した sessionId の数（実際にいいねした人）
-        const visitors = new Set(likes.filter(l => l.isLike && l.sessionId).map(l => l.sessionId)).size;
-        const totalLikes = likes.filter(l => l.isLike).length;
-        const totalComments = likes.filter(l => l.comment && l.comment.trim()).length;
+        const visitors = new Set(shown.filter(l => l.isLike && l.sessionId).map(l => l.sessionId)).size;
+        const totalLikes = shown.filter(l => l.isLike).length;
+        const totalComments = shown.filter(l => l.comment && l.comment.trim()).length;
         const totalArtworks = artworks.filter(a => (a.status || '').toString() === '1').length;
 
         document.getElementById('statVisitors').textContent = visitors.toLocaleString();
@@ -486,19 +498,19 @@
         document.getElementById('statArtworks').textContent = totalArtworks.toLocaleString();
 
         // 合算: 物理 + Web 両方を含むいいね数
-        renderRanking('likesRanking', countByWork(l => l.isLike), 'いいね');
+        renderRanking('likesRanking', countByWork(shown, l => l.isLike), 'いいね');
         // 会場 (物理 QR): source が 'gallery' でない doc。旧 doc も source 未設定 = 物理扱い
-        renderRanking('physicalRanking', countByWork(l => l.isLike && l.source !== 'gallery'), 'いいね');
+        renderRanking('physicalRanking', countByWork(shown, l => l.isLike && l.source !== 'gallery'), 'いいね');
         // Web ギャラリー: source === 'gallery'
-        renderRanking('webRanking', countByWork(l => l.isLike && l.source === 'gallery'), 'いいね');
-        renderFeed(newCommentIds || []);
+        renderRanking('webRanking', countByWork(shown, l => l.isLike && l.source === 'gallery'), 'いいね');
+        renderFeed(shown, newCommentIds || []);
 
         document.getElementById('updatedAt').textContent = '最終更新: ' + new Date().toLocaleTimeString('ja-JP');
       }
 
-      function countByWork(predicate) {
+      function countByWork(list, predicate) {
         const counts = {};
-        likes.forEach(l => {
+        list.forEach(l => {
           if (predicate(l) && l.workId) counts[l.workId] = (counts[l.workId] || 0) + 1;
         });
         return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -524,8 +536,8 @@
         }).join('');
       }
 
-      function renderFeed(newIds) {
-        const items = likes
+      function renderFeed(list, newIds) {
+        const items = list
           .filter(l => l.comment && l.comment.trim())
           .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
           .slice(0, 30);
@@ -554,6 +566,7 @@
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
+  <script src="js/dashboard-metrics.js"></script>
   <script>
     (function () {
       var exNameEl = document.getElementById('exName');
