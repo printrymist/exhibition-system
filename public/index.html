@@ -643,7 +643,45 @@
     };
 
     const browserLang = (navigator.language || "ja").startsWith("ja") ? "ja" : "en";
-    let currentLang = localStorage.getItem("rohei_lang") || browserLang;
+
+    // 来場者が端末に残す設定 (言語・ニックネーム) は 24 時間で失効させる。
+    // localStorage は origin (qriine.com) 単位で期限なく残るため、期限を切らないと
+    // 会場で誰かが一度 EN を押しただけで、その端末では以後すべての作品 QR が
+    // (別の展覧会でも) 永久に英語で開いてしまう。共用タブレットでは次の人の入力欄に
+    // 前の人のニックネームが残る。
+    // localStorage 自体に有効期限の仕組みが無いので、保存時刻を一緒に記録して自前で判定する。
+    const VISITOR_PREF_TTL_MS = 24 * 60 * 60 * 1000;
+
+    function savePref(key, value) {
+      try { localStorage.setItem(key, JSON.stringify({ v: value, ts: Date.now() })); } catch (_e) {}
+    }
+
+    // 期限内の値を返す。期限切れ・旧形式・壊れた値は破棄して null を返す。
+    // isValid: 値の妥当性チェック (省略時は文字列であることのみ見る)
+    function loadPref(key, isValid) {
+      var raw = null;
+      try { raw = localStorage.getItem(key); } catch (_e) {}
+      if (!raw) return null;
+      var value = null;
+      try {
+        var o = JSON.parse(raw);
+        // 端末の時計がずれていると経過時間が負になり得る。負を素通りさせると
+        // 未来の時刻を持つ値が失効しなくなるので、軽い進み (5 分) だけ許容する。
+        var age = (o && typeof o.ts === "number") ? (Date.now() - o.ts) : NaN;
+        if (o && age > -5 * 60 * 1000 && age < VISITOR_PREF_TTL_MS &&
+            (isValid ? isValid(o.v) : typeof o.v === "string")) {
+          value = o.v;
+        }
+      } catch (_e) {
+        // 旧形式 (生文字列) は保存時刻が不明 = 期限切れ扱いで破棄する。
+      }
+      if (value === null) { try { localStorage.removeItem(key); } catch (_e) {} }
+      return value;
+    }
+
+    function isLangCode(v) { return v === "ja" || v === "en"; }
+
+    let currentLang = loadPref("rohei_lang", isLangCode) || browserLang;
 
     // Storage download URL を Hosting CDN 経由 (/img/...) に翻訳して、
     // egress を Storage ($0.12/GB) → Hosting CDN (無料) に振り替える。
@@ -703,7 +741,7 @@
 
     function toggleLang() {
       currentLang = (currentLang === "ja") ? "en" : "ja";
-      localStorage.setItem("rohei_lang", currentLang);
+      savePref("rohei_lang", currentLang);
       reloadApp();
     }
 
@@ -1298,7 +1336,7 @@
         document.getElementById('ansSubmitBtn').innerText = t('ansSubmitBtnAdded');
         document.getElementById('ansAlreadyLikedMsg').style.display = 'block';
       }
-      var savedNickname = localStorage.getItem("nickname_" + ex);
+      var savedNickname = loadPref("nickname_" + ex);
       if (savedNickname) {
         document.getElementById('ansNicknameInput').value = savedNickname;
       }
@@ -1497,7 +1535,7 @@
           : t('ansCountMsg') + fsCount;
 
         localStorage.setItem("voted_" + exVal + "_" + idVal, "true");
-        if (nicknameTrim) localStorage.setItem("nickname_" + exVal, nicknameTrim);
+        if (nicknameTrim) savePref("nickname_" + exVal, nicknameTrim);
       } catch (err) {
         console.error('submit failed:', err);
         alert(friendlyError(err, '送信'));

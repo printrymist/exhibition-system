@@ -35,6 +35,44 @@
     }
   }
 
+  // メールリンクを開いたときの本人確認用に、送信先アドレスを端末に控えておく。
+  // 期限を切らないと、共用 PC で前の人のアドレスが残り続け、次の人が自分のリンクを
+  // 開いたときに他人のアドレスでサインインを試みて不可解なエラーになる。
+  const EMAIL_KEY = 'emailForSignIn';
+  const EMAIL_TTL_MS = 24 * 60 * 60 * 1000;
+
+  function saveSignInEmail(addr) {
+    try {
+      window.localStorage.setItem(EMAIL_KEY, JSON.stringify({ email: addr, ts: Date.now() }));
+    } catch (_e) {}
+  }
+
+  function clearSignInEmail() {
+    try { window.localStorage.removeItem(EMAIL_KEY); } catch (_e) {}
+  }
+
+  // 期限内なら控えたアドレスを返す。期限切れ・壊れた値は破棄して null。
+  function loadSignInEmail() {
+    var raw = null;
+    try { raw = window.localStorage.getItem(EMAIL_KEY); } catch (_e) {}
+    if (!raw) return null;
+    var o = null;
+    try {
+      o = JSON.parse(raw);
+    } catch (_e) {
+      // 旧形式 (アドレスの生文字列)。この修正の直前にリンクを送った人を弾かないよう
+      // そのまま使う。他人の残骸だった場合はサインインに失敗し、下で破棄 + 再入力になる。
+      return raw;
+    }
+    if (o && typeof o.email === 'string' && typeof o.ts === 'number') {
+      // 端末の時計が進んでいると経過時間が負になる。軽い進み (5 分) だけ許容する。
+      var age = Date.now() - o.ts;
+      if (age > -5 * 60 * 1000 && age < EMAIL_TTL_MS) return o.email;
+    }
+    clearSignInEmail();
+    return null;
+  }
+
   // メールリンクの送信 (Cloud Function 経由)
   // email: 送信先アドレス (string)
   // 返り値: Promise<void>
@@ -44,7 +82,7 @@
     var fn = firebase.app().functions('asia-northeast1').httpsCallable('sendSignInLink');
     return fn({ email: addr, continueUrl: window.location.href })
       .then(function () {
-        window.localStorage.setItem('emailForSignIn', addr);
+        saveSignInEmail(addr);
       });
   }
 
@@ -57,20 +95,33 @@
     if (!auth.isSignInWithEmailLink(href)) {
       return Promise.resolve(null);
     }
-    var email = window.localStorage.getItem('emailForSignIn');
-    if (!email) {
-      // 別端末でリンクを開いた場合などはここに来る。本人確認のため再入力を求める。
-      email = window.prompt('確認のため、ログインに使用したメールアドレスを入力してください:');
-      if (!email) {
+    // 控えたアドレスで試し、失敗したらそれを破棄して本人に再入力してもらう。
+    // (控えが別人のもの / 古いものだったケース。ここで諦めるとログインできない)
+    function signInWith(email, fromStorage) {
+      return auth.signInWithEmailLink(String(email).trim(), href)
+        .then(function (result) {
+          clearSignInEmail();
+          cleanAuthParamsFromUrl();
+          return result.user;
+        })
+        .catch(function (err) {
+          clearSignInEmail();
+          if (!fromStorage) throw err;
+          return askEmailAndSignIn();
+        });
+    }
+
+    // 別端末でリンクを開いた場合などはここに来る。本人確認のため入力を求める。
+    function askEmailAndSignIn() {
+      var typed = window.prompt('確認のため、ログインに使用したメールアドレスを入力してください:');
+      if (!typed) {
         return Promise.reject(new Error('Email is required to complete sign-in'));
       }
+      return signInWith(typed, false);
     }
-    return auth.signInWithEmailLink(email.trim(), href)
-      .then(function (result) {
-        window.localStorage.removeItem('emailForSignIn');
-        cleanAuthParamsFromUrl();
-        return result.user;
-      });
+
+    var saved = loadSignInEmail();
+    return saved ? signInWith(saved, true) : askEmailAndSignIn();
   }
 
   // 現在ログイン中の運営者ユーザを返す。未ログインまたは非運営者なら null。
