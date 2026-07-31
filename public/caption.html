@@ -3487,6 +3487,11 @@
       const placeholder = document.getElementById('previewPlaceholder');
       frame.srcdoc = printHtml;
       frame.addEventListener('load', function () {
+        // 測定より先に iframe を表示する。display:none のまま autoFitText を呼ぶと
+        // 全要素の高さが 0 と測定され、初回だけ「何でも収まる」誤判定になる
+        // (2 回目以降の再描画で突然警告が出る、という不整合の原因だった)。
+        if (placeholder) placeholder.style.display = 'none';
+        frame.style.display = 'block';
         if (!isPhone) {
           const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
           showOverflowWarning(overflow);
@@ -3494,9 +3499,6 @@
           // phone preview ではカード overflow は概念上発生しない
           showOverflowWarning([]);
         }
-        // 初回 generate 後、placeholder を消して iframe を表示
-        if (placeholder) placeholder.style.display = 'none';
-        frame.style.display = 'block';
         const status = document.getElementById('previewStatus');
         if (status) status.innerText = '✓ 最新';
       }, { once: true });
@@ -4121,11 +4123,24 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     // はみ出させる + 一覧を返す。呼び出し側 (showOverflowWarning) が UI に反映。
     function autoFitText(doc, win) {
       const overflowList = [];
+      // 行数「制限なし (0)」のフィールドをカード単位で集める (第2パスでカードの
+      // 物理高さ超過を判定するため)。Map key = .cap-card 要素。
+      const unlimitedByCard = new Map();
       doc.querySelectorAll('.auto-fit').forEach(function (el) {
-        var maxLines = parseInt(el.dataset.maxLines) || 2;
+        // 「制限なし」は 0。`parseInt(...) || 2` だと 0 が falsy で 2 行に化けて
+        // しまう (制限なし設定が無視される) ので、未指定 (NaN) のときだけ 2 にする。
+        var maxLines = parseInt(el.dataset.maxLines);
+        if (isNaN(maxLines)) maxLines = 2;
         var minSize = parseFloat(el.dataset.minSize) || 7;
         if (maxLines === 0) {
+          // 行数では縮めない。カードに物理的に入るかは第2パスで判定する
+          // (ここで return して終わりにすると、はみ出しても黙って切れてしまう)。
           el.style.overflow = 'visible';
+          var cardOfEl = el.closest('.cap-card');
+          if (cardOfEl) {
+            if (!unlimitedByCard.has(cardOfEl)) unlimitedByCard.set(cardOfEl, []);
+            unlimitedByCard.get(cardOfEl).push(el);
+          }
           return;
         }
         var origSize = parseFloat(el.dataset.size);
@@ -4155,6 +4170,39 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             origSize: origSize,
             finalSize: size,
             text: (el.textContent || '').trim()
+          });
+        }
+      });
+      // 第2パス: 「制限なし」フィールドを含むカードは、カードの物理高さで判定する。
+      // はみ出していれば制限なしフィールドを minSize まで 0.5pt ずつ縮小し、
+      // それでも入らなければ警告に載せる (省略・切り捨てはしない方針)。
+      unlimitedByCard.forEach(function (els, card) {
+        var cardOverflows = function () { return card.scrollHeight > card.clientHeight + 2; };
+        var shrunk = true;
+        while (cardOverflows() && shrunk) {
+          shrunk = false;
+          els.forEach(function (el) {
+            var size = parseFloat(el.style.fontSize) || parseFloat(el.dataset.size);
+            var minSize = parseFloat(el.dataset.minSize) || 7;
+            if (size - 0.5 >= minSize) {
+              el.style.fontSize = (size - 0.5) + 'pt';
+              shrunk = true;
+            }
+          });
+        }
+        if (cardOverflows()) {
+          // どの制限なしフィールドが超過の主因かは特定できないため、カード内の
+          // 制限なしフィールド全てを警告対象にする (通常は 1 カード 1 フィールド)。
+          els.forEach(function (el) {
+            el.dataset.overflow = 'true';
+            card.classList.add('has-overflow');
+            overflowList.push({
+              artworkId: card.dataset.artworkId || '?',
+              field: el.dataset.field || '?',
+              origSize: parseFloat(el.dataset.size),
+              finalSize: parseFloat(el.style.fontSize) || parseFloat(el.dataset.size),
+              text: (el.textContent || '').trim()
+            });
           });
         }
       });
