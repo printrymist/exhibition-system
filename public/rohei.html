@@ -26,7 +26,7 @@
   }
   .wrap{max-width:880px;margin:0 auto;padding:0 24px;}
 
-  header{padding:56px 0 36px;}
+  header{padding:56px 0 24px;}
   .profile{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
   .avatar{
     width:84px;height:84px;border-radius:50%;object-fit:cover;
@@ -44,7 +44,33 @@
   }
   .ig-link:hover{background:#faf7ef;}
 
-  .works{padding:8px 0 72px;}
+  nav{
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    margin-top:28px;
+  }
+  nav .wrap{display:flex;gap:28px;flex-wrap:wrap;}
+  nav a{
+    display:block;padding:12px 0;text-decoration:none;
+    font-family:"Shippori Mincho",serif;font-size:14px;
+    color:var(--indigo-deep);letter-spacing:.06em;
+  }
+  nav a:hover{color:var(--ink);}
+
+  section{padding:48px 0 8px;}
+  .sec-title{
+    font-family:"Shippori Mincho",serif;font-weight:700;
+    font-size:20px;color:var(--indigo-deep);margin:0 0 4px;letter-spacing:.06em;
+  }
+  .sec-sub{
+    font-size:12.5px;color:var(--ink-soft);margin:0 0 28px;letter-spacing:.08em;
+  }
+  .series-title{
+    font-family:"Shippori Mincho",serif;font-weight:500;
+    font-size:16px;color:var(--ink);margin:36px 0 16px;letter-spacing:.04em;
+    border-left:3px solid var(--indigo-deep);padding-left:10px;
+  }
+  .series-title:first-of-type{margin-top:0;}
+
   .grid{
     display:grid;grid-template-columns:1fr 1fr;gap:28px 24px;
   }
@@ -59,14 +85,23 @@
   }
   .full{grid-column:1 / -1;max-width:640px;margin:0 auto;}
 
+  .text-block{max-width:640px;}
+  .text-block p{margin:0 0 1em;font-size:14.5px;}
+
+  .exhibitions{list-style:none;margin:0;padding:0;max-width:640px;}
+  .exhibitions li{
+    padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;
+  }
+
   footer{
-    border-top:1px solid var(--line);padding:28px 0 48px;
+    border-top:1px solid var(--line);margin-top:64px;padding:28px 0 48px;
     font-size:13px;color:var(--ink-soft);
   }
   footer a{color:var(--indigo-deep);}
 
   @media (max-width:560px){
     .grid{grid-template-columns:1fr;}
+    nav .wrap{gap:20px;}
   }
 </style>
 </head>
@@ -78,15 +113,27 @@
       <img class="avatar" src="/assets/rohei/icon.jpg" alt="">
       <div>
         <h1>Rohei_Printer（宮川良平）</h1>
-        <p class="bio">QRコードと木版画を組み合わせた作品を制作しています。</p>
-        <a class="ig-link" href="https://instagram.com/rohei_printer" target="_blank" rel="noopener">Instagram @rohei_printer</a>
+        <p class="bio">木版画家。QRコードと木版画を組み合わせた作品を制作しています。</p>
+        <a class="ig-link" href="https://www.instagram.com/rohei_printer/" target="_blank" rel="noopener">Instagram @rohei_printer</a>
       </div>
     </div>
   </div>
 </header>
 
-<section class="works">
+<nav>
   <div class="wrap">
+    <a href="#works">作品 Works</a>
+    <a href="#statement">ステートメント Statement</a>
+    <a href="#profile">プロフィール Profile</a>
+  </div>
+</nav>
+
+<section id="works">
+  <div class="wrap">
+    <h2 class="sec-title">作品</h2>
+    <p class="sec-sub">Works</p>
+
+    <h3 class="series-title">QRコード × 木版画</h3>
     <div class="grid">
       <figure class="full">
         <img src="/assets/rohei/qrface_set.jpg" alt="QR Face 組み絵">
@@ -100,6 +147,10 @@
         <img src="/assets/rohei/qrflower_01.jpg" alt="QR 花 ヒルサキツキミソウ 組み絵">
         <figcaption>QR 花 ヒルサキツキミソウ — 2026・木版画</figcaption>
       </figure>
+    </div>
+
+    <h3 class="series-title">Masked man ／ Noboru's story</h3>
+    <div class="grid">
       <figure>
         <img src="/assets/rohei/maskedman_set.jpg" alt="Masked man">
         <figcaption>Masked man</figcaption>
@@ -112,6 +163,10 @@
         <img src="/assets/rohei/noboru_02.jpg" alt="Noboru's story">
         <figcaption>Noboru's story</figcaption>
       </figure>
+    </div>
+
+    <h3 class="series-title">木版画</h3>
+    <div class="grid">
       <figure>
         <img src="/assets/rohei/mayonaka.jpg" alt="真夜中に生きる">
         <figcaption>真夜中に生きる — 2023・木版画</figcaption>
@@ -124,9 +179,34 @@
   </div>
 </section>
 
+<section id="statement">
+  <div class="wrap">
+    <h2 class="sec-title">ステートメント</h2>
+    <p class="sec-sub">Statement</p>
+    <div class="text-block">
+      <p>江戸の浮世絵に連なる木版画の技法で、現代の図像であるQRコードを彫り、摺る。4枚の版木それぞれに4色から1色を選んで摺り重ねることで、同じ版から8種類の頭像が生まれる。QRを読めばInstagramへつながり、版画はSNSの回路に接続される。</p>
+      <p>制作中の花シリーズでは、自作プラットフォーム「QRいいね」を通じて鑑賞者の感想や反応が作家へ届く仕組みを組み込む。版木・印刷・デジタルという三つの層を往還しながら、観ることと伝えることが一体となった版画の現在地を問う。</p>
+    </div>
+  </div>
+</section>
+
+<section id="profile">
+  <div class="wrap">
+    <h2 class="sec-title">プロフィール</h2>
+    <p class="sec-sub">Profile</p>
+    <div class="text-block">
+      <p>京都在住。東京工業大学大学院物理情報工学専攻修了。イメージセンサの研究開発に従事し、退職後アーティストとして活動を開始。伝統木版画工房にて17年師事。展覧会向け鑑賞者参加プラットフォーム「QRいいね」を自ら開発・運営する。</p>
+    </div>
+    <ul class="exhibitions">
+      <li>春陽会 会友</li>
+      <li>日本版画協会展 出品</li>
+    </ul>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
-    <p>Rohei_Printer（宮川良平） ／ <a href="https://instagram.com/rohei_printer" target="_blank" rel="noopener">Instagram @rohei_printer</a></p>
+    <p>Rohei_Printer（宮川良平） ／ <a href="https://www.instagram.com/rohei_printer/" target="_blank" rel="noopener">Instagram @rohei_printer</a></p>
   </div>
 </footer>
 
