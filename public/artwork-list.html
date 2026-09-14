@@ -137,6 +137,12 @@
       tr { page-break-inside: avoid; }
       .list-flow-row { font-size: 10pt; }
       .list-flow-head { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      /* 段組モードは page-break-after:always で強制改ページしており、Chrome では
+         2ページ目以降 @page の margin (上) が反映されないことがある (caption.html の
+         固定ページ印刷でも同じ理由で margin:0 + 各ページ padding 方式に変更済み)。
+         1ページ目は @page の margin がそのまま効くので、2ページ目以降だけ上に
+         同じ 10mm を padding として足して補う。 */
+      .print-page:not(:first-child) { padding-top: 10mm; }
     }
   </style>
   <style id="pageStyle">@page { size: A4 portrait; margin: 10mm; }</style>
