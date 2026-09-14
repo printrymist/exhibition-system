@@ -82,8 +82,11 @@
       border: 1px solid #e6ebf3; border-radius: 8px; margin-bottom: 6px; background: #fff;
     }
     .order-row .drag-handle { cursor: grab; color: #9aa7bd; font-size: 1.1em; user-select: none; flex-shrink: 0; }
+    .order-row .order-include { flex-shrink: 0; }
     .order-row .order-id { font-size: 0.8em; color: #1a73e8; font-weight: bold; min-width: 44px; flex-shrink: 0; }
     .order-row .order-label { font-size: 0.9em; color: #1a2a4a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .order-row.excluded { opacity: 0.45; }
+    .order-row.excluded .order-label { text-decoration: line-through; }
     .sortable-ghost { opacity: 0.4; }
     .sortable-chosen { background: #eef3fb; }
 
@@ -243,7 +246,8 @@
 
     <div class="card no-print">
       <div class="card-title">作品の並び順</div>
-      <p style="font-size:0.85em; color:#666; margin:0 0 10px;">⋮⋮ をつかんでドラッグで並べ替えてください。この順番は<strong>この作品リストの印刷</strong>に使われます（作品 ID は変わりません）。</p>
+      <p style="font-size:0.85em; color:#666; margin:0 0 10px;">⋮⋮ をつかんでドラッグで並べ替えてください（並び順は全リスト共通、作品 ID は変わりません）。
+        チェックを外すと<strong>今選んでいるリストだけ</strong>から作品を外せます（登録の解除ではありません。他のリストや作品登録には影響しません）。</p>
       <div id="orderList"></div>
       <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
         <button class="btn-primary" id="btnSaveOrder" onclick="saveOrder()">💾 並び順を保存</button>
@@ -294,16 +298,19 @@
     // QR は field-defs.js (register/caption と共有) には入れない。作品リスト固有の
     // 表示機能であり、他画面の項目選択に QR が漏れ出るのを避けるため。
     const QR_COL = '_qr';
+    const SEQ_COL = '_seq';   // 通し番号 (印刷順に 1 から振り直す疑似列。artwork_id とは無関係)
     const COLUMN_CANDIDATES = FIELD_DEFS
       .filter(d => d.type !== 'image' && !d.isPureSns)
       .map(d => d.name)
-      .concat([QR_COL]);
+      .concat([QR_COL, SEQ_COL]);
     const DEFAULT_ON = ['artwork_id', 'title', 'artist', 'year', 'technique', 'size', 'price'];
     const NUM_COLS = ['price', 'price_framed'];
 
     function isQrColumn(name) { return name === QR_COL; }
+    function isSeqColumn(name) { return name === SEQ_COL; }
     function labelOf(name) {
       if (isQrColumn(name)) return 'QR（いいね・感想）';
+      if (isSeqColumn(name)) return '通し番号';
       return (FIELD_MAP[name] && FIELD_MAP[name].label) || name;
     }
 
@@ -383,7 +390,8 @@
       return {
         title: currentExName || '出品作品一覧', align: 'left',
         paper: 'A4', orientation: 'portrait', sectionCount: 1,
-        columns: columns
+        columns: columns,
+        excludedIds: []   // このリストから外す artwork_id (リストごと。作品登録には影響しない)
       };
     }
 
@@ -408,7 +416,8 @@
         paper: saved.paper === 'Letter' ? 'Letter' : 'A4',
         orientation: saved.orientation === 'landscape' ? 'landscape' : 'portrait',
         sectionCount: sc,
-        columns: cols
+        columns: cols,
+        excludedIds: Array.isArray(saved.excludedIds) ? saved.excludedIds.filter(id => typeof id === 'string') : []
       };
     }
 
@@ -488,6 +497,7 @@
       currentListIdx = Math.min(Math.max(i, 0), lists.length - 1);
       listConfig = lists[currentListIdx];
       applyListToControls();
+      buildOrderList();
       renderPreview();
     }
     function onListNameInput() {
@@ -503,7 +513,7 @@
       lists.push(c);
       currentListIdx = lists.length - 1;
       listConfig = c;
-      rebuildListSelect(); applyListToControls(); renderPreview();
+      rebuildListSelect(); applyListToControls(); buildOrderList(); renderPreview();
       const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
     }
     function duplicateList() {
@@ -514,7 +524,7 @@
       lists.push(copy);
       currentListIdx = lists.length - 1;
       listConfig = copy;
-      rebuildListSelect(); applyListToControls(); renderPreview();
+      rebuildListSelect(); applyListToControls(); buildOrderList(); renderPreview();
       const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
     }
     function deleteList() {
@@ -523,7 +533,7 @@
       lists.splice(currentListIdx, 1);
       currentListIdx = Math.min(currentListIdx, lists.length - 1);
       listConfig = lists[currentListIdx];
-      rebuildListSelect(); applyListToControls(); renderPreview();
+      rebuildListSelect(); applyListToControls(); buildOrderList(); renderPreview();
     }
 
     // ── 展覧会読み込み ──
@@ -679,7 +689,7 @@
         cb.onchange = () => { col.on = cb.checked; row.classList.toggle('off', !col.on); renderPreview(); };
         const label = document.createElement('label'); label.setAttribute('for', cb.id);
         label.innerHTML = escapeHtml(labelOf(col.name))
-          + (isQrColumn(col.name) ? '' : ' <span class="field-hint">' + escapeHtml(col.name) + '</span>');
+          + ((isQrColumn(col.name) || isSeqColumn(col.name)) ? '' : ' <span class="field-hint">' + escapeHtml(col.name) + '</span>');
         const wLabel = document.createElement('span'); wLabel.className = 'col-w-label';
         const wInput = document.createElement('input'); wInput.type = 'number'; wInput.className = 'col-w';
         if (isQrColumn(col.name)) {
@@ -775,11 +785,15 @@
       cols.forEach(c => { h += '<span>' + escapeHtml(labelOf(c)) + '</span>'; });
       return h + '</div>';
     }
-    function flowRowHtml(cols, a, tmpl) {
+    function flowRowHtml(cols, a, tmpl, seq) {
       let h = '<div class="list-flow-row" style="grid-template-columns:' + tmpl + ';">';
       cols.forEach(c => {
         if (isQrColumn(c)) {
           h += '<span style="text-align:center;">' + qrCellHtml(a) + '</span>';
+          return;
+        }
+        if (isSeqColumn(c)) {
+          h += '<span class="num">' + seq + '</span>';
           return;
         }
         const cell = formatCell(c, a[c]);
@@ -813,7 +827,7 @@
       const meas = document.createElement('div');
       meas.className = 'list-flow-measure';
       meas.style.cssText = 'position:absolute; visibility:hidden; left:-99999px; top:0; width:' + colWmm.toFixed(2) + 'mm;';
-      meas.innerHTML = flowHeaderHtml(cols, tmpl) + rows.map(r => flowRowHtml(cols, r, tmpl)).join('');
+      meas.innerHTML = flowHeaderHtml(cols, tmpl) + rows.map((r, i) => flowRowHtml(cols, r, tmpl, i + 1)).join('');
       document.body.appendChild(meas);
       const kids = meas.children;
       const headH = kids[0] ? kids[0].getBoundingClientRect().height : 0;
@@ -869,7 +883,7 @@
         html += '<div class="print-page" style="' + brk + '"><div class="page-cols" style="grid-template-columns:repeat(' + n + ',1fr);">';
         page.forEach(colRows => {
           html += '<div class="page-col">' + flowHeaderHtml(cols, tmpl)
-            + colRows.map(idx => flowRowHtml(cols, rows[idx], tmpl)).join('') + '</div>';
+            + colRows.map(idx => flowRowHtml(cols, rows[idx], tmpl, idx + 1)).join('') + '</div>';
         });
         html += '</div></div>';
       });
@@ -939,11 +953,15 @@
       h += '</colgroup><thead><tr>';
       cols.forEach(n => { h += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
       h += '</tr></thead><tbody>';
-      rows.forEach(a => {
+      rows.forEach((a, i) => {
         h += '<tr>';
         cols.forEach(n => {
           if (isQrColumn(n)) {
             h += '<td style="text-align:center;vertical-align:middle;">' + qrCellHtml(a) + '</td>';
+            return;
+          }
+          if (isSeqColumn(n)) {
+            h += '<td class="num">' + (i + 1) + '</td>';
             return;
           }
           const cell = formatCell(n, a[n]);
@@ -955,19 +973,46 @@
       return h;
     }
 
-    // ── 作品の並び順 (ドラッグ) ──
+    // ── 作品の並び順 (ドラッグ) / このリストに含めるか ──
+    function isExcludedFromCurrentList(artworkId) {
+      return !!(listConfig && Array.isArray(listConfig.excludedIds) && listConfig.excludedIds.indexOf(artworkId) !== -1);
+    }
+    function setExcludedFromCurrentList(artworkId, excluded) {
+      if (!listConfig) return;
+      if (!Array.isArray(listConfig.excludedIds)) listConfig.excludedIds = [];
+      const idx = listConfig.excludedIds.indexOf(artworkId);
+      if (excluded && idx === -1) listConfig.excludedIds.push(artworkId);
+      if (!excluded && idx !== -1) listConfig.excludedIds.splice(idx, 1);
+    }
     function buildOrderList() {
       const wrap = document.getElementById('orderList');
       wrap.innerHTML = '';
       orderedArtworks().forEach(a => {
+        const id = a.artwork_id;
+        const excluded = isExcludedFromCurrentList(id);
         const row = document.createElement('div');
-        row.className = 'order-row';
-        row.dataset.id = a.artwork_id;
-        const labelText = (a.title || '（無題）') + (a.artist ? ' / ' + a.artist : '');
-        row.innerHTML =
-          '<span class="drag-handle">⋮⋮</span>' +
-          '<span class="order-id">' + escapeHtml(a.artwork_id) + '</span>' +
-          '<span class="order-label">' + escapeHtml(labelText) + '</span>';
+        row.className = 'order-row' + (excluded ? ' excluded' : '');
+        row.dataset.id = id;
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⋮⋮';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'order-include';
+        cb.checked = !excluded;
+        cb.title = 'このリストに含める（外すと印刷に出ません。作品登録は解除されません）';
+        cb.onchange = () => {
+          setExcludedFromCurrentList(id, !cb.checked);
+          row.classList.toggle('excluded', !cb.checked);
+          renderPreview();
+        };
+        const idSpan = document.createElement('span');
+        idSpan.className = 'order-id';
+        idSpan.textContent = id;
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'order-label';
+        labelSpan.textContent = (a.title || '（無題）') + (a.artist ? ' / ' + a.artist : '');
+        row.appendChild(handle); row.appendChild(cb); row.appendChild(idSpan); row.appendChild(labelSpan);
         wrap.appendChild(row);
       });
       if (window.Sortable) {
@@ -988,11 +1033,18 @@
       const msg = document.getElementById('orderMsg');
       btn.disabled = true; msg.style.color = '#888'; msg.innerText = '保存中...';
       try {
+        // 並び順 (全リスト共通) と、このカードで変更できる「このリストに含めるか」
+        // (listConfig.excludedIds、リストごと) をまとめて保存する。
+        const payload = JSON.stringify(lists);
         await firebase.firestore().collection('exhibitions').doc(currentEx).set({
           artwork_order: orderIds,
+          artwork_list_configs: payload,
           updatedAt: new Date().toISOString()
         }, { merge: true });
-        if (currentExData) currentExData.artwork_order = orderIds.slice();
+        if (currentExData) {
+          currentExData.artwork_order = orderIds.slice();
+          currentExData.artwork_list_configs = payload;
+        }
         msg.style.color = '#1a73e8'; msg.innerText = '✅ 並び順を保存しました。';
         setTimeout(() => { msg.innerText = ''; }, 3000);
       } catch (err) {
@@ -1038,13 +1090,22 @@
       }
       applyPageStyle();
       const n = sectionCountValue();
-      const ordered = orderedArtworks();
+      // このリストから除外された作品 (listConfig.excludedIds) を除いて印刷する。
+      const excluded = new Set(Array.isArray(listConfig.excludedIds) ? listConfig.excludedIds : []);
+      const ordered = orderedArtworks().filter(a => !excluded.has(a.artwork_id));
+      if (ordered.length === 0) {
+        wrap.innerHTML = '<p class="empty-note">このリストに含まれる作品がありません（すべて除外されています）。</p>';
+        document.getElementById('countLabel').innerText = '0 / ' + artworks.length + ' 件';
+        return;
+      }
       // 1 段 = 幅100%の罫線テーブル (各ページに見出し再表示)。2段以上 = ページ×N列に
       // 自前で割り付け、各列に見出しを付ける (ページまたぎでも切れない)。
       wrap.innerHTML = (n <= 1)
         ? buildListTableHtml(cols, ordered)
         : buildPaginatedSections(cols, ordered, n);
-      document.getElementById('countLabel').innerText = artworks.length + ' 件';
+      document.getElementById('countLabel').innerText = (ordered.length === artworks.length)
+        ? (artworks.length + ' 件')
+        : (ordered.length + ' / ' + artworks.length + ' 件（' + (artworks.length - ordered.length) + ' 件を除外中）');
     }
 
     // ── 設定の保存 (exhibitions doc に紐づけ) ──
