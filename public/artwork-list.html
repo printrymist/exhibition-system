@@ -266,6 +266,7 @@
   </div>
 
   <script src="/js/sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="field-defs.js"></script>
   <script>
     function getUrlParam(name) {
@@ -289,15 +290,69 @@
     let _sortable = null;       // SortableJS インスタンス
     let _loadedForEx = '';      // 二重ロード防止
 
-    // 列候補: 画像と pure SNS を除いた全項目 (artwork_id 含む)
+    // 列候補: 画像と pure SNS を除いた全項目 (artwork_id 含む) + QR 疑似列。
+    // QR は field-defs.js (register/caption と共有) には入れない。作品リスト固有の
+    // 表示機能であり、他画面の項目選択に QR が漏れ出るのを避けるため。
+    const QR_COL = '_qr';
     const COLUMN_CANDIDATES = FIELD_DEFS
       .filter(d => d.type !== 'image' && !d.isPureSns)
-      .map(d => d.name);
+      .map(d => d.name)
+      .concat([QR_COL]);
     const DEFAULT_ON = ['artwork_id', 'title', 'artist', 'year', 'technique', 'size', 'price'];
     const NUM_COLS = ['price', 'price_framed'];
 
+    function isQrColumn(name) { return name === QR_COL; }
     function labelOf(name) {
+      if (isQrColumn(name)) return 'QR（いいね・感想）';
       return (FIELD_MAP[name] && FIELD_MAP[name].label) || name;
+    }
+
+    // ── QR セル生成 (caption.html の短縮QR方式を流用。誤り訂正は M 固定＝ロゴなしのため) ──
+    const SHORT_QR_BASE = 'HTTPS://QRIINE.COM/A/';
+    const QR_CELL_SIZE = 10;   // QR 1モジュールあたりの canvas pixel
+    const QR_MARGIN = 4;       // QR 周囲の quiet zone (モジュール単位)
+    const QR_COL_MM = 15;      // 一覧上の QR 物理サイズ (来場者がリストを見ながら読み取れる最小サイズ)
+
+    // 1 作品分の QR を data URL (PNG) で返す。qr_code (短縮) 優先、なければ qr_url、
+    // どちらも無ければ null (呼び出し側で「QRなし」表示にする)。
+    function buildQrDataUrl(art) {
+      let url = art.qr_url;
+      let dataMode = 'Byte';
+      if (art.qr_code) {
+        url = SHORT_QR_BASE + art.qr_code;
+        dataMode = 'Alphanumeric';
+      } else if (!url) {
+        return null;
+      }
+      const qr = qrcode(0, 'M');
+      qr.addData(url, dataMode);
+      qr.make();
+      const size = (qr.getModuleCount() + QR_MARGIN * 2) * QR_CELL_SIZE;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#333333';
+      for (let row = 0; row < qr.getModuleCount(); row++) {
+        for (let col = 0; col < qr.getModuleCount(); col++) {
+          if (qr.isDark(row, col)) {
+            ctx.fillRect((col + QR_MARGIN) * QR_CELL_SIZE, (row + QR_MARGIN) * QR_CELL_SIZE, QR_CELL_SIZE, QR_CELL_SIZE);
+          }
+        }
+      }
+      return canvas.toDataURL('image/png');
+    }
+    // QR セルの HTML (img または「QRなし」プレースホルダ)。行によって別々の位置に
+    // ずらす千鳥配置はしない: リストとしての一覧性を優先し、QR は常に同じ列に固定する
+    // (誤読しても画面のタイトル表示で来場者・作家どちらも気づける = 自己訂正が効くため)。
+    function qrCellHtml(art) {
+      const durl = buildQrDataUrl(art);
+      if (!durl) {
+        return '<div style="width:' + QR_COL_MM + 'mm;height:' + QR_COL_MM + 'mm;background:#eee;'
+          + 'display:flex;align-items:center;justify-content:center;font-size:7pt;color:#aaa;border:1px solid #ddd;">No QR</div>';
+      }
+      return '<img src="' + durl + '" style="width:' + QR_COL_MM + 'mm;height:' + QR_COL_MM + 'mm;display:block;" alt="QR">';
     }
 
     // 作品配列を表示順 (orderIds = artwork_id の並び) でソート。
@@ -623,17 +678,26 @@
         cb.id = 'col_' + col.name;
         cb.onchange = () => { col.on = cb.checked; row.classList.toggle('off', !col.on); renderPreview(); };
         const label = document.createElement('label'); label.setAttribute('for', cb.id);
-        label.innerHTML = escapeHtml(labelOf(col.name)) + ' <span class="field-hint">' + escapeHtml(col.name) + '</span>';
-        const wLabel = document.createElement('span'); wLabel.className = 'col-w-label'; wLabel.textContent = '幅';
+        label.innerHTML = escapeHtml(labelOf(col.name))
+          + (isQrColumn(col.name) ? '' : ' <span class="field-hint">' + escapeHtml(col.name) + '</span>');
+        const wLabel = document.createElement('span'); wLabel.className = 'col-w-label';
         const wInput = document.createElement('input'); wInput.type = 'number'; wInput.className = 'col-w';
-        wInput.min = '1'; wInput.step = '1'; wInput.placeholder = '自動';
-        wInput.value = (Number(col.weight) > 0) ? col.weight : '';
-        wInput.title = '列幅の比率（空欄＝均等）';
-        wInput.oninput = () => {
-          const v = parseFloat(wInput.value);
-          if (v > 0) col.weight = v; else delete col.weight;
-          renderPreview();
-        };
+        if (isQrColumn(col.name)) {
+          // QR は来場者が読み取れる物理サイズが必要なため、他列のような比率指定ではなく
+          // 固定 mm サイズ (QR_COL_MM) を確保する。幅入力は出さない。
+          wLabel.textContent = QR_COL_MM + 'mm固定';
+          wInput.style.display = 'none';
+        } else {
+          wLabel.textContent = '幅';
+          wInput.min = '1'; wInput.step = '1'; wInput.placeholder = '自動';
+          wInput.value = (Number(col.weight) > 0) ? col.weight : '';
+          wInput.title = '列幅の比率（空欄＝均等）';
+          wInput.oninput = () => {
+            const v = parseFloat(wInput.value);
+            if (v > 0) col.weight = v; else delete col.weight;
+            renderPreview();
+          };
+        }
         row.appendChild(move); row.appendChild(cb); row.appendChild(label);
         row.appendChild(wLabel); row.appendChild(wInput);
         wrap.appendChild(row);
@@ -714,6 +778,10 @@
     function flowRowHtml(cols, a, tmpl) {
       let h = '<div class="list-flow-row" style="grid-template-columns:' + tmpl + ';">';
       cols.forEach(c => {
+        if (isQrColumn(c)) {
+          h += '<span style="text-align:center;">' + qrCellHtml(a) + '</span>';
+          return;
+        }
         const cell = formatCell(c, a[c]);
         h += '<span' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</span>';
       });
@@ -734,10 +802,11 @@
     // 段組 (N 列) を「ページ × N列」に自前で割り付けて生成。各列に見出しを付け、
     // 行高を実測して 1 ページに収まる行数を決めるので、ページまたぎでも切れず見出しも各列に出る。
     function buildPaginatedSections(cols, rows, n) {
-      const tmpl = colWidthsPercent(cols).map(p => p.toFixed(2) + '%').join(' ');
       const geo = pageContentPx();
       const colGap = mm2px(6);
       const colWpx = (geo.w - (n - 1) * colGap) / n;
+      // QR 列は列 (段) の実幅 (colWpx) を基準に固定 mm を確保する。
+      const tmpl = colWidthsPercent(cols, colWpx).map(p => p.toFixed(2) + '%').join(' ');
       const colWmm = colWpx * 25.4 / 96;
 
       // 実測: 印刷相当の列幅・フォントで見出し + 各行の高さを測る。
@@ -830,7 +899,8 @@
     // 代表値は 90 パーセンタイル付近 (1 件だけ極端に長い値に引っ張られない) + 見出し幅を下限に。
     function autoFitWidths() {
       if (!listConfig) return;
-      const onCols = listConfig.columns.filter(c => c.on);
+      // QR 列は固定 mm サイズなので文字幅からの比率調整の対象外。
+      const onCols = listConfig.columns.filter(c => c.on && !isQrColumn(c.name));
       if (onCols.length === 0) return;
       const arts = orderedArtworks();
       const raw = onCols.map(c => {
@@ -843,20 +913,27 @@
       buildColumnList();
       renderPreview();
     }
-    // ON 列 cols の幅を % に正規化 (weight 未設定は 1 = 均等)。
-    function colWidthsPercent(cols) {
-      const ws = cols.map(n => {
+    // ON 列 cols の幅を % に正規化 (weight 未設定は 1 = 均等)。QR 列がある場合は
+    // availPx (この行が実際に描画される幅 px) から逆算した固定 % を先に確保し、
+    // 残りを他列の weight で配分する (QR は文字数に関係なく物理サイズが必要なため)。
+    function colWidthsPercent(cols, availPx) {
+      const hasQr = cols.some(isQrColumn);
+      const qrPct = (hasQr && availPx > 0) ? Math.min(90, mm2px(QR_COL_MM) / availPx * 100) : 0;
+      const flexCols = cols.filter(n => !isQrColumn(n));
+      const ws = flexCols.map(n => {
         const c = listConfig.columns.find(x => x.name === n);
         const w = (c && Number(c.weight) > 0) ? Number(c.weight) : 1;
         return w;
       });
-      const sum = ws.reduce((a, b) => a + b, 0) || cols.length;
-      return ws.map(w => (w / sum * 100));
+      const sum = ws.reduce((a, b) => a + b, 0) || flexCols.length;
+      const remain = 100 - qrPct;
+      let fi = 0;
+      return cols.map(n => isQrColumn(n) ? qrPct : (ws[fi++] / sum * remain));
     }
 
     // 選択列 cols の作品 rows を 1 つの表 HTML にする (見出し付き)。
     function buildListTableHtml(cols, rows) {
-      const widths = colWidthsPercent(cols);
+      const widths = colWidthsPercent(cols, pageContentPx().w);
       let h = '<table class="list"><colgroup>';
       widths.forEach(p => { h += '<col style="width:' + p.toFixed(2) + '%">'; });
       h += '</colgroup><thead><tr>';
@@ -865,6 +942,10 @@
       rows.forEach(a => {
         h += '<tr>';
         cols.forEach(n => {
+          if (isQrColumn(n)) {
+            h += '<td style="text-align:center;vertical-align:middle;">' + qrCellHtml(a) + '</td>';
+            return;
+          }
           const cell = formatCell(n, a[n]);
           h += '<td' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</td>';
         });
