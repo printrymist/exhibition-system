@@ -104,6 +104,9 @@
     table.list th { background: #eef3fb; font-weight: bold; }
     table.list td.num { text-align: right; }
     .empty-note { color: #999; font-size: 0.9em; }
+    /* 1段モードの行高の実測は印刷時のフォント (10pt) に合わせる (段組の
+       .list-flow-measure と同じ理由: 画面の 12px だと過小評価して印刷で溢れる)。 */
+    .list-measure th, .list-measure td { font-size: 10pt; padding: 3px 5px; }
 
     /* 段組 (2〜3列) は新聞段組フロー (column-count) で出す。内容が列→列→次ページへ
        自動で流れ、ページまたぎはブラウザが処理する (grid/flex のような途中切れが起きない)。
@@ -951,32 +954,66 @@
       return cols.map(n => isQrColumn(n) ? qrPct : (ws[fi++] / sum * remain));
     }
 
-    // 選択列 cols の作品 rows を 1 つの表 HTML にする (見出し付き)。
+    // 選択列 cols の作品 rows を「表 (見出し付き)」の HTML にする。1段モード。
+    // ブラウザの表の自動改ページ (thead 繰り返し) に任せると、Chrome では 2ページ目
+    // 以降で @page の上マージンが反映されないことがある (段組と同じ理由)。そのため
+    // ここでも行高を実測し、1ページに収まる分ごとに**独立した <table> を分けて**出す
+    // (段組の buildPaginatedSections と同じ組み方: 各ページが .print-page 1つ)。
     function buildListTableHtml(cols, rows) {
       const widths = colWidthsPercent(cols, pageContentPx().w);
-      let h = '<table class="list"><colgroup>';
-      widths.forEach(p => { h += '<col style="width:' + p.toFixed(2) + '%">'; });
-      h += '</colgroup><thead><tr>';
-      cols.forEach(n => { h += '<th>' + escapeHtml(labelOf(n)) + '</th>'; });
-      h += '</tr></thead><tbody>';
-      rows.forEach((a, i) => {
-        h += '<tr>';
+      const colgroupHtml = '<colgroup>' + widths.map(p => '<col style="width:' + p.toFixed(2) + '%">').join('') + '</colgroup>';
+      const theadHtml = '<thead><tr>' + cols.map(n => '<th>' + escapeHtml(labelOf(n)) + '</th>').join('') + '</tr></thead>';
+      function trHtml(a, seq) {
+        let h = '<tr>';
         cols.forEach(n => {
-          if (isQrColumn(n)) {
-            h += '<td style="text-align:center;vertical-align:middle;">' + qrCellHtml(a) + '</td>';
-            return;
-          }
-          if (isSeqColumn(n)) {
-            h += '<td class="num">' + (i + 1) + '</td>';
-            return;
-          }
+          if (isQrColumn(n)) { h += '<td style="text-align:center;vertical-align:middle;">' + qrCellHtml(a) + '</td>'; return; }
+          if (isSeqColumn(n)) { h += '<td class="num">' + seq + '</td>'; return; }
           const cell = formatCell(n, a[n]);
           h += '<td' + (cell.num ? ' class="num"' : '') + '>' + cell.html + '</td>';
         });
-        h += '</tr>';
+        return h + '</tr>';
+      }
+
+      // 実測: 印刷相当の表幅・フォント (.list-measure、10pt) で見出し + 各行の高さを測る。
+      const geo = pageContentPx();
+      const meas = document.createElement('table');
+      meas.className = 'list list-measure';
+      meas.style.cssText = 'position:absolute; visibility:hidden; left:-99999px; top:0; width:' + (geo.w * 25.4 / 96).toFixed(2) + 'mm;';
+      meas.innerHTML = colgroupHtml + theadHtml + '<tbody>' + rows.map((r, i) => trHtml(r, i + 1)).join('') + '</tbody>';
+      document.body.appendChild(meas);
+      const theadEl = meas.querySelector('thead');
+      const headH = theadEl ? theadEl.getBoundingClientRect().height : 0;
+      const rowH = Array.from(meas.querySelectorAll('tbody tr')).map(tr => tr.getBoundingClientRect().height);
+      document.body.removeChild(meas);
+
+      const titleEl = document.getElementById('printTitle');
+      const subEl = document.getElementById('printSub');
+      const titleH = (titleEl ? titleEl.getBoundingClientRect().height : 0)
+        + (subEl ? subEl.getBoundingClientRect().height : 0) + mm2px(4);
+      const safety = mm2px(4);
+
+      // 行をページ単位に詰める (段組と同じ「実測して収まる分だけ」方式)。
+      const pages = [];
+      let ri = 0;
+      while (ri < rows.length) {
+        const isFirst = pages.length === 0;
+        const availH = geo.h - (isFirst ? titleH : 0) - safety;
+        const start = ri;
+        let used = headH;
+        while (ri < rows.length && (ri === start || used + rowH[ri] <= availH)) {
+          used += rowH[ri]; ri++;
+        }
+        pages.push([start, ri]);
+      }
+
+      let html = '';
+      pages.forEach((range, pi) => {
+        const from = range[0], to = range[1];
+        const brk = pi < pages.length - 1 ? 'page-break-after:always;' : '';
+        html += '<div class="print-page" style="' + brk + '"><table class="list">' + colgroupHtml + theadHtml + '<tbody>'
+          + rows.slice(from, to).map((r, i) => trHtml(r, from + i + 1)).join('') + '</tbody></table></div>';
       });
-      h += '</tbody></table>';
-      return h;
+      return html;
     }
 
     // ── 作品の並び順 (ドラッグ) / このリストに含めるか ──
