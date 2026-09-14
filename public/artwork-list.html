@@ -813,13 +813,23 @@
 
     function mm2px(mm) { return mm * 96 / 25.4; }
     // 印刷ページの内側 (余白を除いた) 領域を px で返す。@page margin 10mm + #printArea 左右 padding 8mm。
+    // h = 1ページ目の高さ (@page の上下マージンがそのまま効く)。
+    // hCont = 2ページ目以降の高さ。Chrome では強制改ページした2ページ目以降 @page の上下
+    // マージンが反映されないため (.print-page:not(:first-child) の padding-top:10mm で上だけ
+    // 自前補っている)、実際に使える高さは 1margin 分 (自前の padding-top) しか引かない。
+    // ここを 1ページ目と同じ 2margin で見積もると、2ページ目以降が margin 1つ分ぶん
+    // 早めに折り返してしまい (下に無駄な余白ができてページ数が増える)。
     function pageContentPx() {
       const PAPER = { A4: [210, 297], Letter: [215.9, 279.4] };
       const dim = (PAPER[listConfig.paper === 'Letter' ? 'Letter' : 'A4']).slice();
       let w = dim[0], h = dim[1];
       if (listConfig.orientation === 'landscape') { const t = w; w = h; h = t; }
       const margin = 10, sidePad = 8;
-      return { w: mm2px(w - 2 * margin - 2 * sidePad), h: mm2px(h - 2 * margin) };
+      return {
+        w: mm2px(w - 2 * margin - 2 * sidePad),
+        h: mm2px(h - 2 * margin),
+        hCont: mm2px(h - margin)
+      };
     }
 
     // 段組 (N 列) を「ページ × N列」に自前で割り付けて生成。各列に見出しを付け、
@@ -856,7 +866,7 @@
       let ri = 0;
       while (ri < rows.length) {
         const isFirst = pages.length === 0;
-        const availH = geo.h - (isFirst ? titleH : 0) - safety;
+        const availH = (isFirst ? geo.h - titleH : geo.hCont) - safety;
         const page = [];
         for (let c = 0; c < n && ri < rows.length; c++) {
           let used = headH;
@@ -997,7 +1007,7 @@
       let ri = 0;
       while (ri < rows.length) {
         const isFirst = pages.length === 0;
-        const availH = geo.h - (isFirst ? titleH : 0) - safety;
+        const availH = (isFirst ? geo.h - titleH : geo.hCont) - safety;
         const start = ri;
         let used = headH;
         while (ri < rows.length && (ri === start || used + rowH[ri] <= availH)) {
