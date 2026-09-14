@@ -140,6 +140,12 @@
       tr { page-break-inside: avoid; }
       .list-flow-row { font-size: 10pt; }
       .list-flow-head { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      /* 実機の印刷プレビュー (Ctrl+P) で確認済み: page-break-after:always で強制改ページした
+         2ページ目以降は @page の margin (上) が反映されない。1ページ目は @page の margin が
+         そのまま効くので、2ページ目以降だけ上に同じ 10mm を padding として足して補う。
+         (headless Chrome の --print-to-pdf ではこの現象が再現しないため、この補正の要否は
+         実機の印刷プレビューで確認すること。) */
+      .print-page:not(:first-child) { padding-top: 10mm; }
     }
   </style>
   <style id="pageStyle">@page { size: A4 portrait; margin: 10mm; }</style>
