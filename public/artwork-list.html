@@ -318,7 +318,7 @@
     const SHORT_QR_BASE = 'HTTPS://QRIINE.COM/A/';
     const QR_CELL_SIZE = 10;   // QR 1モジュールあたりの canvas pixel
     const QR_MARGIN = 4;       // QR 周囲の quiet zone (モジュール単位)
-    const QR_COL_MM = 15;      // 一覧上の QR 物理サイズ (来場者がリストを見ながら読み取れる最小サイズ)
+    const QR_COL_MM = 14;      // 一覧上の QR 物理サイズ (12mm実績あり、余裕を見て14mmに設定)
 
     // 1 作品分の QR を data URL (PNG) で返す。qr_code (短縮) 優先、なければ qr_url、
     // どちらも無ければ null (呼び出し側で「QRなし」表示にする)。
