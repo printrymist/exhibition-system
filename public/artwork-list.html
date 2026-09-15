@@ -95,8 +95,10 @@
     #printTitle { font-size: 1.4em; margin: 0 0 4px 0; color: #1a2a4a; }
     #printSub { font-size: 0.85em; color: #666; margin-bottom: 14px; }
     /* table-layout: fixed で表を必ずコンテナ幅 (=印刷ページ幅) に収め、右側が切れないようにする。
-       列幅は均等配分され、内容はセル内で折り返す。 */
-    table.list { width: 100%; border-collapse: collapse; table-layout: fixed; }
+       列幅は均等配分され、内容はセル内で折り返す。
+       幅は 100% ちょうどではなく少し (2mm) 引く: border-collapse の罫線がコンテナの右端
+       ぴったりに重なると、印刷時に border 自体が切れて見えなくなることがある (実機で確認)。 */
+    table.list { width: calc(100% - 2mm); border-collapse: collapse; table-layout: fixed; }
     table.list th, table.list td {
       border: 1px solid #c9d2e0; padding: 5px 8px; font-size: 12px; text-align: left;
       vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
