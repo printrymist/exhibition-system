@@ -822,6 +822,45 @@
     }
 
     function mm2px(mm) { return mm * 96 / 25.4; }
+    // rowH[start..count) を、どのページも headH+行高の合計が cap を超えないという条件のもとで
+    // 「できるだけ均等な行数」の連続したページに分割する。単純に前から詰めるだけだと (最小
+    // ページ数にはなるが) 総行数がページ収容数の倍数からズレたとき最後のページだけ極端に
+    // 薄くなる。まず cap で最小ページ数 targetGroups を求めた上で、二分探索で「この上限
+    // (cap 以下) でも targetGroups 枚に収まるか」を判定し、収まる最小の上限で分割し直すことで、
+    // ページ数を増やさずに余りを全ページへ均等に散らす (段組の「最後のページだけ列のバランスを
+    // 取る」処理の、複数ページ版)。
+    function splitRowsBalanced(rowH, headH, start, count, cap) {
+      function groupsNeeded(limit) {
+        let groups = 0, i = start;
+        while (i < count) {
+          let used = headH;
+          const gStart = i;
+          while (i < count && (i === gStart || used + rowH[i] <= limit)) { used += rowH[i]; i++; }
+          groups++;
+        }
+        return groups;
+      }
+      function splitAt(limit) {
+        const bounds = [];
+        let i = start;
+        while (i < count) {
+          let used = headH;
+          const gStart = i;
+          while (i < count && (i === gStart || used + rowH[i] <= limit)) { used += rowH[i]; i++; }
+          bounds.push([gStart, i]);
+        }
+        return bounds;
+      }
+      const targetGroups = groupsNeeded(cap);
+      let lo = headH, hi = cap;
+      for (let i = start; i < count; i++) lo = Math.max(lo, headH + rowH[i]);
+      if (lo > hi) lo = hi; // 通常起きない (cap は元々この行を収められる値のはず) が念のため
+      for (let iter = 0; iter < 40; iter++) {
+        const mid = (lo + hi) / 2;
+        if (groupsNeeded(mid) <= targetGroups) hi = mid; else lo = mid;
+      }
+      return splitAt(hi);
+    }
     // 印刷ページの内側 (余白を除いた) 領域を px で返す。@page margin 10mm + #printArea 左右 padding 8mm。
     // ページごとに独立した <table>/<div class="print-page"> を forced page-break で
     // 送る方式 (buildListTableHtml / buildPaginatedSections) にしてからは、@page の
@@ -1013,18 +1052,16 @@
         + (subEl ? subEl.getBoundingClientRect().height : 0) + mm2px(2);
       const safety = mm2px(1.5);
 
-      // 行をページ単位に詰める (段組と同じ「実測して収まる分だけ」方式)。
-      const pages = [];
-      let ri = 0;
-      while (ri < rows.length) {
-        const isFirst = pages.length === 0;
-        const availH = geo.h - (isFirst ? titleH : 0) - safety;
-        const start = ri;
-        let used = headH;
-        while (ri < rows.length && (ri === start || used + rowH[ri] <= availH)) {
-          used += rowH[ri]; ri++;
-        }
-        pages.push([start, ri]);
+      // 1ページ目はタイトル分だけ予算が違うので専用に確定し、2ページ目以降は
+      // splitRowsBalanced でページ数を増やさずに行数を均等に散らす (総行数がページ収容数の
+      // 倍数からズレたとき、最後のページだけ極端に薄くなるのを防ぐ)。
+      const cap1 = geo.h - titleH - safety;
+      const capRest = geo.h - safety;
+      let ri = 0, used1 = headH;
+      while (ri < rows.length && (ri === 0 || used1 + rowH[ri] <= cap1)) { used1 += rowH[ri]; ri++; }
+      const pages = [[0, ri]];
+      if (ri < rows.length) {
+        pages.push.apply(pages, splitRowsBalanced(rowH, headH, ri, rows.length, capRest));
       }
 
       let html = '';
