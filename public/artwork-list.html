@@ -330,6 +330,10 @@
     const QR_CELL_SIZE = 10;   // QR 1モジュールあたりの canvas pixel
     const QR_MARGIN = 4;       // QR 周囲の quiet zone (モジュール単位)
     const QR_COL_MM = 14;      // 一覧上の QR 物理サイズ (12mm実績あり、余裕を見て14mmに設定)
+    // QR 画像は <img> に固定 mm サイズで描画するが、それを収める列 (表モードの <td> / 段組モードの
+    // .list-flow-row の余白) 自体にも左右の padding ・罫線があり、そのぶん使える幅は QR_COL_MM より
+    // 狭くなる。列幅算出時はこの分も上乗せして確保しないと、QR 画像が列・用紙の右端からはみ出す。
+    const QR_COL_SAFETY_MM = 3;
 
     // 1 作品分の QR を data URL (PNG) で返す。qr_code (短縮) 優先、なければ qr_url、
     // どちらも無ければ null (呼び出し側で「QRなし」表示にする)。
@@ -956,7 +960,7 @@
     // 残りを他列の weight で配分する (QR は文字数に関係なく物理サイズが必要なため)。
     function colWidthsPercent(cols, availPx) {
       const hasQr = cols.some(isQrColumn);
-      const qrPct = (hasQr && availPx > 0) ? Math.min(90, mm2px(QR_COL_MM) / availPx * 100) : 0;
+      const qrPct = (hasQr && availPx > 0) ? Math.min(90, mm2px(QR_COL_MM + QR_COL_SAFETY_MM) / availPx * 100) : 0;
       const flexCols = cols.filter(n => !isQrColumn(n));
       const ws = flexCols.map(n => {
         const c = listConfig.columns.find(x => x.name === n);
