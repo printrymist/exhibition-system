@@ -125,14 +125,19 @@
     /* 行高の実測は印刷時のフォント (10pt) に合わせる (画面の 12px だと過小評価して印刷で溢れるため) */
     .list-flow-measure .list-flow-row { font-size: 10pt; }
 
-    /* @page は用紙・向きの選択に応じて別 <style id="pageStyle"> で動的に設定する。
-       余白を必ず持たせ、表の右端が用紙端 (印字不可領域) に入って切れるのを防ぐ。 */
+    /* @page は用紙・向きの選択に応じて別 <style id="pageStyle"> で動的に設定する。margin は常に 0 にし、
+       余白はすべて #printArea / .print-page の padding (CSS のボックスモデル) で保証する。
+       @page 自身の margin は、強制改ページ (page-break-after:always) した2ページ目以降で
+       Chrome (実機の印刷プレビュー) には反映されないことがあると実機検証で確認済み。ここに依存せず
+       padding だけで完結させることで、段組数・用紙・向きの組み合わせによらず同じ土台で動くようにする。 */
     @media print {
       body { background: white; max-width: none; margin: 0; padding: 0; color: #000; }
       .no-print { display: none !important; }
-      /* @page 余白が「なし」に設定されても切れないよう、印刷領域自体にも左右の内側余白を持たせる。
-         box-sizing: border-box で table の width:100% がこの内側に収まる。 */
-      #printArea { box-shadow: none; border-radius: 0; padding: 0 8mm; box-sizing: border-box; }
+      /* 上 10mm (1ページ目の見出し分) + 左右 18mm (旧: @page 10mm + 印刷領域 8mm の合算を
+         そのまま踏襲、印字不可領域での右端切れ防止)。下は付けない — 各ページに収める行数は
+         JS 側の実測で「収まる分だけ」に抑えているので、余りは自然な空白になる (@page 側の
+         下マージンに頼らない)。box-sizing: border-box で table の width:100% がこの内側に収まる。 */
+      #printArea { box-shadow: none; border-radius: 0; padding: 10mm 18mm 0; box-sizing: border-box; }
       #printTitle { font-size: 18pt; }
       table.list th, table.list td { font-size: 10pt; padding: 3px 5px; }
       table.list th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -140,11 +145,8 @@
       tr { page-break-inside: avoid; }
       .list-flow-row { font-size: 10pt; }
       .list-flow-head { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      /* 実機の印刷プレビュー (Ctrl+P) で確認済み: page-break-after:always で強制改ページした
-         2ページ目以降は @page の margin (上) が反映されない。1ページ目は @page の margin が
-         そのまま効くので、2ページ目以降だけ上に同じ 10mm を padding として足して補う。
-         (headless Chrome の --print-to-pdf ではこの現象が再現しないため、この補正の要否は
-         実機の印刷プレビューで確認すること。) */
+      /* 1ページ目は #printArea 自身の padding-top (上記) が見出しの前に効くので、ここでは
+         2ページ目以降の各ページの先頭にだけ同じ 10mm を付ける (@page には一切頼らない)。 */
       .print-page:not(:first-child) { padding-top: 10mm; }
     }
   </style>
@@ -786,7 +788,9 @@
       const paper = listConfig.paper === 'Letter' ? 'Letter' : 'A4';
       const orient = listConfig.orientation === 'landscape' ? 'landscape' : 'portrait';
       const el = document.getElementById('pageStyle');
-      if (el) el.textContent = '@page { size: ' + paper + ' ' + orient + '; margin: 10mm; }';
+      // margin は常に 0。余白は #printArea / .print-page 側の padding だけで保証する
+      // (pageContentPx の PAGE_MARGIN_MM / PAGE_SIDE_MM と対になっている。詳細はそちらのコメント参照)。
+      if (el) el.textContent = '@page { size: ' + paper + ' ' + orient + '; margin: 0; }';
     }
     // 段組の 1 行 (見出し / データ)。列内のフィールドを列幅 (weight) 比率の grid で縦に揃える。
     function flowHeaderHtml(cols, tmpl) {
@@ -816,15 +820,20 @@
     // ページごとに独立した <table>/<div class="print-page"> を forced page-break で
     // 送る方式 (buildListTableHtml / buildPaginatedSections) にしてからは、@page の
     // margin は 2ページ目以降も 1ページ目と同じに効く (実測で確認済み)。
+    // @page の margin には頼らない (実機の印刷プレビューで、強制改ページ後のページに margin が
+    // 反映されないことがあると確認済み)。ページの余白は #printArea (上10mm・左右18mm、CSS の
+    // padding。@media print の #printArea 定義と対応) と .print-page (2ページ目以降の上10mm)
+    // という「必ず効く」CSS ボックスモデルだけで作る。ここではその前提で使える幅・高さを計算する。
+    const PAGE_MARGIN_MM = 10; // 上下 (#printArea の上 padding / .print-page の上 padding と一致させる)
+    const PAGE_SIDE_MM = 18;   // 左右 (#printArea の左右 padding と一致させる)
     function pageContentPx() {
       const PAPER = { A4: [210, 297], Letter: [215.9, 279.4] };
       const dim = (PAPER[listConfig.paper === 'Letter' ? 'Letter' : 'A4']).slice();
       let w = dim[0], h = dim[1];
       if (listConfig.orientation === 'landscape') { const t = w; w = h; h = t; }
-      const margin = 10, sidePad = 8;
       return {
-        w: mm2px(w - 2 * margin - 2 * sidePad),
-        h: mm2px(h - 2 * margin)
+        w: mm2px(w - 2 * PAGE_SIDE_MM),
+        h: mm2px(h - 2 * PAGE_MARGIN_MM)
       };
     }
 
