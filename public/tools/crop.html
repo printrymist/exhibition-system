@@ -92,6 +92,7 @@
         </div>
         <div id="status" class="status"></div>
         <div id="aiStat" class="hint" style="margin-top:6px;"></div>
+        <div id="lensStat" class="hint" style="margin-top:2px;"></div>
         <div id="cornerCheck" class="corner-check">
           <div class="cc-item"><canvas id="cc0" width="240" height="240"></canvas><span class="cc-label">左上</span></div>
           <div class="cc-item"><canvas id="cc1" width="240" height="240"></canvas><span class="cc-label">右上</span></div>
@@ -1035,12 +1036,184 @@
   let currentFile = null;     // 読み込んだ元 File (保管庫へ元バイトのまま保存する用)
   let lastOuterQuad = null;   // 直近の自動検出が出した AI 外周枠 (🎯 の起点)
   let trimMode = false, trimRect = null, trimDrag = null;  // ✂ 切り落としモード (trimRect は画像座標 {l,t,r,b})
-  let imageEdited = false;    // 回転・切り落とし後 true。GT は加工後画像を別名保存してそれに対して記録する
+  let imageEdited = false;    // 回転・切り落とし・レンズ補正の後 true。GT は加工後画像を別名保存してそれに対して記録する
   let editSeq = 0;            // 加工状態の通し番号 (保存名 _edit1, _edit2, … に使う)
   let editedSavedName = null; // 今の加工状態を保存したファイル名 (未保存なら null。再記録時の二重DL防止)
 
   const view = $('view');
   const vctx = view.getContext('2d');
+
+  // ===== レンズ歪み補正 (ユーザー機材固定のプロファイルを EXIF から自動適用) =====
+  // Sony α6000 + SEL20F28 の実測プロファイル (scripts/lens-calibration/ でチェッカーボード
+  // キャリブレーション)。同梱の opencv.js は calib3d (undistort/remap) を含まないビルドなので、
+  // 放射+接線歪みモデルを canvas ImageData に対して手動で remap する。
+  // 他機種/レンズの EXIF なら何もしない。
+  //
+  // 教訓の記録 (2026-09-16〜17、ユーザーに3回「まだ歪んでいる、ちゃんと検証したか」と
+  // 指摘され都度実測して発覚した3つの問題。見た目チェックだけでは全部見逃していた):
+  // 1. 最初の4枚(似た正面構図)だけで k1 のみ解いたら fx が物理的な期待値と28%も乖離する
+  //    過小決定(fxとk1が打ち消し合う)になっていた → 四隅/端/斜め構図を増やして解決。
+  // 2. crop.html は createImageBitmap(file,{imageOrientation:'none'}) でセンサー生の画素を
+  //    取り出すつもりだったが、この環境ではオプションが無視され常に自動回転済みの画素が
+  //    返ってきていた → 縦位置写真で幅/高さのfx・cxが入れ替わって適用され歪みが悪化。
+  //    対策: 自動回転後の画像を「EXIF Orientationの逆回転で生の並びに戻す→補正→
+  //    また回転で戻す」canvas変換のみの往復方式に変更 (createImageBitmapに頼らない)。
+  // 3. **最大の要因**: チェッカーボード撮影がA4を画面いっぱいにするため至近距離(約30cm、
+  //    レンズの最短撮影距離0.2mに近い)になっていたが、実際の作品撮影は約1m。
+  //    このレンズはパンケーキ設計でフォーカスブリージング(合焦距離で歪み方が変わる)があり、
+  //    30cmでの生の歪み量(行10〜18px)は1mでの生の歪み量(行2〜3px)よりずっと大きく、
+  //    別物だった。→ 実際の撮影距離(1m)・実際の撮影用マスク装着状態でチェッカーボードを
+  //    撮り直し(28枚)、その距離で再キャリブレーション。RMS再投影誤差 5.07px→0.69px、
+  //    行/列の残存曲がりが平均1px程度まで低減 (2026-09-17)。
+  // 教訓: キャリブレーションは実際の被写体距離で行うこと。至近距離のテストパターンは
+  // 「画面いっぱいにしたい」という都合で無意識に本番と違う距離になりがち。
+  const LENS_PROFILES = [{
+    label: 'α6000 + E20mm F2.8 (作品撮影距離~1m用)',
+    cameraModel: 'ILCE-6000',
+    lensMatch: /20\s*mm|SEL20F28/i,
+    fx_over_w: 0.8263688286796615,
+    fy_over_w: 0.8262493037846669,
+    cx_over_w: 0.4957366560822791,
+    cy_over_h: 0.50688398350437,
+    distCoeffs: [-0.1622954601032725, 0.11464279012977087, 0.00034143624487409206, -0.000409944276097939, 0.0], // k1,k2,p1,p2,k3
+  }];
+
+  function readExifTags(buf) {
+    try {
+      const view2 = new DataView(buf);
+      if (view2.getUint16(0) !== 0xFFD8) return null; // JPEG以外
+      let offset = 2;
+      while (offset + 4 <= view2.byteLength) {
+        const marker = view2.getUint16(offset);
+        const size = view2.getUint16(offset + 2);
+        if (marker === 0xFFE1 && view2.getUint32(offset + 4) === 0x45786966) {
+          return parseExifTiff(view2, offset + 10);
+        }
+        if (marker === 0xFFDA) break; // Start of Scan 以降に APP セグメントは無い
+        offset += 2 + size;
+      }
+    } catch (e) { console.warn('EXIF読み取り失敗', e); }
+    return null;
+  }
+
+  function parseExifTiff(view2, tiffStart) {
+    const little = view2.getUint16(tiffStart) === 0x4949;
+    const g16 = (o) => view2.getUint16(o, little);
+    const g32 = (o) => view2.getUint32(o, little);
+    function readIFD(ifdOffset) {
+      const count = g16(ifdOffset);
+      const tags = {};
+      for (let i = 0; i < count; i++) {
+        const eo = ifdOffset + 2 + i * 12;
+        tags[g16(eo)] = { count: g32(eo + 4), valOff: eo + 8 };
+      }
+      return tags;
+    }
+    function readAscii(entry) {
+      let base = entry.valOff;
+      if (entry.count > 4) base = tiffStart + g32(entry.valOff);
+      let s = '';
+      for (let i = 0; i < entry.count - 1; i++) {
+        const c = view2.getUint8(base + i);
+        if (c === 0) break;
+        s += String.fromCharCode(c);
+      }
+      return s;
+    }
+    const ifd0 = readIFD(tiffStart + g32(tiffStart + 4));
+    const result = {};
+    if (ifd0[0x0110]) result.model = readAscii(ifd0[0x0110]).trim();        // Model
+    if (ifd0[0x0112]) result.orientation = g16(ifd0[0x0112].valOff);        // Orientation (SHORT, 1-8)
+    if (ifd0[0x8769]) {                                                    // ExifIFD ポインタ
+      const exifIfd = readIFD(tiffStart + g32(ifd0[0x8769].valOff));
+      if (exifIfd[0xA434]) result.lensModel = readAscii(exifIfd[0xA434]).trim(); // LensModel
+    }
+    return result;
+  }
+
+  // EXIF Orientation ぶんだけ canvas を回転させて向きを合わせる (回転のみの 1/3/6/8 に対応。
+  // 2/4/5/7 のミラー系は通常のカメラ写真では出ないので未対応=呼び出し側で弾く)。
+  function applyExifRotation(cnv, orientation) {
+    const w = cnv.width, h = cnv.height;
+    const out = document.createElement('canvas');
+    const ctx2 = out.getContext('2d');
+    if (orientation === 3) {
+      out.width = w; out.height = h;
+      ctx2.transform(-1, 0, 0, -1, w, h);
+    } else if (orientation === 6) {
+      out.width = h; out.height = w;
+      ctx2.transform(0, 1, -1, 0, h, 0);
+    } else if (orientation === 8) {
+      out.width = h; out.height = w;
+      ctx2.transform(0, -1, 1, 0, 0, w);
+    } else {
+      return cnv;
+    }
+    ctx2.drawImage(cnv, 0, 0);
+    return out;
+  }
+
+  function matchLensProfile(tags) {
+    if (!tags || !tags.model) return null;
+    return LENS_PROFILES.find(p => p.cameraModel === tags.model &&
+      (!tags.lensModel || p.lensMatch.test(tags.lensModel))) || null;
+  }
+
+  // 標準的なOpenCVの放射/接線歪みモデルの forward 写像 (補正後座標→歪み座標) をそのまま使い、
+  // 出力画像の各画素についてソース側のサンプル位置を求める (initUndistortRectifyMap と同じ考え方)。
+  function undistortImageDataManual(imgData, w, h, profile) {
+    const fx = profile.fx_over_w * w, fy = profile.fy_over_w * w;
+    const cx = profile.cx_over_w * w, cy = profile.cy_over_h * h;
+    const [k1, k2, p1, p2, k3] = profile.distCoeffs;
+    const src = imgData.data;
+    const out = new Uint8ClampedArray(src.length);
+    const xnArr = new Float64Array(w);
+    for (let u = 0; u < w; u++) xnArr[u] = (u - cx) / fx;
+    for (let v = 0; v < h; v++) {
+      const yn = (v - cy) / fy, yn2 = yn * yn;
+      const rowOut = v * w * 4;
+      for (let u = 0; u < w; u++) {
+        const xn = xnArr[u];
+        const r2 = xn * xn + yn2;
+        const radial = 1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2;
+        const xd = xn * radial + 2 * p1 * xn * yn + p2 * (r2 + 2 * xn * xn);
+        const yd = yn * radial + p1 * (r2 + 2 * yn2) + 2 * p2 * xn * yn;
+        const xs = xd * fx + cx, ys = yd * fy + cy;
+        const di = rowOut + u * 4;
+        if (xs < 0 || xs > w - 1 || ys < 0 || ys > h - 1) {
+          out[di] = 0; out[di + 1] = 0; out[di + 2] = 0; out[di + 3] = 255;
+          continue;
+        }
+        const x0 = xs | 0, y0 = ys | 0;
+        const x1 = x0 + 1 < w ? x0 + 1 : x0;
+        const y1 = y0 + 1 < h ? y0 + 1 : y0;
+        const fxr = xs - x0, fyr = ys - y0;
+        const i00 = (y0 * w + x0) * 4, i10 = (y0 * w + x1) * 4, i01 = (y1 * w + x0) * 4, i11 = (y1 * w + x1) * 4;
+        for (let c = 0; c < 4; c++) {
+          const top = src[i00 + c] + (src[i10 + c] - src[i00 + c]) * fxr;
+          const bot = src[i01 + c] + (src[i11 + c] - src[i01 + c]) * fxr;
+          out[di + c] = top + (bot - top) * fyr;
+        }
+      }
+    }
+    return new ImageData(out, w, h);
+  }
+
+  // 補正後の canvas を返す (Mat ではなく canvas を返すのは、これを imgEl にも差し替えて
+  // 表示・全ての drawImage(imgEl,...) 参照・GT記録の toDataURL を補正後の画素に揃えるため。
+  // fullMat だけ差し替えて imgEl (元の <img>) を残すと、検出結果は補正後なのに画面表示や
+  // 拡大鏡・エッジ再サンプルが未補正画素を参照する不整合になる (回転/切り落としの
+  // replaceImage() と同じ理由で imgEl ごと差し替える必要がある)。
+  function applyLensCorrection(mat, profile) {
+    const w = mat.cols, h = mat.rows;
+    const cnv = document.createElement('canvas');
+    cnv.width = w; cnv.height = h;
+    cv.imshow(cnv, mat);
+    const ctx = cnv.getContext('2d');
+    const src = ctx.getImageData(0, 0, w, h);
+    ctx.putImageData(undistortImageDataManual(src, w, h, profile), 0, 0);
+    return cnv;
+  }
 
   // ===== 読み込み =====
   const drop = $('drop'), fileInput = $('file');
@@ -1054,29 +1227,85 @@
   fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
   $('newImg').addEventListener('click', () => { fileInput.value=''; fileInput.click(); });
 
-  function loadFile(file) {
+  function finishLoad() {
+    exitTrim();
+    buildGrad();
+    $('editCard').style.display = 'block';
+    $('outWrap').style.display = 'none';
+    layoutCanvas();
+    autoDetect();
+    gtCountUpdate();
+    $('editCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function toCanvas(source, w, h) {
+    const cnv = document.createElement('canvas');
+    cnv.width = w; cnv.height = h;
+    cnv.getContext('2d').drawImage(source, 0, 0);
+    return cnv;
+  }
+
+  // orientation 6⇔8 は互いに逆回転、1と3は自分自身が逆回転 (数式で往復して確認済み)。
+  const EXIF_ORIENTATION_INVERSE = { 1: 1, 3: 3, 6: 8, 8: 6 };
+
+  async function loadFile(file) {
     if (!cvReady) { alert('画像処理エンジンの準備がまだ終わっていません。数秒待って再度お試しください。'); return; }
     if (!/^image\//.test(file.type)) { alert('画像ファイルを選んでください。'); return; }
     currentFileName = file.name || '';
     currentFile = file;   // 保管庫 (学習用) に元バイトのまま保存するための参照
+    if (fullMat) { fullMat.delete(); fullMat = null; }
+    imageEdited = false;
+    editSeq = 0;
+    editedSavedName = null;
+
+    let lensProfile = null, orientation = 1;
+    try {
+      const tags = readExifTags(await file.arrayBuffer());
+      lensProfile = matchLensProfile(tags);
+      if (tags && tags.orientation) orientation = tags.orientation;
+    } catch (e) { console.warn('EXIF解析失敗', e); }
+
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       URL.revokeObjectURL(url);
-      if (fullMat) { fullMat.delete(); fullMat = null; }
-      imgEl = img;
-      fullMat = cv.imread(img);
-      imageEdited = false;
-      editSeq = 0;
-      editedSavedName = null;
-      exitTrim();
-      buildGrad();
-      $('editCard').style.display = 'block';
-      $('outWrap').style.display = 'none';
-      layoutCanvas();
-      autoDetect();
-      gtCountUpdate();
-      $('editCard').scrollIntoView({ behavior:'smooth', block:'start' });
+      // 縦位置 (EXIF Orientation) で撮った写真は、ブラウザが自動回転した後の画素のままだと
+      // センサー基準で組んだキャリブレーションと軸がズレる (2026-09-16: 実写真で発覚。
+      // 縦向きに補正をかけると歪みが悪化した — fx/cx が幅方向・高さ方向で入れ替わるため)。
+      // 当初 createImageBitmap({imageOrientation:'none'}) でセンサー生の並びを取り出す
+      // 案を試したが、この環境では 'none' 指定でも自動回転されたままで効かないと判明した
+      // (page.evaluateで実測: none/default/from-image が全て同じ回転済みサイズを返した)。
+      // → ブラウザが自動回転した後の画像を「逆回転で生の並びに戻す→補正→また回転で戻す」
+      //   という canvas 変換だけで完結させる方式に変更 (createImageBitmapに頼らない)。
+      if (lensProfile && [1, 3, 6, 8].includes(orientation)) {
+        $('lensStat').textContent = `🔧 レンズ補正を適用中… (${lensProfile.label})`;
+        await new Promise(r => requestAnimationFrame(r));
+        try {
+          const decodedCnv = toCanvas(img, img.naturalWidth, img.naturalHeight); // ブラウザ自動回転済み(表示向き)
+          const rawCnv = applyExifRotation(decodedCnv, EXIF_ORIENTATION_INVERSE[orientation]); // センサー生の並びに戻す
+          const rawMat = cv.imread(rawCnv);
+          const correctedCnv = applyLensCorrection(rawMat, lensProfile); // まだセンサー生の並び
+          rawMat.delete();
+          const finalCnv = applyExifRotation(correctedCnv, orientation); // 表示向きに戻す
+          imgEl = finalCnv;
+          fullMat = cv.imread(finalCnv);
+          imageEdited = true;   // 検出器が見たのは補正後の画素 → GT記録も補正後画像が対象になる (v28の方針と一致)
+          editSeq = 1;
+          $('lensStat').textContent = `🔧 レンズ補正: 適用済み (${lensProfile.label})`;
+        } catch (e) {
+          console.warn('レンズ補正に失敗。補正なしで読み込みます。', e);
+          imgEl = img;
+          fullMat = cv.imread(img);
+          $('lensStat').textContent = '';
+        }
+      } else {
+        imgEl = img;
+        fullMat = cv.imread(img);
+        $('lensStat').textContent = lensProfile
+          ? `🔧 レンズ補正: 非対応の向き(EXIF Orientation=${orientation})のため未適用`
+          : '';
+      }
+      finishLoad();
     };
     img.onerror = () => { URL.revokeObjectURL(url); alert('画像を読み込めませんでした。'); };
     img.src = url;

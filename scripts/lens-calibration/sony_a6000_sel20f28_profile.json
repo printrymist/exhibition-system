@@ -1,0 +1,22 @@
+{
+  "camera": "Sony ILCE-6000",
+  "lens": "E 20mm F2.8 (SEL20F28)",
+  "calibratedImageSize": [
+    6000,
+    4000
+  ],
+  "fx_over_w": 0.8263688286796615,
+  "fy_over_w": 0.8262493037846669,
+  "cx_over_w": 0.4957366560822791,
+  "cy_over_h": 0.50688398350437,
+  "distCoeffs": [
+    -0.1622954601032725,
+    0.11464279012977087,
+    0.00034143624487409206,
+    -0.000409944276097939,
+    0.0
+  ],
+  "rmsReprojectionError": 0.6908981215602268,
+  "numImagesUsed": 28,
+  "numImagesTotal": 28
+}
