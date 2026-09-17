@@ -871,13 +871,22 @@ exports.mintGalleryQrToken = onCall(
 
     const exp = Math.floor(Date.now() / 1000) + Math.floor(expDays) * 86400;
     const sig = computeGallerySig(secret, exCode, exp);
+
+    // 短縮QR用コード。galleryPage が ?c=code をサーバー側で解決するので
+    // URL には exp/sig を出さない (作品QRの qr_codes と同じ発想、詳細は
+    // gallery_qr_codes の firestore.rules コメント参照)。
+    const code = generateShortQrCode();
+    await admin.firestore().collection("gallery_qr_codes").doc(code).set({
+      exCode, exp, sig, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     logger.info("gallery QR token minted", {
       exCode,
       caller: authEmail,
       role: isOperator ? "operator" : "organizer",
       expDays: Math.floor(expDays),
     });
-    return { exCode, exp, sig };
+    return { exCode, exp, sig, code };
   },
 );
 
@@ -1101,7 +1110,33 @@ const HOSTING_ORIGIN = "https://qriine.com";
 
 exports.galleryPage = onRequest(async (req, res) => {
   const exRaw = String((req.query && req.query.ex) || "").trim();
-  const ex = /^[A-Za-z0-9_-]+$/.test(exRaw) ? exRaw : "";
+  let ex = /^[A-Za-z0-9_-]+$/.test(exRaw) ? exRaw : "";
+  let exp = String((req.query && req.query.exp) || "").trim();
+  let sig = String((req.query && req.query.sig) || "").trim();
+
+  // 短縮QR (?c=code): gallery_qr_codes をサーバー側で解決し、URLに出さず
+  // ページへ埋め込む (来場者のURL欄・履歴にexp/sigを残さない設計)。
+  const codeRaw = String((req.query && req.query.c) || "").trim();
+  if (/^[A-Za-z0-9]{6,20}$/.test(codeRaw)) {
+    try {
+      const snap = await admin.firestore()
+        .collection("gallery_qr_codes").doc(codeRaw).get();
+      if (snap.exists) {
+        const d = snap.data() || {};
+        const dEx = String(d.exCode || "");
+        const dExp = d.exp;
+        const dSig = String(d.sig || "");
+        if (/^[A-Za-z0-9_-]+$/.test(dEx)) ex = dEx;
+        if (Number.isFinite(dExp)) exp = String(dExp);
+        if (/^[0-9a-f]{64}$/.test(dSig)) sig = dSig;
+      }
+    } catch (e) {
+      logger.warn("galleryPage short code lookup failed", {
+        code: codeRaw,
+        msg: e && e.message,
+      });
+    }
+  }
 
   let title = GALLERY_DEFAULT_TITLE;
   let description = GALLERY_DEFAULT_DESC;
@@ -1137,7 +1172,11 @@ exports.galleryPage = onRequest(async (req, res) => {
   let html = loadGalleryTemplate()
     .replace(/__OG_TITLE__/g, escapeAttr(title))
     .replace(/__OG_DESCRIPTION__/g, escapeAttr(description))
-    .replace(/__OG_URL__/g, escapeAttr(ogUrl));
+    .replace(/__OG_URL__/g, escapeAttr(ogUrl))
+    .replace(
+      "__GALLERY_INIT_JSON__",
+      () => JSON.stringify({ ex, exp, sig }),
+    );
 
   if (image) {
     html = html.replace(/__OG_IMAGE__/g, escapeAttr(image));
@@ -1736,6 +1775,18 @@ async function purgeExhibitionInternal(exCode) {
     stats.qrCodes = qSnap.size;
   } catch (e) {
     logger.warn("purgeExhibitionInternal: qr_codes delete failed", {
+      exCode, error: e.message,
+    });
+  }
+
+  // Web展覧会の短縮QR (gallery_qr_codes)。同様に参照を残さない。
+  try {
+    const gqSnap = await db.collection("gallery_qr_codes")
+      .where("exCode", "==", exCode).get();
+    await Promise.all(gqSnap.docs.map((d) => d.ref.delete()));
+    stats.galleryQrCodes = gqSnap.size;
+  } catch (e) {
+    logger.warn("purgeExhibitionInternal: gallery_qr_codes delete failed", {
       exCode, error: e.message,
     });
   }

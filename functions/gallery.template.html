@@ -507,6 +507,10 @@
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="/sessionid.js"></script>
   <script>
+    // 短縮QR (?c=code) はサーバー側 (galleryPage CF) で ex/exp/sig を解決し、
+    // URLに出さずここへ埋め込む。旧来の長いURL (?ex=&exp=&sig=) は解決されず
+    // 空オブジェクトのままなので、getUrlParam へのフォールバックで従来通り動く。
+    const GALLERY_INIT = __GALLERY_INIT_JSON__;
     function getUrlParam(name) {
       return new URLSearchParams(window.location.search).get(name) || '';
     }
@@ -656,7 +660,7 @@
     async function init() {
       // sessionId を localStorage / cookie / IndexedDB から復元する (Phase V1)
       try { await window.restoreSessionIdFromIDB(); } catch (_e) { /* fall through */ }
-      const exCode = getUrlParam('ex').trim();
+      const exCode = String(GALLERY_INIT.ex || getUrlParam('ex') || '').trim();
       if (!exCode) {
         document.getElementById('exTitle').innerText = 'Web 展覧会';
         showInfo('❓', '展覧会コードがありません', 'URL に ?ex=展覧会コード を付けてアクセスしてください。');
@@ -694,8 +698,8 @@
       // sig 不一致 → permission-denied、期限切れ → deadline-exceeded。
       // Phase A-1: sessionId を CF に渡して custom token claims に含めてもらう
       // (likes/comments の update/delete を Firestore Rules で sessionId 一致で許可するため)
-      const expRaw = getUrlParam('exp');
-      const sigRaw = getUrlParam('sig');
+      const expRaw = String(GALLERY_INIT.exp || getUrlParam('exp') || '');
+      const sigRaw = String(GALLERY_INIT.sig || getUrlParam('sig') || '');
       const sidForToken = getOrCreateSessionId();
       const callPayload = { exCode, sessionId: sidForToken };
       if (expRaw) callPayload.exp = Number(expRaw);
@@ -765,8 +769,26 @@
           if (!getArtworkImageUrl(a, 'display')) return;
           artworks.push(a);
         });
-        artworks.sort((a, b) =>
-          String(a.artwork_id || '').localeCompare(String(b.artwork_id || '')));
+        // 表示順は作品リスト機能 (artwork-list.html) が保存する
+        // exhibitions.{exCode}.artwork_order (展覧会で1本共有) に合わせる。
+        // 未設定/新規作品はそちらと同じロジックで artwork_id 数値順を末尾に補う。
+        const orderIds = (exData && Array.isArray(exData.artwork_order)) ? exData.artwork_order : [];
+        if (orderIds.length) {
+          const pos = {};
+          orderIds.forEach((id, i) => { pos[String(id)] = i; });
+          const num = id => parseInt(String(id || '').replace(/[^\d]/g, ''), 10) || 0;
+          artworks.sort((a, b) => {
+            const pa = pos[a.artwork_id], pb = pos[b.artwork_id];
+            const ha = pa !== undefined, hb = pb !== undefined;
+            if (ha && hb) return pa - pb;
+            if (ha) return -1;
+            if (hb) return 1;
+            return num(a.artwork_id) - num(b.artwork_id);
+          });
+        } else {
+          artworks.sort((a, b) =>
+            String(a.artwork_id || '').localeCompare(String(b.artwork_id || '')));
+        }
         artworksCache = artworks;
         // Phase A-1: 自分のいいね状態は subscribeToLikes の snap.forEach で
         // sessionId 一致を見て myLikeIdByWork に入れる方式に変更。localStorage 'voted_*' は不使用に。

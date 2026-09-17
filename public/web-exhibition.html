@@ -631,10 +631,15 @@
       try {
         const fn = firebase.app().functions('asia-northeast1').httpsCallable('mintGalleryQrToken');
         const res = await fn({ exCode: currentEx, expDays: expDays });
-        const { exp, sig } = res.data || {};
+        const { exp, sig, code } = res.data || {};
         if (!exp || !sig) throw new Error('Function から exp/sig が返りませんでした');
-        const url = window.location.origin + '/gallery.html?ex=' + encodeURIComponent(currentEx)
-          + '&exp=' + exp + '&sig=' + sig;
+        // 短縮コード (?c=code) だけを QR に載せる。ex/exp/sig はサーバー側
+        // (galleryPage CF) が gallery_qr_codes を引いて解決するので URL には出ない。
+        // コードが無い (古い Function 等) 場合のみ従来の長い URL にフォールバック。
+        const url = code
+          ? window.location.origin + '/gallery.html?c=' + encodeURIComponent(code)
+          : window.location.origin + '/gallery.html?ex=' + encodeURIComponent(currentEx)
+            + '&exp=' + exp + '&sig=' + sig;
 
         const qr = qrcode(0, 'H');
         qr.addData(url);

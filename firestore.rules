@@ -204,6 +204,15 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Web展覧会の短縮QR (gallery.html?c=code)。galleryPage (CF, admin SDK) が
+    // サーバー側で ex/exp/sig を解決してページに埋め込むため、qr_codes と違い
+    // 来場者ブラウザが直接このコレクションを引く経路が無い→ get も operator限定でよい。
+    // 書き込みは CF (admin SDK, mintGalleryQrToken) のみ。
+    match /gallery_qr_codes/{code} {
+      allow get, list: if isOperator();
+      allow create, update, delete: if false;
+    }
+
     // Phase E (2026-05-10): submitArtwork CF が変更履歴を append する監査ログ。
     // クライアントからの書き込みは禁止 (admin SDK 経由の CF だけが書ける)。
     // 読み取りは operator のみ (主催者の作品履歴閲覧 UI を後付けする場合は別の経路で渡す)。
