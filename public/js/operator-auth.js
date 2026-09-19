@@ -86,42 +86,137 @@
       });
   }
 
+  // 控えたメールアドレスが無い/一致しないときに、画面上にフォーム(モーダル)を出して
+  // 本人に再入力してもらう。window.prompt() はスマホのメールアプリ内蔵ブラウザ
+  // (Gmailアプリ内WebView等) の多くでブロック/無視され、何も表示されず失敗するだけに
+  // なる (2026-09-20 実地報告で発覚)。completeSignInIfNeeded は 16 画面から呼ばれる
+  // 共通関数なので、各画面に個別のフォームを作らせず、ここに1つだけ実装して
+  // 呼び出し側の見た目・呼び方を一切変えずに直す。
+  function showEmailConfirmModal(onSubmit) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;'
+      + 'display:flex;align-items:center;justify-content:center;padding:16px;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;';
+
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:10px;padding:20px;max-width:360px;'
+      + 'width:100%;box-shadow:0 4px 24px rgba(0,0,0,.25);';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-weight:bold;margin-bottom:8px;';
+    title.textContent = '📧 ログインの確認';
+
+    var desc = document.createElement('div');
+    desc.style.cssText = 'font-size:.85em;color:#555;margin-bottom:12px;line-height:1.5;';
+    desc.textContent = 'ログインを完了するため、メールリンクを送った先のメールアドレスをもう一度入力してください。';
+
+    var input = document.createElement('input');
+    input.type = 'email';
+    input.autocomplete = 'email';
+    input.placeholder = 'メールアドレス';
+    input.style.cssText = 'width:100%;box-sizing:border-box;padding:10px;border:1px solid #ddd;'
+      + 'border-radius:6px;font-size:16px;margin-bottom:8px;';
+
+    var errEl = document.createElement('div');
+    errEl.style.cssText = 'color:#d93025;font-size:.85em;min-height:1.2em;margin-bottom:8px;';
+
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;';
+
+    var submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.textContent = 'ログイン';
+    submitBtn.style.cssText = 'flex:1;padding:10px;background:#1a73e8;color:#fff;border:none;'
+      + 'border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = '閉じる';
+    closeBtn.style.cssText = 'padding:10px 14px;background:#eee;color:#555;border:none;'
+      + 'border-radius:6px;font-size:14px;cursor:pointer;';
+
+    row.appendChild(submitBtn);
+    row.appendChild(closeBtn);
+    card.appendChild(title);
+    card.appendChild(desc);
+    card.appendChild(input);
+    card.appendChild(errEl);
+    card.appendChild(row);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    input.focus();
+
+    function remove() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+    function submit() {
+      errEl.textContent = '';
+      var addr = normalizeEmail(input.value);
+      if (!addr) { errEl.textContent = 'メールアドレスを入力してください。'; return; }
+      submitBtn.disabled = true;
+      submitBtn.textContent = '確認中...';
+      onSubmit(addr)
+        .then(function () { remove(); })
+        .catch(function (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'ログイン';
+          errEl.textContent = friendlyErrForModal(err);
+        });
+    }
+    submitBtn.addEventListener('click', submit);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    closeBtn.addEventListener('click', remove);
+  }
+
+  // このファイルは friendly-error.js に依存させたくない (読み込み順を各画面に強制しない)
+  // ので、モーダル内だけの簡易な日本語化に留める。
+  function friendlyErrForModal(err) {
+    var code = (err && err.code) || '';
+    if (code === 'auth/invalid-action-code') return 'リンクの有効期限が切れているか、既に使用済みです。';
+    if (code === 'auth/invalid-email') return 'メールアドレスの形式が正しくありません。';
+    return 'ログインできませんでした。メールアドレスをご確認のうえもう一度お試しください。';
+  }
+
   // 現在の URL がメールリンクなら sign-in を完了させる。
   // 完了したら user オブジェクトを返し、URL から認証パラメータを除去する。
-  // メールリンクでなければ null を返す。
+  // メールリンクでなければ null を返す。控えたアドレスが無い/失敗したときは
+  // モーダルで本人に再入力してもらい、それでも入力されない (閉じるを押した) 場合は
+  // ずっと解決しない = 呼び出し側の .then は呼ばれない (元々 prompt() をキャンセルした
+  // ときも then が呼ばれなかったのと同じ挙動)。
   function completeSignInIfNeeded() {
     var auth = firebase.auth();
     var href = window.location.href;
     if (!auth.isSignInWithEmailLink(href)) {
       return Promise.resolve(null);
     }
-    // 控えたアドレスで試し、失敗したらそれを破棄して本人に再入力してもらう。
-    // (控えが別人のもの / 古いものだったケース。ここで諦めるとログインできない)
-    function signInWith(email, fromStorage) {
-      return auth.signInWithEmailLink(String(email).trim(), href)
-        .then(function (result) {
-          clearSignInEmail();
-          cleanAuthParamsFromUrl();
-          return result.user;
-        })
-        .catch(function (err) {
-          clearSignInEmail();
-          if (!fromStorage) throw err;
-          return askEmailAndSignIn();
-        });
-    }
 
-    // 別端末でリンクを開いた場合などはここに来る。本人確認のため入力を求める。
-    function askEmailAndSignIn() {
-      var typed = window.prompt('確認のため、ログインに使用したメールアドレスを入力してください:');
-      if (!typed) {
-        return Promise.reject(new Error('Email is required to complete sign-in'));
-      }
-      return signInWith(typed, false);
+    function askViaModal() {
+      return new Promise(function (resolve) {
+        showEmailConfirmModal(function (addr) {
+          return auth.signInWithEmailLink(addr, href).then(function (result) {
+            clearSignInEmail();
+            cleanAuthParamsFromUrl();
+            resolve(result.user);
+            return result;
+          });
+        });
+      });
     }
 
     var saved = loadSignInEmail();
-    return saved ? signInWith(saved, true) : askEmailAndSignIn();
+    if (!saved) return askViaModal();
+    // 控えたアドレスで試し、失敗したら (控えが別人のもの/古いもの) 破棄して
+    // モーダルでの再入力を促す。ここで諦めるとログインできない。
+    return auth.signInWithEmailLink(String(saved).trim(), href)
+      .then(function (result) {
+        clearSignInEmail();
+        cleanAuthParamsFromUrl();
+        return result.user;
+      })
+      .catch(function (_err) {
+        clearSignInEmail();
+        return askViaModal();
+      });
   }
 
   // 現在ログイン中の運営者ユーザを返す。未ログインまたは非運営者なら null。
