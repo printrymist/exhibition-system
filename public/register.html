@@ -1364,6 +1364,11 @@
 
     // 認証状態と主催者一致を見て pwCard / notOrganizerCard / mainArea を切り替え
     function applyAuthorizationUI() {
+      // Firebase Auth の永続化からの復元が終わるまで (window._authStateKnown が
+      // 立つまで) は firebase.auth().currentUser がログイン済みでも null のことが
+      // ある。ここで「未ログイン」と確定させず、判定を保留する (onAuthChange の
+      // 初回発火時に window._authStateKnown が立ってから再度呼ばれる)。
+      if (!window._authStateKnown) return;
       const user = firebase.auth().currentUser;
       const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
       if (!user) {
@@ -3247,6 +3252,12 @@ ${artistMessage}
 
       // 認証状態の変化を監視: 主催者本人なら mainArea、それ以外は notOrganizerCard / pwCard
       window.operatorAuth.onAuthChange(function (user, isOp) {
+        // Firebase Auth の永続化からの復元は非同期で、初回のこのコールバックが
+        // 発火するまで firebase.auth().currentUser は (実際はログイン済みでも) null。
+        // これが立つ前に applyAuthorizationUI が動くと「未ログイン」と誤判定して
+        // pwCard が一瞬出る (2026-09-20 実地報告: 「何度もログインを求められる、
+        // 無視すると通る」という症状の原因)。
+        window._authStateKnown = true;
         var statusEl = document.getElementById('operatorAuthStatus');
         if (user && statusEl) {
           statusEl.innerText = '🔓 ' + user.email + ' でログイン中';

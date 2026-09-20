@@ -596,6 +596,9 @@
     }
 
     function applyAuthorizationUI() {
+      // Firebase Auth の永続化復元が終わる (window._authStateKnown) 前に呼ばれると
+      // ログイン済みでも currentUser が null で「未ログイン」に誤判定するため保留する。
+      if (!window._authStateKnown) return;
       const user = firebase.auth().currentUser;
       const userEmail = (user && user.email) ? user.email.trim().toLowerCase() : '';
       if (!user) {
@@ -1278,6 +1281,9 @@
         .catch(function (err) { setMsg(friendlyError(err, 'ログイン'), '#d93025'); });
 
       window.operatorAuth.onAuthChange(function (user) {
+        // 初回発火まで currentUser がログイン済みでも null のことがある (register.html
+        // 2026-09-20 の教訓と同じ)。applyAuthorizationUI の誤判定防止フラグ。
+        window._authStateKnown = true;
         var statusEl = document.getElementById('operatorAuthStatus');
         if (user && statusEl) { statusEl.innerText = '🔓 ' + user.email + ' でログイン中'; statusEl.style.display = 'block'; }
         else if (statusEl) { statusEl.style.display = 'none'; }
