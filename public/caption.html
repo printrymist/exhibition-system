@@ -2273,7 +2273,7 @@
       }
       confirmMsg += 'キャプションに載せる項目はテンプレに合わせて置き換わります。';
 
-      if (!confirm(confirmMsg)) return;
+      if (!(await window.showConfirmModal(confirmMsg, { okLabel: '採用する' }))) return;
 
       const newRegFields = [
         ...currentRegFields,
@@ -2376,13 +2376,15 @@
     // バナーの「この展覧会のテンプレとして保存」ボタン: 展覧会名で保存する。
     // 既に同名 (この展覧会の) テンプレがあるときは確認を出して無断上書きを防ぐ
     // (別名で残したいなら詳細編集タブの保存欄で名前を変えて保存)。
-    function saveAsExhibitionTemplate() {
+    async function saveAsExhibitionTemplate() {
       const exName = (artworkData && artworkData.exName) || '';
       if (!exName) { saveTemplate(); return; }  // 念のためのフォールバック
       if (savedTemplateNames.has(exName)) {
-        if (!confirm(`この展覧会のテンプレ「${exName}」を、今の内容で上書きしますか?\n\n別の内容を残したいときは、キャンセルして「③ 詳細編集」タブの保存欄で別の名前を付けて保存してください。`)) {
-          return;
-        }
+        const okOverwrite = await window.showConfirmModal(
+          `この展覧会のテンプレ「${exName}」を、今の内容で上書きしますか?\n\n別の内容を残したいときは、キャンセルして「③ 詳細編集」タブの保存欄で別の名前を付けて保存してください。`,
+          { okLabel: '上書きする' }
+        );
+        if (!okOverwrite) return;
       }
       const nameInput = document.getElementById('saveTemplateName');
       if (nameInput) {
@@ -2539,7 +2541,7 @@
 
     // Custom タブ内の「↻ 選択中テンプレで再構築」ボタン。
     // 編集中の内容があれば破棄確認、無ければ即座に再構築。
-    function resetCustomFromTemplate() {
+    async function resetCustomFromTemplate() {
       if (!currentTemplate || !PRESETS[currentTemplate]) {
         alert('テンプレが選択されていません。テンプレートタブから選んでください。');
         return;
@@ -2548,7 +2550,11 @@
       const hasRows = grid && topLevelRows(grid).length > 0;
       if (hasRows) {
         const tplLabel = getTemplateLabel(currentTemplate);
-        if (!confirm(`現在の編集内容を破棄して、選択中のテンプレ「${tplLabel}」で再構築しますか?`)) return;
+        const okReset = await window.showConfirmModal(
+          `現在の編集内容を破棄して、選択中のテンプレ「${tplLabel}」で再構築しますか?`,
+          { okLabel: '再構築する' }
+        );
+        if (!okReset) return;
       }
       buildFieldsGridFromPreset(currentTemplate);
       switchTab('custom');
@@ -5141,6 +5147,7 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
   <script src="js/operator-auth.js"></script>
   <script src="js/gas-authed-call.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/confirm-modal.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     // ===== Email Link 認証の起動処理 =====

@@ -549,6 +549,7 @@
   <script src="offline-banner.js" data-message="⚠ オフラインです。作品の登録・更新は接続復帰後に行ってください。"></script>
   <script src="field-defs.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/confirm-modal.js"></script>
   <script>setFriendlyErrorContact('artist');</script>
   <script>
     // =========================================================
@@ -872,7 +873,11 @@
       }
 
       const label = art.title || art.title_en || art.artwork_id;
-      if (!confirm(`作品「${label}」を提出します。\n\n提出後は編集ができなくなります。\n再編集が必要な場合は主催者にご連絡ください。\n\n続行しますか?`)) return;
+      const okToSubmit = await window.showConfirmModal(
+        `作品「${label}」を提出します。\n\n提出後は編集ができなくなります。\n再編集が必要な場合は主催者にご連絡ください。\n\n続行しますか?`,
+        { okLabel: '提出する' }
+      );
+      if (!okToSubmit) return;
       if (!navigator.onLine) {
         alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
@@ -1007,7 +1012,11 @@
       }
       // 練習モード展覧会への新規登録は session 内で 1 回だけ事前確認
       if (window._exIsSandbox && !_sandboxWarningAcknowledged) {
-        if (!confirm('🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?\n\n(同じセッション中はこのメッセージは再表示されません)')) return;
+        const okSandbox = await window.showConfirmModal(
+          '🧪 これは練習モードの展覧会です。\n\n入力した作品データは 14 日後に自動削除されます。\nそれでも登録しますか?\n\n(同じセッション中はこのメッセージは再表示されません)',
+          { okLabel: '登録する' }
+        );
+        if (!okSandbox) return;
         _sandboxWarningAcknowledged = true;
       }
       // 必須項目チェックは「💾 登録する」では行わない (部分登録を許可)。
@@ -1161,7 +1170,11 @@
 
     async function rollbackFailedSave() {
       if (!_failedImageUpload) return;
-      if (!confirm('作品データを削除して最初からやり直しますか?\n\n(画像のアップロードができなかったため、画像なしの作品が登録された状態になっています)')) return;
+      const okRollback = await window.showConfirmModal(
+        '作品データを削除して最初からやり直しますか?\n\n(画像のアップロードができなかったため、画像なしの作品が登録された状態になっています)',
+        { okLabel: '削除してやり直す' }
+      );
+      if (!okRollback) return;
       if (!navigator.onLine) { alert('オフラインです。ネットワーク接続を確認してください。'); return; }
       const errEl = document.getElementById('newFormError');
       errEl.innerHTML = '<span class="spinner-sm"></span> 削除中…';

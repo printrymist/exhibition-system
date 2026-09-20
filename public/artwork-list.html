@@ -544,9 +544,9 @@
       rebuildListSelect(); applyListToControls(); buildOrderList(); renderPreview();
       const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
     }
-    function deleteList() {
+    async function deleteList() {
       if (lists.length <= 1) { alert('リストは最低 1 つ必要です。最後の 1 つは削除できません。'); return; }
-      if (!confirm('リスト「' + (listConfig.name || '') + '」を削除しますか？')) return;
+      if (!(await window.showConfirmModal('リスト「' + (listConfig.name || '') + '」を削除しますか？', { okLabel: '削除する' }))) return;
       lists.splice(currentListIdx, 1);
       currentListIdx = Math.min(currentListIdx, lists.length - 1);
       listConfig = lists[currentListIdx];
@@ -1267,6 +1267,7 @@
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/confirm-modal.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     (function () {
