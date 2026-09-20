@@ -489,11 +489,11 @@
 
     <!-- 入力フォーム -->
     <div id="formView" style="display:none;">
-      <label>展覧会コード
-        <input type="text" id="exCode" placeholder="例: TSUJI26" maxlength="10" oninput="onExCodeInput()">
-      </label>
-      <div class="hint">展覧会を識別する短いコードです。URL や QR に使われます。英数字・ハイフン・アンダースコアのみ使用できます。</div>
-      <div id="exCodeStatus" style="font-size:0.85em; min-height:1.4em; margin-top:4px;"></div>
+      <!-- 展覧会コード (URL/QR用の内部識別子) は自動生成し、画面には出さない。
+           2026-09-20 ユーザー判断: 一般利用者には「何のことか分からない」項目で、
+           使う場面(手入力での再アクセス)もほぼ無いため入力自体を不要にした。
+           完了画面のリンクとして渡されるだけで、人が読んで覚える必要は無い。 -->
+      <input type="hidden" id="exCode">
 
       <label>展覧会名
         <input type="text" id="exName" value="<?= exName ?>" readonly style="background:#f0f0f0; color:#555;">
@@ -589,12 +589,6 @@
             document.getElementById('formView').style.display = 'block';
             document.getElementById('exName').value = res.exName || '';
             document.getElementById('email').value = res.email || '';
-            // 展覧会名から展覧会コードを自動サジェスト
-            const _suggested = suggestExCode(res.exName || '');
-            if (_suggested) {
-              document.getElementById('exCode').value = _suggested;
-              onExCodeInput();
-            }
             // Firebase 認証用メアド欄に申請メアドを自動入力
             const authInput = document.getElementById('setupAuthEmailInput');
             if (authInput && res.email) authInput.value = res.email;
@@ -606,11 +600,15 @@
             // tokenを保持
             window._confirmedToken = res.token;
             // GAS token でメール所有が確認済みなので Firebase Email Link は不要
-            // 認証カードを隠して submit を有効化
+            // 認証カードを隠す (submit の有効化は展覧会コードの自動決定が終わってから)
             const authCardEl = document.getElementById('firebaseAuthCard');
             if (authCardEl) authCardEl.style.display = 'none';
-            const submitBtnEl = document.getElementById('btnSetupSubmit');
-            if (submitBtnEl) submitBtnEl.disabled = false;
+            // 展覧会コードを裏側で自動決定 (画面には出さない、ユーザー操作不要)。
+            // Firestore の重複確認を含む非同期処理なので、終わるまで submit を押させない。
+            assignExCode(res.exName || '').then(() => {
+              const submitBtnEl = document.getElementById('btnSetupSubmit');
+              if (submitBtnEl) submitBtnEl.disabled = false;
+            });
           });
       } else {
         // 通常アクセス → 申請フォームを表示
@@ -657,8 +655,11 @@
     }
 
     // =========================================================
-    // 展覧会コード — 自動サジェスト & バリデーション
+    // 展覧会コード — 自動決定 (画面には出さない)
     // =========================================================
+    // 展覧会名から英数字を拾えるだけ拾う (英語名なら意味のあるコードになる)。
+    // 日本語だけの名前だと何も拾えないことが多いので、戻り値が空でも呼び出し側が
+    // ランダムで埋める前提。
     function suggestExCode(exName) {
       const tokens = exName
         .replace(/[^\x00-\x7F]/g, '')
@@ -692,42 +693,39 @@
       return code;
     }
 
-    window._exCodeTaken = false;
-    let _exCodeCheckTimer = null;
-
-    function onExCodeInput() {
-      const el = document.getElementById('exCode');
-      const raw = el.value;
-      // 使えない文字 (英数字・ハイフン・アンダースコア以外: 全角・スペース・記号等) は
-      // エラーで止めず、入力した時点でその場で自動的に取り除く。
-      const cleaned = raw.replace(/[^A-Za-z0-9_-]/g, '');
-      if (cleaned !== raw) {
-        el.value = cleaned;
-        try { el.setSelectionRange(cleaned.length, cleaned.length); } catch (_e) {}
+    // 紛らわしい 0/O/1/I を除いた英数字 (短縮QRコード等、他機能と同じ発想の文字種)。
+    const EXCODE_RANDOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    function randomExCodeChars(n) {
+      let s = '';
+      for (let i = 0; i < n; i++) {
+        s += EXCODE_RANDOM_ALPHABET[Math.floor(Math.random() * EXCODE_RANDOM_ALPHABET.length)];
       }
-      const code = cleaned.trim();
-      const statusEl = document.getElementById('exCodeStatus');
-      window._exCodeTaken = false;
-      clearTimeout(_exCodeCheckTimer);
+      return s;
+    }
 
-      if (!code) { statusEl.innerText = ''; return; }
-      statusEl.innerHTML = (cleaned !== raw)
-        ? '<span style="color:#c08400;">使えない文字を取り除きました。確認中...</span>'
-        : '<span style="color:#aaa;">確認中...</span>';
-      _exCodeCheckTimer = setTimeout(async () => {
+    // 展覧会コードを裏側で自動決定して #exCode (hidden) にセットする。
+    // 名前から拾える文字があれば活用しつつ、必ずランダム4文字を付けて重複を避ける
+    // (ユーザーがコードを見ないので、名前由来の見た目より衝突しないことを優先)。
+    // 万一 Firestore 上で衝突していたら作り直す (最大8回、実際にはまず起きない)。
+    async function assignExCode(exName) {
+      const base = suggestExCode(exName || '') || 'EX';
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const candidate = (base + randomExCodeChars(4)).slice(0, 10).toUpperCase();
         try {
-          const snap = await window.fsDb.collection('exhibitions').doc(code).get();
-          if (snap.exists) {
-            window._exCodeTaken = true;
-            statusEl.innerHTML = '<span style="color:#d93025;">❌ このコードはすでに使われています。別のコードを入力してください。</span>';
-          } else {
-            window._exCodeTaken = false;
-            statusEl.innerHTML = '<span style="color:#2e7d32;">✅ 使用可能です。</span>';
+          const snap = await window.fsDb.collection('exhibitions').doc(candidate).get();
+          if (!snap.exists) {
+            document.getElementById('exCode').value = candidate;
+            return;
           }
         } catch (e) {
-          statusEl.innerHTML = '<span style="color:#aaa;">（重複確認できませんでした）</span>';
+          // オフライン等で確認できないときはそのまま採用 (サーバー側の実処理は
+          // 既存の GAS/CF が exCode 一致検証をしており、丸ごと無防備にはならない)。
+          document.getElementById('exCode').value = candidate;
+          return;
         }
-      }, 500);
+      }
+      // 8回連続衝突は天文学的に低確率。ランダム部分を伸ばして最後の候補を使う。
+      document.getElementById('exCode').value = (base + randomExCodeChars(6)).slice(0, 10).toUpperCase();
     }
 
     function showError(msg) {
@@ -750,9 +748,9 @@
       const workCount = parseInt(document.getElementById('workCount').value) || 30;
       const email = document.getElementById('email').value.trim();
 
-      if (!exCode) return showError('展覧会コードを入力してください。');
-      if (!/^[A-Za-z0-9_-]+$/.test(exCode)) return showError('展覧会コードは英数字・ハイフン・アンダースコアのみ使用できます。');
-      if (window._exCodeTaken) return showError('この展覧会コードはすでに使われています。別のコードを入力してください。');
+      // exCode は assignExCode が自動決定する (画面には出さない)。ボタンはそれが
+      // 終わるまで disabled のはずだが、念のための防御チェックとして残す。
+      if (!exCode) return showError('準備中です。少し待ってからもう一度お試しください。');
       if (!exName) return showError('展覧会名が取得できていません。');
       if (!email) return showError('メールアドレスが取得できていません。');
       if (workCount < 1 || workCount > 100) return showError('作品数は 1〜100 の範囲で入力してください。');
@@ -880,11 +878,14 @@
         var authCard = document.getElementById('firebaseAuthCard');
         var submitBtn = document.getElementById('btnSetupSubmit');
         var statusEl = document.getElementById('firebaseAuthStatus');
+        // 展覧会コードの自動決定 (assignExCode, Firestore重複確認込み) が終わるまでは
+        // ここで submit を有効化しない (認証状態の変化はそれより先に発火し得るため)。
+        var exCodeReady = !!document.getElementById('exCode').value;
         // GAS token 確認済みなら、Firebase 認証カードは表示せず submit も常に有効
         if (window._confirmedToken) {
           if (statusEl) statusEl.style.display = 'none';
           if (authCard) authCard.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
+          if (submitBtn) submitBtn.disabled = !exCodeReady;
           return;
         }
         if (user && user.email) {
@@ -893,7 +894,7 @@
             statusEl.style.display = 'block';
           }
           if (authCard) authCard.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
+          if (submitBtn) submitBtn.disabled = !exCodeReady;
         } else {
           if (statusEl) statusEl.style.display = 'none';
           if (authCard) authCard.style.display = 'block';
