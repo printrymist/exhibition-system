@@ -6,7 +6,7 @@
 //   v1.X.Y   — バグ修正 / 軽微な改善 (Y が増える)
 //   v2.0.0+  — 破壊的変更
 // 詳細な変更履歴はリポジトリ root の CHANGELOG.md を参照。
-window.APP_VERSION = 'v0.22.2';
+window.APP_VERSION = 'v0.22.3';
 window.APP_RELEASED_AT = '2026-09-21';
 window.APP_NAME = 'Qriine';
 
