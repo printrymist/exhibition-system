@@ -505,6 +505,7 @@
     const visitorFunctions = visitorApp.functions('asia-northeast1');
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
+  <script src="js/confirm-modal.js"></script>
   <script src="/sessionid.js"></script>
   <script>
     // 短縮QR (?c=code) はサーバー側 (galleryPage CF) で ex/exp/sig を解決し、
@@ -1086,7 +1087,7 @@
     // Firestore Rules で delete 権限を auth.token.sessionId == resource.data.sessionId で gate。
     async function onCommentDelete(commentId) {
       if (!commentId) return;
-      if (!confirm('このコメントを削除しますか?')) return;
+      if (!(await window.showConfirmModal('このコメントを削除しますか?'))) return;
       try {
         // #3 対策: 直接 delete でなく CF deleteLike に ownerKey を渡して本人確認。
         const fn = visitorFunctions.httpsCallable('deleteLike');
@@ -1094,7 +1095,7 @@
         // 一覧はリスナー経由で自動更新
       } catch (e) {
         console.error('comment 削除失敗:', e);
-        alert(friendlyError(e, '削除'));
+        await window.showAlertModal(friendlyError(e, '削除'));
       }
     }
 
@@ -1189,7 +1190,7 @@
         }
       } catch (e) {
         console.error('like toggle 失敗:', e);
-        alert(friendlyError(e, 'いいねの送信'));
+        await window.showAlertModal(friendlyError(e, 'いいねの送信'));
       } finally {
         // 成否に関わらず、disabled 解除と楽観 UI 反映 (リスナー届くまでのチラつき防止)
         updateModalLikeUI();
