@@ -2045,9 +2045,9 @@
           return r.json();
         })
         .then(data => { Object.assign(PRESETS, data || {}); })
-        .catch(err => {
+        .catch(async err => {
           console.error('PRESETS load failed:', err);
-          alert(friendlyError(err, 'プリセットの読み込み'));
+          await window.showAlertModal(friendlyError(err, 'プリセットの読み込み'));
         }),
       fetch('data/official-presets.json')
         .then(r => {
@@ -2134,8 +2134,8 @@
 
     async function runCategorization() {
       const ex = document.getElementById('exCodeInput').value.trim();
-      if (!ex) { alert('展覧会コードを読み込んでから実行してください'); return; }
-      if (!artworkData) { alert('作品データが読み込まれていません'); return; }
+      if (!ex) { await window.showAlertModal('展覧会コードを読み込んでから実行してください'); return; }
+      if (!artworkData) { await window.showAlertModal('作品データが読み込まれていません'); return; }
       const force = document.getElementById('catForceRedo').checked;
 
       catStopFlag = false;
@@ -2230,16 +2230,16 @@
     async function adoptTemplate(name) {
       const preset = PRESETS[name];
       if (!preset) {
-        alert('テンプレが読み込まれていません。');
+        await window.showAlertModal('テンプレが読み込まれていません。');
         return;
       }
       const ex = window._currentEx;
       if (!ex) {
-        alert('展覧会が読み込まれていません。');
+        await window.showAlertModal('展覧会が読み込まれていません。');
         return;
       }
       if (!artworkData) {
-        alert('展覧会データが読み込まれていません。');
+        await window.showAlertModal('展覧会データが読み込まれていません。');
         return;
       }
 
@@ -2255,7 +2255,7 @@
       // FIELD_DEFS に未定義のフィールドがあるとラベル等が出ないので弾く
       const unknown = missing.filter(n => !FIELD_MAP[n]);
       if (unknown.length > 0) {
-        alert('このテンプレートが使う項目の一部がシステムに見つかりません: ' + unknown.join(', ')
+        await window.showAlertModal('このテンプレートが使う項目の一部がシステムに見つかりません: ' + unknown.join(', ')
           + '\n運営者にお問い合わせください。');
         return;
       }
@@ -2327,14 +2327,14 @@
         updateAdoptedBadges(name);
         updatePresetUsageBanner();  // preset 採用中なので「保存してこの展覧会専用に」ナッジを出す
 
-        alert('✅ ' + label + ' を採用しました。'
+        await window.showAlertModal('✅ ' + label + ' を採用しました。'
           + (missing.length > 0
               ? '\n項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
               : '')
           + '\n\n→ 上の「🖨️ プレビュー」で仕上がりを確認し、良ければ「💾 この展覧会のテンプレとして保存」してください。');
       } catch (err) {
         console.error('adoption save failed:', err);
-        alert(friendlyError(err, '保存'));
+        await window.showAlertModal(friendlyError(err, '保存'));
       }
     }
 
@@ -2543,7 +2543,7 @@
     // 編集中の内容があれば破棄確認、無ければ即座に再構築。
     async function resetCustomFromTemplate() {
       if (!currentTemplate || !PRESETS[currentTemplate]) {
-        alert('テンプレが選択されていません。テンプレートタブから選んでください。');
+        await window.showAlertModal('テンプレが選択されていません。テンプレートタブから選んでください。');
         return;
       }
       const grid = document.getElementById('fieldsGrid');
@@ -2738,12 +2738,12 @@
       document.getElementById('btnEditExName').style.display = 'inline-block';
     }
 
-    function saveExName() {
+    async function saveExName() {
       const newName = document.getElementById('exNameInput').value.trim();
-      if (!newName) return alert('展覧会名を入力してください。');
+      if (!newName) { await window.showAlertModal('展覧会名を入力してください。'); return; }
       // D-3: オフラインだと Firestore 書き込みが永久 pending になるので事前チェック
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してください。');
         return;
       }
       const ex = document.getElementById('exCodeInput').value.trim();
@@ -2758,7 +2758,7 @@
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      Promise.allSettled([gasPromise, fsPromise]).then(([gasRes, fsRes]) => {
+      Promise.allSettled([gasPromise, fsPromise]).then(async ([gasRes, fsRes]) => {
         const gasOk = gasRes.status === 'fulfilled' && gasRes.value && gasRes.value.success;
         const fsOk  = fsRes.status === 'fulfilled';
         const gasErr = gasRes.status === 'rejected' ? (gasRes.reason && gasRes.reason.message || gasRes.reason)
@@ -2775,12 +2775,12 @@
         if (gasOk && fsOk) {
           // 両方成功、追加メッセージなし
         } else if (!gasOk && !fsOk) {
-          alert('保存に失敗しました。\nMaster SS: ' + gasErr + '\nFirestore: ' + fsErr);
+          await window.showAlertModal('保存に失敗しました。\nMaster SS: ' + gasErr + '\nFirestore: ' + fsErr);
         } else if (!gasOk) {
-          alert('⚠ Master SS への反映に失敗しました。アプリ表示 (Firestore) は更新済みですが、運用台帳が古いままです。\n' + gasErr);
+          await window.showAlertModal('⚠ Master SS への反映に失敗しました。アプリ表示 (Firestore) は更新済みですが、運用台帳が古いままです。\n' + gasErr);
         } else {
           // Firestore 失敗 = アプリ表示が古いまま
-          alert('⚠ Firestore への同期に失敗しました。Master SS は更新済みですが、次回読み込み時に古い名前が出る可能性があります。\n' + fsErr);
+          await window.showAlertModal('⚠ Firestore への同期に失敗しました。Master SS は更新済みですが、次回読み込み時に古い名前が出る可能性があります。\n' + fsErr);
         }
       }).finally(() => { saveBtn.disabled = false; });
     }
@@ -4329,10 +4329,10 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
     // 出力は qrPosition / qrOffset / textAlign / pageSettings / items だけ。
     // 公式テンプレの label / tagline / size は固有のメタ情報なので含めず、私 (Claude) 側で
     // 既存値を温存して中身だけ差し替える運用にする。
-    function copyOfficialJsonSnippet(tpl, btn) {
+    async function copyOfficialJsonSnippet(tpl, btn) {
       let settings;
       try { settings = JSON.parse(tpl.settingsJson || '{}'); }
-      catch (e) { alert(friendlyError(e, '保存テンプレートの読み込み')); return; }
+      catch (e) { await window.showAlertModal(friendlyError(e, '保存テンプレートの読み込み')); return; }
 
       const pageSettings = {
         paperSize:       settings.paperSize || 'A4',
@@ -4490,7 +4490,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       .catch(err => { console.warn('loadSavedTemplates error:', err && err.message ? err.message : err); });
     }
 
-    function loadSavedTemplate(btn, opts) {
+    async function loadSavedTemplate(btn, opts) {
       try {
         // 選択中テンプレを記録 (現状 read 箇所はなし。将来再利用候補のためアサインのみ残す)
         if (btn && btn.dataset && btn.dataset.tplId) {
@@ -4654,7 +4654,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         // 詳細を編集したい人だけ自分で「⚙️ 詳細編集」タブを開く。
         updatePresetUsageBanner();  // saved 読込なのでナッジは隠れる (preset のときだけ出す)
       } catch (e) {
-        alert(friendlyError(e, '読み込み'));
+        await window.showAlertModal(friendlyError(e, '読み込み'));
       }
     }
 
@@ -4771,11 +4771,11 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       document.getElementById('deleteSavedTemplateModal').style.display = 'none';
     }
 
-    function executeDeleteSavedTemplateFromModal() {
+    async function executeDeleteSavedTemplateFromModal() {
       const pending = _pendingDeleteTemplate;
       if (!pending) { closeDeleteSavedTemplateModal(); return; }
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
       const btnConfirm = document.getElementById('btnDeleteSavedTemplateConfirm');
@@ -4790,8 +4790,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           closeDeleteSavedTemplateModal();
           loadSavedTemplates();
         })
-        .catch(err => {
-          alert(friendlyError(err, '処理'));
+        .catch(async err => {
+          await window.showAlertModal(friendlyError(err, '処理'));
           if (btnConfirm) btnConfirm.disabled = false;
           if (pending.btn) pending.btn.disabled = false;
         });
@@ -4892,8 +4892,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         .finally(() => { if (saveBtn) saveBtn.disabled = false; });
     }
 
-    function openQrPrint() {
-      if (!qrAllData) { alert('QRデータが読み込まれていません。'); return; }
+    async function openQrPrint() {
+      if (!qrAllData) { await window.showAlertModal('QRデータが読み込まれていません。'); return; }
       const size = parseInt(document.getElementById('qrPrintSize').value);
       const logo = document.getElementById('qrPrintLogo').value;
       const target = document.getElementById('qrPrintTarget').value;
@@ -4901,7 +4901,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       const header = document.getElementById('qrPrintHeader').value;
       let artworks = qrAllData.artworks;
       if (target !== 'all') { artworks = artworks.filter(a => a.status === target); }
-      if (artworks.length === 0) { alert('対象の作品がありません。'); return; }
+      if (artworks.length === 0) { await window.showAlertModal('対象の作品がありません。'); return; }
       const layouts = { 15: { cols: 6, rows: 8 }, 20: { cols: 5, rows: 7 }, 25: { cols: 4, rows: 6 }, 30: { cols: 4, rows: 5 }, 45: { cols: 3, rows: 4 }, 60: { cols: 2, rows: 3 } };
       const { cols, rows } = layouts[size] || layouts[25];
       buildQrPrintHtml(artworks, size, cols, rows, logo, paper, header);

@@ -1661,11 +1661,11 @@
       const wantCaptionFields = document.getElementById('imp_captionFields').checked;
       const wantGalleryFields = document.getElementById('imp_galleryFields').checked;
       if (!wantRegFields && !wantCaptionFields && !wantGalleryFields) {
-        alert('複製する内容を1つ以上選択してください。');
+        await window.showAlertModal('複製する内容を1つ以上選択してください。');
         return;
       }
       if (!navigator.onLine) {
-        alert('オフラインです。接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。接続を確認してから再試行してください。');
         return;
       }
       btn.disabled = true;
@@ -1674,7 +1674,7 @@
         // 元展覧会の doc を1回 fetch して必要な field を取り出す
         const snap = await fsDb.collection('exhibitions').doc(exCode).get();
         if (!snap.exists) {
-          alert(`"${exName}" の展覧会データが見つかりません。`);
+          await window.showAlertModal(`"${exName}" の展覧会データが見つかりません。`);
           return;
         }
         const data = snap.data() || {};
@@ -1792,7 +1792,7 @@
         document.getElementById('importPanel').style.display = 'none';
 
         if (copied.length === 0 && failed.length === 0) {
-          alert(`"${exName}" には複製可能な設定がありませんでした (${skipped.join(' / ')})。`);
+          await window.showAlertModal(`"${exName}" には複製可能な設定がありませんでした (${skipped.join(' / ')})。`);
           return;
         }
 
@@ -1803,7 +1803,7 @@
         showMsg('saveMsgSetup', msg, failed.length > 0 ? '#d93025' : '#1a73e8');
       } catch (err) {
         console.error('importFromExhibition failed:', err);
-        alert(friendlyError(err, '読み込み'));
+        await window.showAlertModal(friendlyError(err, '読み込み'));
       } finally {
         btn.disabled = false;
         btn.textContent = '読み込む';
@@ -2069,7 +2069,7 @@ ${artistMessage}
             btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
           } catch (err) {
             btn.textContent = '⚠️ 読み込み失敗';
-            alert(friendlyError(err, '画像の読み込み'));
+            await window.showAlertModal(friendlyError(err, '画像の読み込み'));
           } finally { btn.disabled = false; }
         });
         wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);
@@ -2486,7 +2486,7 @@ ${artistMessage}
     // 主催者はここからいつでも切替可能 (作家からの「直したい」依頼に対応する用)。
     async function toggleArtworkLock(art) {
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
       // 行を展開した時点で closure に閉じ込めた `art` は、「💾 更新する」後に古くなる
@@ -2518,7 +2518,7 @@ ${artistMessage}
           }
         });
         if (offenders.length > 0) {
-          alert(
+          await window.showAlertModal(
             '⚠️ この作品で必須項目が空欄になっているためロックできません:\n\n' +
             offenders.map(l => '  - ' + l).join('\n') +
             '\n\n空欄を埋めてから再度ロックしてください。\n' +
@@ -2569,7 +2569,7 @@ ${artistMessage}
         }
       } catch (e) {
         console.error('toggleArtworkLock failed:', e);
-        alert(friendlyError(e, 'ロック切替'));
+        await window.showAlertModal(friendlyError(e, 'ロック切替'));
       } finally {
         if (lockBtn) lockBtn.disabled = false;
       }
@@ -2581,7 +2581,7 @@ ${artistMessage}
     // かかる可能性があるので逐次。30 件規模なら数秒で終わる想定。
     async function bulkSetArtworkLock(targetState) {
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
 
@@ -2650,7 +2650,7 @@ ${artistMessage}
               : '';
             return `  - ${o.label}: ${o.count} 件 (${shown}${overflow})`;
           }).join('\n');
-          alert(
+          await window.showAlertModal(
             '⚠️ 必須項目に空欄の作品があるため一括ロックできません:\n\n' + lines +
             '\n\n空欄を埋めてから再度ロックしてください。\n' +
             'どうしても必須から外したい場合は「項目設定」タブで該当項目を手動で「任意」に変えてください。'
@@ -2890,10 +2890,10 @@ ${artistMessage}
 
     // 🎓 練習モード卒業: テストデータをクリアして本番運用に切替
     // A-1: confirm() を ack checkbox 付きモーダルに置換
-    function openGraduateModal() {
+    async function openGraduateModal() {
       if (!currentEx) return;
       const user = firebase.auth().currentUser;
-      if (!user || !user.email) { alert('ログインが必要です。'); return; }
+      if (!user || !user.email) { await window.showAlertModal('ログインが必要です。'); return; }
       document.getElementById('graduateAck').checked = false;
       document.getElementById('btnGraduateConfirm').disabled = true;
       document.getElementById('graduateModal').style.display = 'flex';
@@ -2909,7 +2909,7 @@ ${artistMessage}
     async function graduateKeepData() {
       if (!currentEx) return;
       const user = firebase.auth().currentUser;
-      if (!user || !user.email) { alert('ログインが必要です。'); return; }
+      if (!user || !user.email) { await window.showAlertModal('ログインが必要です。'); return; }
       const okGraduate = await window.showConfirmModal(
         '練習モードを終了し、いま入力した練習データ（作品・コメント・いいね・画像）を' +
         'そのまま本番として使います。\n\nよろしいですか?',
@@ -2926,7 +2926,7 @@ ${artistMessage}
 
       const user = firebase.auth().currentUser;
       if (!user || !user.email) {
-        alert('ログインが必要です。');
+        await window.showAlertModal('ログインが必要です。');
         return;
       }
 

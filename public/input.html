@@ -863,7 +863,7 @@
         }
       });
       if (offenders.length > 0) {
-        alert(
+        await window.showAlertModal(
           '⚠️ この作品で必須項目が空欄になっているため提出できません:\n\n' +
           offenders.map(l => '  - ' + l).join('\n') +
           '\n\n空欄を埋めてから再度提出してください。\n' +
@@ -879,7 +879,7 @@
       );
       if (!okToSubmit) return;
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
       const btn = document.getElementById('btnSubmit_' + art.artwork_id);
@@ -911,7 +911,7 @@
         showTopToast('✅「' + label + '」を提出しました。あとは主催者にお任せください。再編集が必要なときは主催者にご連絡ください。');
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
-        alert(friendlyError(e, '提出'));
+        await window.showAlertModal(friendlyError(e, '提出'));
         if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
       }
     }
@@ -942,12 +942,12 @@
       return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    function executeDeleteFromModal() {
+    async function executeDeleteFromModal() {
       const artworkId = _pendingDeleteArtworkId;
       if (!artworkId) { closeDeleteArtworkModal(); return; }
       // オフライン時は Firestore 書き込みが永久 pending になるので事前で弾く
       if (!navigator.onLine) {
-        alert('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
         return;
       }
       const confirmBtn = document.getElementById('btnDeleteArtworkConfirm');
@@ -967,8 +967,8 @@
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         })
-        .catch(err => {
-          alert(friendlyError(err, '削除'));
+        .catch(async err => {
+          await window.showAlertModal(friendlyError(err, '削除'));
           closeDeleteArtworkModal();
           if (confirmBtn) confirmBtn.disabled = false;
         });
@@ -1152,7 +1152,7 @@
 
     async function retryFailedImageUpload() {
       if (!_failedImageUpload) return;
-      if (!navigator.onLine) { alert('オフラインです。ネットワーク接続を確認してください。'); return; }
+      if (!navigator.onLine) { await window.showAlertModal('オフラインです。ネットワーク接続を確認してください。'); return; }
       const errEl = document.getElementById('newFormError');
       errEl.innerHTML = '<span class="spinner-sm"></span> 画像を再アップロード中…';
       const artworkId = _failedImageUpload.artworkId;
@@ -1175,7 +1175,7 @@
         { okLabel: '削除してやり直す' }
       );
       if (!okRollback) return;
-      if (!navigator.onLine) { alert('オフラインです。ネットワーク接続を確認してください。'); return; }
+      if (!navigator.onLine) { await window.showAlertModal('オフラインです。ネットワーク接続を確認してください。'); return; }
       const errEl = document.getElementById('newFormError');
       errEl.innerHTML = '<span class="spinner-sm"></span> 削除中…';
       const artworkId = _failedImageUpload.artworkId;
@@ -1190,7 +1190,7 @@
         const res2 = await window.fsGetArtworksByArtist(ex, currentArtist);
         if (res2.success) { existingWorks = res2.artworks; showArtworkList(); }
       } catch (e) {
-        alert(friendlyError(e, '削除'));
+        await window.showAlertModal(friendlyError(e, '削除'));
         showImageUploadFailureRecovery(artworkId, dataUrl, e);
       }
     }
@@ -1291,7 +1291,7 @@
             btn.textContent = '✅ ' + e.target.files[0].name + '（変更）';
           } catch (err) {
             btn.textContent = '⚠️ 読み込み失敗';
-            alert(friendlyError(err, '画像の読み込み'));
+            await window.showAlertModal(friendlyError(err, '画像の読み込み'));
           } finally { btn.disabled = false; }
         });
         wrap.appendChild(file); wrap.appendChild(btn); wrap.appendChild(preview); wrap.appendChild(existingHidden);

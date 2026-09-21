@@ -545,7 +545,7 @@
       const n = document.getElementById('listName'); if (n) { n.focus(); n.select(); }
     }
     async function deleteList() {
-      if (lists.length <= 1) { alert('リストは最低 1 つ必要です。最後の 1 つは削除できません。'); return; }
+      if (lists.length <= 1) { await window.showAlertModal('リストは最低 1 つ必要です。最後の 1 つは削除できません。'); return; }
       if (!(await window.showConfirmModal('リスト「' + (listConfig.name || '') + '」を削除しますか？', { okLabel: '削除する' }))) return;
       lists.splice(currentListIdx, 1);
       currentListIdx = Math.min(currentListIdx, lists.length - 1);

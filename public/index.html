@@ -538,6 +538,7 @@
   <script src="/offline-banner.js" data-message="⚠ オフラインです。いいねは接続復帰後に反映されます。"></script>
   <script src="/sessionid.js"></script>
   <script src="/js/friendly-error.js"></script>
+  <script src="/js/confirm-modal.js"></script>
   <script>
     // =========================================================
     // 🌟 URL パラメータ取得
@@ -945,7 +946,7 @@
           _getArtworkFn({ exCode: ex, artworkId: id, accessToken: accessToken }),
         ]);
         if (!exSnap.exists) {
-          alert('エラー: 展覧会データが見つかりません');
+          await window.showAlertModal('エラー: 展覧会データが見つかりません');
           return;
         }
         const exData = exSnap.data() || {};
@@ -993,7 +994,7 @@
         regChangeStep(1);
       } catch (err) {
         console.error('regInit failed:', err);
-        alert(friendlyError(err, '読み込み'));
+        await window.showAlertModal(friendlyError(err, '読み込み'));
       }
     }
 
@@ -1039,8 +1040,8 @@
       img.src = imgUrl;
     };
 
-    function regToConfirm() {
-      if (regImageRequired && !regRawImgData && !regConfig.imageUrl) return alert(t('regPhotoRequired'));
+    async function regToConfirm() {
+      if (regImageRequired && !regRawImgData && !regConfig.imageUrl) { await window.showAlertModal(t('regPhotoRequired')); return; }
       const insta = regCleanSnsId(document.getElementById('regSnsInsta').value);
       const x = regCleanSnsId(document.getElementById('regSnsX').value);
       const fb = regCleanSnsId(document.getElementById('regSnsFb').value);
@@ -1089,7 +1090,7 @@
         }
       } catch (e) {
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        alert(friendlyError(e, '画像のアップロード'));
+        await window.showAlertModal(friendlyError(e, '画像のアップロード'));
         return;
       }
 
@@ -1142,7 +1143,7 @@
       } catch (err) {
         console.error('artist registration failed:', err);
         document.getElementById('regLoadingOverlay').style.display = 'none';
-        alert(t('regError'));
+        await window.showAlertModal(t('regError'));
       }
     }
 
@@ -1412,10 +1413,10 @@
 
     async function onSubmittedUndo() {
       if (!_lastSubmitted || !_lastSubmitted.docId) {
-        alert('取消対象がありません。');
+        await window.showAlertModal('取消対象がありません。');
         return;
       }
-      if (!navigator.onLine) { alert('オフラインです。接続を確認してください。'); return; }
+      if (!navigator.onLine) { await window.showAlertModal('オフラインです。接続を確認してください。'); return; }
       const btn = document.getElementById('ansSubmittedUndoBtn');
       if (btn) { btn.disabled = true; btn.textContent = '取消中…'; }
       try {
@@ -1431,7 +1432,7 @@
         reloadApp();
       } catch (e) {
         console.error('submitted undo failed:', e);
-        alert(friendlyError(e, '取り消し'));
+        await window.showAlertModal(friendlyError(e, '取り消し'));
         if (btn) { btn.disabled = false; btn.textContent = '🔄 取消'; }
       }
     }
@@ -1473,11 +1474,11 @@
               throw new Error('fsSetArtwork が利用できません');
             }
             await window.fsSetArtwork(exVal, idVal, { status: "" });
-            alert(t('alertUnlock'));
+            await window.showAlertModal(t('alertUnlock'));
             reloadApp();
             return;
           }
-          alert('入力エラー：作家本人のお名前での投稿はできません。');
+          await window.showAlertModal('入力エラー：作家本人のお名前での投稿はできません。');
           btn.innerText = originalText;
           btn.disabled = false;
           return;
@@ -1538,7 +1539,7 @@
         if (nicknameTrim) savePref("nickname_" + exVal, nicknameTrim);
       } catch (err) {
         console.error('submit failed:', err);
-        alert(friendlyError(err, '送信'));
+        await window.showAlertModal(friendlyError(err, '送信'));
         btn.innerText = originalText;
         btn.disabled = false;
       }
