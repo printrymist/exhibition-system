@@ -248,6 +248,16 @@
     </div>
 
     <div class="card">
+      <div class="card-title">🖼 作品情報の表示項目</div>
+      <div style="font-size:0.85em; color:#666; margin-bottom:10px; line-height:1.6;">
+        作品をタップしたときに、タイトル・作家名に加えて表示する項目を選べます（印刷キャプションの項目設定とは別の設定です）。販売サイトとして使う場合は「価格」「作家コメント」などを、単なる紹介なら「制作年」「技法」「サイズ」あたりを選ぶと良いでしょう。
+      </div>
+      <div id="galleryFieldsGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px 12px; font-size:0.9em; margin-bottom:12px;"></div>
+      <button class="btn-primary" id="btnSaveGallerySettings2" onclick="saveGallerySettings()">💾 設定を保存</button>
+      <div id="galleryFieldsMsg" style="font-size:0.85em; min-height:1.2em; margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">🎨 ギャラリー外観</div>
       <div style="font-size:0.85em; color:#666; margin-bottom:12px;">
         gallery.html の見た目をカスタマイズします。未設定の項目は既定値が使われます。
@@ -325,6 +335,8 @@
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/confirm-modal.js"></script>
+  <script src="field-defs.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     function getUrlParam(name) {
@@ -397,6 +409,7 @@
           document.getElementById('gallerySelectInteractions').value = data.gallery_interactions || 'none';
           document.getElementById('galleryOpenAtInput').value = isoToLocalInput(data.gallery_open_at || '');
           document.getElementById('galleryCloseAtInput').value = isoToLocalInput(data.gallery_close_at || '');
+          renderGalleryFieldsGrid(Array.isArray(data.gallery_fields) ? data.gallery_fields : DEFAULT_GALLERY_FIELDS);
           document.getElementById('galleryTitleInput').value = data.gallery_title || '';
           document.getElementById('gallerySubtitleInput').value = data.gallery_subtitle || '';
           document.getElementById('galleryBgColorInput').value = data.gallery_bg_color || '#fafafa';
@@ -512,10 +525,10 @@
           appearanceCleared[kind] = false;
           setAppearancePreview(kind, dataUrl);
         };
-        img.onerror = () => alert('画像の読み込みに失敗しました');
+        img.onerror = () => window.showAlertModal('画像の読み込みに失敗しました');
         img.src = reader.result;
       };
-      reader.onerror = () => alert('ファイルの読み込みに失敗しました');
+      reader.onerror = () => window.showAlertModal('ファイルの読み込みに失敗しました');
       reader.readAsDataURL(file);
       ev.target.value = ''; // 同じファイルを選び直せるように
     }
@@ -585,15 +598,43 @@
       }
     }
 
+    // Web展覧会の表示項目 (印刷キャプションの caption_fields とは別建て)。
+    // 未設定時は従来の固定表示 (制作年・技法・サイズ・価格) を再現する既定値。
+    const DEFAULT_GALLERY_FIELDS = ['year', 'technique', 'size', 'price'];
+
+    // タイトル・作家名は常時表示のため選択対象から除外。画像/システム項目・純SNSも除外
+    // (SNSは作家単位の別導線で既に出ているため)。
+    const GALLERY_FIELD_CANDIDATES = FIELD_DEFS.filter((d) =>
+      !d.isSystem && d.type !== 'image' && !d.isSnsSection &&
+      d.name !== 'title' && d.name !== 'artist');
+
+    function renderGalleryFieldsGrid(selected) {
+      const grid = document.getElementById('galleryFieldsGrid');
+      const selSet = new Set(selected);
+      grid.innerHTML = GALLERY_FIELD_CANDIDATES.map((d) =>
+        '<label style="display:flex; align-items:center; gap:5px; cursor:pointer;">'
+        + '<input type="checkbox" value="' + d.name + '"' + (selSet.has(d.name) ? ' checked' : '') + '>'
+        + d.label + '</label>'
+      ).join('');
+    }
+
+    function readGalleryFieldsGrid() {
+      return Array.from(document.querySelectorAll('#galleryFieldsGrid input:checked')).map((el) => el.value);
+    }
+
     async function saveGallerySettings() {
       if (!currentEx) return;
       const visibility = document.getElementById('gallerySelectVisibility').value;
       const interactions = document.getElementById('gallerySelectInteractions').value;
       const openAt = localInputToIso(document.getElementById('galleryOpenAtInput').value);
       const closeAt = localInputToIso(document.getElementById('galleryCloseAtInput').value);
+      const galleryFields = readGalleryFieldsGrid();
       const btn = document.getElementById('btnSaveGallerySettings');
+      const btn2 = document.getElementById('btnSaveGallerySettings2');
       const msgEl = document.getElementById('gallerySettingMsg');
+      const msgEl2 = document.getElementById('galleryFieldsMsg');
       btn.disabled = true;
+      btn2.disabled = true;
       msgEl.innerText = '保存中...';
       msgEl.style.color = '#888';
       try {
@@ -605,6 +646,7 @@
           gallery_interactions: interactions,
           gallery_open_at: openAt,
           gallery_close_at: closeAt,
+          gallery_fields: galleryFields,
         });
         const d = res && res.data;
         if (!d || !d.success) {
@@ -612,11 +654,16 @@
         }
         msgEl.innerText = '✅ 保存しました (' + (d.updated || 0) + ' 件の作品を同期)。';
         msgEl.style.color = '#1a73e8';
+        msgEl2.innerText = '✅ 保存しました。';
+        msgEl2.style.color = '#1a73e8';
       } catch (e) {
         msgEl.innerText = '❌ ' + friendlyError(e, '保存');
         msgEl.style.color = '#d93025';
+        msgEl2.innerText = '❌ ' + friendlyError(e, '保存');
+        msgEl2.style.color = '#d93025';
       } finally {
         btn.disabled = false;
+        btn2.disabled = false;
       }
     }
 
@@ -624,7 +671,7 @@
       if (!currentEx) return;
       const expDays = parseInt(document.getElementById('qrExpDays').value, 10);
       if (!Number.isFinite(expDays) || expDays < 1 || expDays > 365) {
-        alert('有効期限は 1〜365 の整数で指定してください。');
+        await window.showAlertModal('有効期限は 1〜365 の整数で指定してください。');
         return;
       }
       const btn = document.getElementById('btnIssueGalleryQr');
@@ -678,8 +725,8 @@
 
     function copyQrUrl(url) {
       navigator.clipboard.writeText(url).then(() => {
-        alert('URL をコピーしました。');
-      }).catch(e => alert(friendlyError(e, 'コピー')));
+        window.showAlertModal('URL をコピーしました。');
+      }).catch(e => window.showAlertModal(friendlyError(e, 'コピー')));
     }
 
     function printQrPage(url) {

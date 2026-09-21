@@ -908,6 +908,9 @@ exports.issueGalleryToken = onCall(
     const exData = exSnap.data() || {};
     const visibility = String(exData.gallery_visibility || "closed");
     const interactions = String(exData.gallery_interactions || "none");
+    // 未設定 (null) なら gallery.template.html 側で従来の固定表示にフォールバックする。
+    const galleryFields = Array.isArray(exData.gallery_fields) ?
+      exData.gallery_fields.map((f) => String(f)) : null;
 
     // visibility は "closed" / "visitor_only" / "public" のいずれか。
     // 未知値 (手動編集・typo・将来追加) は fail-closed で拒否する。
@@ -1003,6 +1006,7 @@ exports.issueGalleryToken = onCall(
       exCode,
       visibility,
       interactions,
+      galleryFields,
     };
   },
 );
@@ -3162,6 +3166,17 @@ exports.syncArtworkPublishedFlags = onCall(async (request) => {
   }
   if ("gallery_close_at" in data) {
     exhibitionUpdate.gallery_close_at = String(data.gallery_close_at || "");
+  }
+  // Web展覧会の表示項目 (caption印刷用の caption_fields とは別建て)。
+  // キーが渡されたときだけ更新 (空配列 = 追加項目なし = 固定表示のみに戻す)。
+  if ("gallery_fields" in data) {
+    if (!Array.isArray(data.gallery_fields)) {
+      throw new HttpsError("invalid-argument", "gallery_fields は配列で指定してください");
+    }
+    const fields = data.gallery_fields
+      .map((f) => String(f || "").trim())
+      .filter((f) => /^[a-z_]{1,40}$/.test(f));
+    exhibitionUpdate.gallery_fields = fields;
   }
   await db.collection("exhibitions").doc(exCode).set(exhibitionUpdate, { merge: true });
 

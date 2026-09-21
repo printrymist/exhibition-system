@@ -278,6 +278,18 @@
       text-decoration: none;
     }
     .details-section .sns-row a:hover { text-decoration: underline; }
+    .detail-long-field { margin-bottom: 10px; }
+    .detail-long-label {
+      font-size: 0.8em;
+      color: #888;
+      margin-bottom: 2px;
+    }
+    .detail-long-value {
+      font-size: 0.92em;
+      color: #333;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
 
     .comment-section {
       margin-top: 6px;
@@ -467,6 +479,7 @@
         <div id="modalShopLink"></div>
         <div class="details-section" id="modalDetailsSection" style="display:none;">
           <div class="detail-row" id="modalArtworkDetail"></div>
+          <div id="modalArtworkLongFields"></div>
           <div class="sns-row" id="modalSnsRow"></div>
         </div>
         <div class="comment-section" id="modalCommentSection" style="display:none;">
@@ -506,6 +519,7 @@
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/confirm-modal.js"></script>
+  <script src="field-defs.js"></script>
   <script src="/sessionid.js"></script>
   <script>
     // 短縮QR (?c=code) はサーバー側 (galleryPage CF) で ex/exp/sig を解決し、
@@ -610,6 +624,10 @@
 
     let artworksCache = [];
     let interactionsMode = 'none'; // 'none' / 'likes_only' / 'likes_and_comments'
+    // 表示項目 (web-exhibition.html の「作品情報の表示項目」で設定)。
+    // null (未設定) のときは従来の固定表示を再現する既定値にフォールバック。
+    const DEFAULT_GALLERY_FIELDS = ['year', 'technique', 'size', 'price'];
+    let galleryFields = DEFAULT_GALLERY_FIELDS;
     let exNameCache = '';
     let exCodeCache = '';
     const likesByWork = Object.create(null);    // {workId: count}
@@ -739,6 +757,9 @@
 
       const customToken = issueRes && issueRes.token;
       interactionsMode = String(issueRes && issueRes.interactions || 'none');
+      if (Array.isArray(issueRes && issueRes.galleryFields)) {
+        galleryFields = issueRes.galleryFields;
+      }
       if (!customToken) {
         showInfo('⚠', '認証トークンが取得できませんでした', '時間をおいて再度お試しください。');
         return;
@@ -978,12 +999,27 @@
       const sec = document.getElementById('modalDetailsSection');
       if (!a) { toggle.style.display = 'none'; sec.style.display = 'none'; return; }
 
+      // 短い項目 (年・技法・サイズ・価格等) は「・」区切りの1行、備考・作家コメントのような
+      // 長文項目 (FIELD_DEFS の textarea:true) は見出し付きの別段落で表示する。
       const detailParts = [];
-      if (a.year) detailParts.push(escapeHtml(a.year));
-      if (a.technique) detailParts.push(escapeHtml(a.technique));
-      if (a.size) detailParts.push(escapeHtml(a.size));
-      if (a.price) detailParts.push(escapeHtml(a.price));
+      const longBlocks = [];
+      galleryFields.forEach((name) => {
+        const def = (typeof FIELD_MAP !== 'undefined') && FIELD_MAP[name];
+        const val = (a[name] || '').toString().trim();
+        if (!val) return;
+        if (def && def.textarea) {
+          longBlocks.push(
+            '<div class="detail-long-field">'
+            + '<div class="detail-long-label">' + escapeHtml(def.label) + '</div>'
+            + '<div class="detail-long-value">' + escapeHtml(val) + '</div>'
+            + '</div>'
+          );
+        } else {
+          detailParts.push(escapeHtml(val));
+        }
+      });
       const detailRow = detailParts.length > 0 ? detailParts.join(' · ') : '';
+      const longFieldsHtml = longBlocks.join('');
 
       const snsLinks = [];
       const insta = (a.insta || '').toString().trim();
@@ -995,7 +1031,7 @@
       if (fb) snsLinks.push(`<a href="${/^https?:\/\//i.test(fb) ? escapeHtml(fb) : 'https://www.facebook.com/' + encodeURIComponent(fb)}" target="_blank" rel="noopener noreferrer">f Facebook</a>`);
       if (web) snsLinks.push(`<a href="${escapeHtml(web)}" target="_blank" rel="noopener noreferrer">🌐 Web</a>`);
 
-      const hasAny = !!detailRow || snsLinks.length > 0;
+      const hasAny = !!detailRow || !!longFieldsHtml || snsLinks.length > 0;
       if (!hasAny) {
         toggle.style.display = 'none';
         sec.style.display = 'none';
@@ -1007,6 +1043,7 @@
       toggle.classList.toggle('active', detailsExpanded);
       sec.style.display = detailsExpanded ? 'block' : 'none';
       document.getElementById('modalArtworkDetail').innerHTML = detailRow;
+      document.getElementById('modalArtworkLongFields').innerHTML = longFieldsHtml;
       document.getElementById('modalSnsRow').innerHTML = snsLinks.join(' · ');
     }
 
