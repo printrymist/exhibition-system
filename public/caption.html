@@ -2314,6 +2314,7 @@
         });
         _savedTemplateId = templateId;
         _lastSelectedTemplate = { id: templateId, name: label };
+        refreshProgress();
 
         // テンプレ反映 (preview + Custom タブの fieldsGrid + 載せる項目 を強制再構築)
         selectTemplate(name, { commit: true });
@@ -2620,6 +2621,14 @@
         });
     }
 
+    // 進捗アシスタントの「次はこれ」: キャプション選択・印刷はこの画面の上部 (テンプレ/印刷ボタン) で行う
+    function navigateFromProgress(action) {
+      if (action.page !== 'caption') return false;
+      switchMainTab('caption');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+
     // 認証状態と主催者一致を見て pwCard / notOrganizerCard / mainArea (loadAllData) を切り替え
     function applyAuthorizationUI() {
       const ex = window._currentEx;
@@ -2655,6 +2664,9 @@
         // 運営者が「本人でない」展覧会を開いているときはサポートモードを明示 (誤操作防止)。
         renderOperatorSupportBanner(isOp && !isOrganizer);
         loadAllData(ex);
+        if (window.QriineProgress) {
+          window.QriineProgress.attach({ exCode: ex, navigate: navigateFromProgress });
+        }
         return;
       }
       // 認証済みだが主催者本人ではない
@@ -4218,7 +4230,21 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       return overflowList;
     }
 
+    // 進捗アシスタント用: 印刷画面を開いた日時を記録する (実際に印刷したかはブラウザから分からないため
+    // 「印刷画面を開いた」を印刷とみなす)。記録失敗は印刷を妨げない。
+    function markCaptionPrinted() {
+      const ex = window._currentEx;
+      if (!ex) return;
+      fsDb.collection('exhibitions').doc(ex).set({ caption_printed_at: new Date().toISOString() }, { merge: true })
+        .then(refreshProgress)
+        .catch(e => console.warn('caption_printed_at 記録失敗:', e));
+    }
+    function refreshProgress() {
+      if (window.QriineProgress) window.QriineProgress.refresh();
+    }
+
     function openPrint() {
+      markCaptionPrinted();
       // 印刷は常に紙レイアウト (paper) を出力。QR-only でも preview とは別に
       // paper 版を再生成する (preview は phone モックアップを表示しているため)。
       const settings = getSettings();
@@ -4505,7 +4531,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             fsDb.collection('exhibitions').doc(window._currentEx).set({
               caption_template_id: _savedTemplateId,
               updatedAt: new Date().toISOString(),
-            }, { merge: true }).catch(e => console.warn('caption_template_id 更新失敗:', e));
+            }, { merge: true }).then(refreshProgress).catch(e => console.warn('caption_template_id 更新失敗:', e));
           }
           // (a) 保存欄には「この展覧会の名前」を入れる (読み込んだテンプレ名ではない)。
           //     過去・共用テンプレを別の展覧会に読み込んだとき、元テンプレを誤って上書きしないため。
@@ -4722,7 +4748,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             fsDb.collection('exhibitions').doc(exForSave).set({
               caption_template_id: savedTplId,
               updatedAt: new Date().toISOString(),
-            }, { merge: true }).catch(e => console.warn('caption_template_id 更新失敗:', e));
+            }, { merge: true }).then(refreshProgress).catch(e => console.warn('caption_template_id 更新失敗:', e));
           }
           _savedTemplateId = savedTplId;
           _lastSelectedTemplate = { id: savedTplId, name: name };
@@ -4902,6 +4928,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
       let artworks = qrAllData.artworks;
       if (target !== 'all') { artworks = artworks.filter(a => a.status === target); }
       if (artworks.length === 0) { await window.showAlertModal('対象の作品がありません。'); return; }
+      markCaptionPrinted();
       const layouts = { 15: { cols: 6, rows: 8 }, 20: { cols: 5, rows: 7 }, 25: { cols: 4, rows: 6 }, 30: { cols: 4, rows: 5 }, 45: { cols: 3, rows: 4 }, 60: { cols: 2, rows: 3 } };
       const { cols, rows } = layouts[size] || layouts[25];
       buildQrPrintHtml(artworks, size, cols, rows, logo, paper, header);
@@ -5148,6 +5175,8 @@ ${pages.map(page => `<div class="page">${page.map(art => `<div class="qr-cell"><
   <script src="js/gas-authed-call.js"></script>
   <script src="js/friendly-error.js"></script>
   <script src="js/confirm-modal.js"></script>
+  <script src="js/progress-core.js"></script>
+  <script src="js/progress-assistant.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     // ===== Email Link 認証の起動処理 =====

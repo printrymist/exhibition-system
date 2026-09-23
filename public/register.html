@@ -1323,6 +1323,18 @@
       if (tab === 'artworks') { loadArtworkList(); loadArtistList(); }
     }
 
+    // 進捗アシスタントの「次はこれ」: この画面のタブで済むものはタブ切替で処理する
+    function navigateFromProgress(action) {
+      if (!action.tab) return false;
+      switchTab(action.tab);
+      if (action.openImport && document.getElementById('importPanel').style.display === 'none') toggleImportPanel();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+    function refreshProgress() {
+      if (window.QriineProgress) window.QriineProgress.refresh();
+    }
+
     // ── 展覧会ロード ──
     let currentExEmail = '';
     function loadExhibition() {
@@ -1435,13 +1447,21 @@
         refreshCurrentArtworkCount();
         if (typeof loadFieldsAndUI === 'function') loadFieldsAndUI(currentEx);
         // 初回表示時は「① 項目を決める」タブを開く (data-regtab の表示制御を初期化)。
+        // ?tab=fields|invite|artworks|manage で開くタブを指定できる (進捗アシスタントからの直行用)。
         if (!window._regTabInit) {
           window._regTabInit = true;
-          switchTab('fields');
+          const tabParam = getUrlParam('tab');
+          switchTab(['fields', 'invite', 'artworks', 'manage'].indexOf(tabParam) >= 0 ? tabParam : 'fields');
+          if (getUrlParam('import') === '1' && document.getElementById('importPanel').style.display === 'none') {
+            toggleImportPanel();
+          }
         } else if (document.getElementById('tab_artworks').classList.contains('active')) {
           // 「③ 作品」タブを開いたまま展覧会を切替えたら、新しい展覧会の内容に refresh する。
           loadArtworkList();
           loadArtistList();
+        }
+        if (window.QriineProgress) {
+          window.QriineProgress.attach({ exCode: currentEx, navigate: navigateFromProgress });
         }
         return;
       }
@@ -1884,6 +1904,7 @@
         if (skipped.length > 0) msg += ` ※ スキップ: ${skipped.join(' / ')}`;
         if (failed.length > 0) msg += ` ⚠ ${failed.join(' / ')}`;
         showMsg('saveMsgSetup', msg, failed.length > 0 ? '#d93025' : '#1a73e8');
+        refreshProgress();
       } catch (err) {
         console.error('importFromExhibition failed:', err);
         await window.showAlertModal(friendlyError(err, '読み込み'));
@@ -1924,6 +1945,7 @@
             sessionStorage.setItem('fields_' + currentEx, JSON.stringify(result));
             buildInputForm();
             clearFieldSettingsDirty();  // A-3
+            refreshProgress();
           } else {
             showMsg('saveMsgSetup', 'エラー: ' + res.error, '#d93025');
           }
@@ -2362,6 +2384,7 @@ ${artistMessage}
           ? '✅ ' + newId + ' を登録しました（画像は未添付）。'
           : '✅ ' + newId + ' を登録しました。';
         banner.style.display = 'block';
+        refreshProgress();
         if (imageUploadFailed) {
           document.getElementById('inputError').innerText =
             '⚠ 作品情報は保存できましたが、画像のアップロードに失敗しました。' +
@@ -2853,6 +2876,7 @@ ${artistMessage}
           if (res.success) {
             const msg = '✅ 更新しました。' + (res.updatedArtistCount > 1 ? '（作家情報を' + res.updatedArtistCount + '件の作品に反映）' : '');
             showEditMsg(artworkId, msg, '#1a73e8');
+            refreshProgress();
             artworkCache = artworkCache.map(a => {
               if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData);
               if (a.artist === originalArtist) return Object.assign({}, a, artistData);
@@ -3161,9 +3185,13 @@ ${artistMessage}
       return { success: true, artworks: artworks };
     };
     window.fsSaveRegistrationFields = async (exCode, fieldsJson) => {
+      const nowIso = new Date().toISOString();
       await fsDb.collection('exhibitions').doc(exCode).set({
         registration_fields: fieldsJson,
-        updatedAt: new Date().toISOString()
+        // 進捗アシスタント用: 主催者が項目を一度確認した印。①の保存と「他の展覧会から設定を複製」の
+        // 両方がこの関数を通るので、どちらでも済みになる (caption のテンプレ採用はここを通らない)。
+        fields_confirmed_at: nowIso,
+        updatedAt: nowIso
       }, { merge: true });
       // SS にも反映（caption 側の参照向け、fire-and-forget）
       gasCallAuthed('saveRegistrationFields', { ex: exCode, fieldsJson: fieldsJson })
@@ -3316,6 +3344,8 @@ ${artistMessage}
   <script src="js/gas-authed-call.js"></script>
   <script src="js/friendly-error.js"></script>
   <script src="js/confirm-modal.js"></script>
+  <script src="js/progress-core.js"></script>
+  <script src="js/progress-assistant.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     // ===== Email Link 認証の起動処理 =====

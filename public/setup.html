@@ -833,6 +833,9 @@
     `;
       const goBtn = document.getElementById('goRegisterBtn');
       if (goBtn) goBtn.href = '/register.html?ex=' + encodeURIComponent(result.exCode);
+      // 進捗アシスタント: 作ったばかりで何も済んでいないので自動で開き「次はこれ」を示す。
+      // 作品はまだ無い (ログイン前だと作品を読めないため空として渡す)。
+      if (window.QriineProgress) window.QriineProgress.attach({ exCode: result.exCode, artworks: [] });
     }
   </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -852,6 +855,8 @@
   </script>
   <script src="js/operator-auth.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/progress-core.js"></script>
+  <script src="js/progress-assistant.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     (function () {

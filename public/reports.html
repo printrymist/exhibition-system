@@ -318,6 +318,7 @@
         const emailLabel = document.getElementById('loggedInEmailLabel');
         if (emailLabel) emailLabel.innerText = user.email;
         renderOperatorSupportBanner(isOp && !isOrganizer);
+        if (window.QriineProgress && currentEx) window.QriineProgress.attach({ exCode: currentEx });
         // データ閲覧 (運営者専用) は運営者ログイン時のみ表示。
         if (isOp) {
           var dvCard = document.getElementById('cardDataViewer');
@@ -387,6 +388,8 @@
   <script src="js/sandbox-badge.js?v=20260505b"></script>
   <script src="js/operator-auth.js"></script>
   <script src="js/friendly-error.js"></script>
+  <script src="js/progress-core.js"></script>
+  <script src="js/progress-assistant.js"></script>
   <script>setFriendlyErrorContact('organizer');</script>
   <script>
     (function () {
