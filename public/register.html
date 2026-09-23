@@ -223,7 +223,10 @@
       color: #1a73e8;
     }
 
-    #sortContainer.collapsed .field-card.secondary:not(.active) {
+    /* 折りたたみ中は、既定以外でチェックの無い項目を隠す。ただし画面で一度触った項目 (.kept) は
+       チェックを外してもその場では残す (押し間違えてもすぐ戻せるように)。.kept は
+       「表示を少なくする」か画面の読み直しで外れる。 */
+    #sortContainer.collapsed .field-card.secondary:not(.active):not(.kept) {
       display: none;
     }
 
@@ -1591,15 +1594,20 @@
       photo: ['shooting_location', 'shooting_year', 'camera'],
       intl:  ['title_en', 'artist_en']
     };
+    // チップは切り替え: 関連項目がすべてオン (チップが「オン」表示) なら全部オフ、それ以外なら全部オン。
+    // オフにしても入力済みの作品データは消えない (入力欄に出なくなるだけ。チェックを外すのと同じ)。
+    // 触った項目は .kept でその場に残す (オフにしても一覧から消えない)。
     function toggleGenreChip(key) {
       const names = GENRE_CHIP_FIELDS[key];
       if (!names) return;
-      names.forEach(name => {
-        const card = document.querySelector('#sortContainer .field-card[data-field="' + name + '"]');
-        if (!card) return;
-        const chk = card.querySelector('input[type="checkbox"]');
-        chk.checked = true;
-        card.classList.add('active');
+      const cards = names
+        .map(name => document.querySelector('#sortContainer .field-card[data-field="' + name + '"]'))
+        .filter(Boolean);
+      const allOn = cards.length > 0 && cards.every(c => c.classList.contains('active'));
+      cards.forEach(card => {
+        card.querySelector('input[type="checkbox"]').checked = !allOn;
+        card.classList.toggle('active', !allOn);
+        card.classList.add('kept');
       });
       markFieldSettingsDirty();
       syncGenreChips();
@@ -1619,6 +1627,8 @@
       const container = document.getElementById('sortContainer');
       const link = document.getElementById('showMoreFieldsLink');
       const willCollapse = !container.classList.contains('collapsed');
+      // 「表示を少なくする」では、チェックの無い項目を残す目印も外して本当に畳む
+      if (willCollapse) container.querySelectorAll('.field-card.kept').forEach(c => c.classList.remove('kept'));
       container.classList.toggle('collapsed');
       link.textContent = willCollapse ? '▼ 他の項目を見る' : '▲ 表示を少なくする';
     }
@@ -1640,8 +1650,10 @@
           <button id="opt_${def.name}" onclick="setRequired('${def.name}',false)" class="${!required ? 'on-optional' : ''}">任意</button>
         </div>`;
       const chk = card.querySelector('input[type="checkbox"]');
+      // 触った項目は .kept でその場に残す (チェックを外しても一覧から消えない)
       chk.addEventListener('change', function () {
         card.classList.toggle('active', this.checked);
+        card.classList.add('kept');
         markFieldSettingsDirty();  // A-3
         syncGenreChips();
       });
@@ -1649,6 +1661,7 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
         if (e.target.classList.contains('drag-handle')) return;
         chk.checked = !chk.checked; card.classList.toggle('active', chk.checked);
+        card.classList.add('kept');
         markFieldSettingsDirty();  // A-3
         syncGenreChips();
       });
