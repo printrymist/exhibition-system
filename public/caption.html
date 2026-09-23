@@ -1322,7 +1322,7 @@
         🖨️ キャプション印刷
       </button>
       <button class="main-tab-btn" id="mainTabQr" onclick="switchMainTab('qr')">
-        🔲 QRコード印刷
+        🔲 QRシールを先に印刷
       </button>
       <button class="main-tab-btn" id="mainTabCategorize" onclick="switchMainTab('categorize')">
         🤖 AI 分類
@@ -1909,7 +1909,14 @@
   <!-- QR Print エリア -->
   <div id="qrPrintArea" style="display:none;">
     <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">🔲 QR コード印刷</div>
+      <div class="card-title">🔲 QR シールを先に印刷</div>
+      <!-- 作品情報がまだの枠の QR を先に刷って作家に配る流れ用。読み取ると index.html が
+           その場で作品を登録するフォームになる。キャプション印刷 (入力済みの作品) とは別の用途。 -->
+      <p style="font-size:0.85em; color:#555; line-height:1.6; margin:0 0 14px;">
+        作品情報がまだ入っていない枠の QR コードを、シールなどに先にまとめて印刷できます。<br>
+        作家がこの QR を読み取ると、その場で作品情報 (タイトル・作家名・画像など) を登録できます。<br>
+        <span style="color:#888;">入力済みの作品のキャプションや QR は「🖨️ キャプション印刷」から印刷してください。</span>
+      </p>
       <div class="layout-row">
         <div class="layout-item">
           <label>用紙</label>
@@ -1940,9 +1947,9 @@
         <div class="layout-item">
           <label>対象</label>
           <select id="qrPrintTarget">
-            <option value="0" selected>未登録のみ (status=0)</option>
-            <option value="1">登録済みのみ (status=1)</option>
-            <option value="all">全作品</option>
+            <option value="0" selected>作品情報がまだの枠だけ</option>
+            <option value="1">作品情報が入っている作品だけ</option>
+            <option value="all">すべての枠</option>
           </select>
         </div>
         <div class="layout-item">
