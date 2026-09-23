@@ -1324,9 +1324,6 @@
       <button class="main-tab-btn" id="mainTabQr" onclick="switchMainTab('qr')">
         🔲 QRシールを先に印刷
       </button>
-      <button class="main-tab-btn" id="mainTabCategorize" onclick="switchMainTab('categorize')">
-        🤖 AI 分類
-      </button>
     </div>
   </div>
 
@@ -1970,30 +1967,8 @@
     </div>
   </div>
 
-  <div id="categorizeArea" style="display:none;">
-    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
-      <div class="card-title">🤖 AI 分類（Claude API）</div>
-      <p style="font-size:0.85em; color:#888; margin-bottom:16px;">
-        登録済みの作品画像を Claude に送り、メディア／モチーフ／スタイル／キーワードを自動分類します。<br>
-        既に分類済みの作品はスキップします。再分類したい場合は「強制再分類」をオンに。
-      </p>
-      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
-        <label style="display:flex; align-items:center; gap:6px; font-size:0.9em;">
-          <input type="checkbox" id="catForceRedo" style="width:16px; height:16px; flex-shrink:0;">
-          強制再分類（分類済みも上書き）
-        </label>
-        <button id="btnCategorize" class="btn-print" onclick="runCategorization()"
-          style="padding:11px 18px;">▶ 分類を開始</button>
-        <button id="btnCategorizeStop" class="btn-cancel" onclick="stopCategorization()"
-          style="padding:11px 18px; display:none;">■ 中断</button>
-      </div>
-      <div class="progress-bar" style="background:#eee; border-radius:4px; height:12px; overflow:hidden; margin-bottom:8px;">
-        <div id="catProgressFill" style="background:#1a73e8; height:100%; width:0%; transition:width .2s;"></div>
-      </div>
-      <div id="catStat" style="font-size:0.85em; color:#555; margin-bottom:10px;">―</div>
-      <div id="catLog" style="background:#1e1e1e; color:#d4d4d4; padding:10px; border-radius:6px; font-family:monospace; font-size:11px; height:280px; overflow-y:auto; white-space:pre-wrap;"></div>
-    </div>
-  </div>
+  <!-- AI 分類は 2026-09-24 に運営者専用のデータ閲覧画面 (admin/data-viewer.html) へ移設。
+       主催者の画面では分類結果がどこにも見えず、キャプション作りとも関係がないため。 -->
 
   <!-- 保存テンプレ削除の確認モーダル (register/input.html B-2 と同パターン) -->
   <div id="deleteSavedTemplateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
@@ -2219,90 +2194,10 @@
     function switchMainTab(tab) {
       document.getElementById('mainTabCaption').classList.toggle('active', tab === 'caption');
       document.getElementById('mainTabQr').classList.toggle('active', tab === 'qr');
-      document.getElementById('mainTabCategorize').classList.toggle('active', tab === 'categorize');
       document.getElementById('settingsArea').style.display = tab === 'caption' ? 'block' : 'none';
       document.getElementById('qrPrintArea').style.display = tab === 'qr' ? 'block' : 'none';
-      document.getElementById('categorizeArea').style.display = tab === 'categorize' ? 'block' : 'none';
     }
 
-    let catStopFlag = false;
-    function stopCategorization() { catStopFlag = true; }
-    function catLogMsg(msg) {
-      const el = document.getElementById('catLog');
-      el.textContent += msg + '\n';
-      el.scrollTop = el.scrollHeight;
-    }
-    function catSetProgress(done, total) {
-      document.getElementById('catProgressFill').style.width = total > 0 ? (100 * done / total) + '%' : '0%';
-      document.getElementById('catStat').textContent = total > 0 ? done + ' / ' + total + ' 件' : '―';
-    }
-
-    async function runCategorization() {
-      const ex = document.getElementById('exCodeInput').value.trim();
-      if (!ex) { await window.showAlertModal('展覧会コードを読み込んでから実行してください'); return; }
-      if (!artworkData) { await window.showAlertModal('作品データが読み込まれていません'); return; }
-      const force = document.getElementById('catForceRedo').checked;
-
-      catStopFlag = false;
-      document.getElementById('btnCategorize').disabled = true;
-      document.getElementById('btnCategorizeStop').style.display = 'inline-block';
-      document.getElementById('catLog').textContent = '';
-
-      const targets = artworkData.artworks.filter(a => {
-        if (!a.image_url) return false;
-        if (!force && a.categorized_at) return false;
-        return true;
-      });
-
-      catLogMsg('対象作品: ' + targets.length + ' 件');
-      if (targets.length === 0) {
-        catLogMsg('処理する作品がありません。');
-        document.getElementById('btnCategorize').disabled = false;
-        document.getElementById('btnCategorizeStop').style.display = 'none';
-        return;
-      }
-
-      let done = 0, ok = 0, ng = 0;
-      catSetProgress(0, targets.length);
-
-      const _categorizeFn = firebase.app().functions('asia-northeast1').httpsCallable('categorizeArtwork');
-      const _submitFn = firebase.app().functions('asia-northeast1').httpsCallable('submitArtwork');
-      for (const a of targets) {
-        if (catStopFlag) { catLogMsg('--- 中断 ---'); break; }
-        const id = a.artwork_id;
-        try {
-          const res = (await _categorizeFn({ exCode: ex, imageUrl: a.image_url })).data;
-          if (res && res.success) {
-            await _submitFn({
-              exCode: ex,
-              artworkId: id,
-              fields: {
-                category_media: res.media,
-                category_motif: res.motif,
-                category_style: res.style,
-                category_keywords: res.keywords,
-                categorized_at: new Date().toISOString(),
-              },
-            });
-            ok++;
-            catLogMsg('OK ' + id + ' [' + res.style + '] ' + (res.media || []).join(',') + ' / ' + (res.motif || []).join(','));
-          } else {
-            ng++;
-            catLogMsg('FAIL ' + id + ': ' + ((res && res.error) || 'unknown'));
-          }
-        } catch (e) {
-          ng++;
-          catLogMsg('ERROR ' + id + ': ' + e.message);
-        }
-        done++;
-        catSetProgress(done, targets.length);
-      }
-
-      catLogMsg('---');
-      catLogMsg('完了: 成功 ' + ok + ' / 失敗 ' + ng);
-      document.getElementById('btnCategorize').disabled = false;
-      document.getElementById('btnCategorizeStop').style.display = 'none';
-    }
 
     function onQrPositionChange() {
       const pos = document.getElementById('qrPosition').value;

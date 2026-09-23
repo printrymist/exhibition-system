@@ -35,6 +35,11 @@
     .detail table { width: 100%; }
     .detail th { width: 180px; white-space: nowrap; position: static; }
     .note { font-size: 0.82em; color: #888; margin: 8px 0; }
+    .cat-panel { border: 1px solid #f0d875; background: #fffdf5; border-radius: 10px; padding: 12px 14px; margin: 0 0 12px; }
+    .cat-title { font-weight: bold; color: #7a5500; }
+    .cat-log { max-height: 160px; overflow: auto; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 8px;
+      font-size: 0.78em; margin: 0; white-space: pre-wrap; }
+    .cat-log:empty { display: none; }
   </style>
 </head>
 <body>
@@ -43,7 +48,8 @@
     &larr; 出力・レポートへ戻る
   </a>
   <h1>データ閲覧 (運営者)</h1>
-  <p class="note">Firestore コレクションの中身をそのまま表で確認できます (運営者専用・閲覧のみ)。サポート時の状況確認用。</p>
+  <p class="note">Firestore コレクションの中身をそのまま表で確認できます (運営者専用・閲覧のみ)。サポート時の状況確認用。<br>
+    ※ 例外として「🤖 AI 分類」(artworks を読み込んだときに表示) だけは、作品データに分類結果を書き込みます。</p>
 
   <div id="authCard" class="auth-card" style="display:none;">
     <div style="font-weight:bold; margin-bottom:10px;">運営者ログイン</div>
@@ -81,6 +87,24 @@
       <button id="btnLoad" onclick="loadCollection()">読み込む</button>
       <span class="count" id="rowCount"></span>
     </div>
+    <!-- AI 分類 (運営者専用)。2026-09-24 にキャプション画面から移設 (主催者の画面では結果がどこにも見えず、
+         キャプション作りとも関係がないため)。結果 (category_*) は下の作品の表にそのまま出る。
+         この画面で唯一の書き込み操作なので、欄の見出しで明示する。 -->
+    <div id="catPanel" class="cat-panel" style="display:none;">
+      <div class="cat-title">🤖 AI 分類 <span style="font-weight:normal;color:#b06000;font-size:0.85em;">(作品データに書き込みます・AI の利用料がかかります)</span></div>
+      <div class="note" style="margin:4px 0 8px;">作品情報が入っていて画像がある作品を Claude に送り、メディア / モチーフ / スタイル / キーワードを分類して作品データに保存します。分類済みの作品は飛ばします。</div>
+      <div class="toolbar" style="margin-bottom:6px;">
+        <span class="count" id="catTargets"></span>
+        <label><input type="checkbox" id="catForceRedo" style="padding:0; vertical-align:middle;" onchange="updateCatTargets()"> 強制再分類 (分類済みも上書き)</label>
+        <button id="btnCategorize" onclick="runCategorization()">▶ 分類を開始</button>
+        <button id="btnCategorizeStop" onclick="stopCategorization()" style="display:none; background:#fff; color:#d93025; border-color:#d93025;">■ 中断</button>
+        <span class="count" id="catStat"></span>
+      </div>
+      <div style="background:#eee; border-radius:4px; height:10px; overflow:hidden; margin-bottom:6px;">
+        <div id="catProgressFill" style="background:#1a73e8; height:100%; width:0%; transition:width .2s;"></div>
+      </div>
+      <pre id="catLog" class="cat-log"></pre>
+    </div>
     <div id="result"></div>
   </div>
 
@@ -115,6 +139,8 @@
     function onCollChange() {
       var coll = document.getElementById('collSelect').value;
       document.getElementById('commentOnlyLabel').style.display = (coll === 'likes') ? '' : 'none';
+      // コレクションを切り替えたら、読み込み直すまで AI 分類の欄は隠す
+      if (coll !== 'artworks' && !catRunning) document.getElementById('catPanel').style.display = 'none';
     }
 
     function sortTs(v) {
@@ -197,6 +223,11 @@
           docs = docs.filter(function(d){ return String(d.data.comment || '').trim() !== ''; });
         }
         renderTable(docs);
+        // AI 分類の欄は artworks を読み込んだときだけ (その展覧会の作品が対象)
+        catEx = ex;
+        catDocs = (coll === 'artworks') ? docs : [];
+        document.getElementById('catPanel').style.display = (coll === 'artworks') ? 'block' : 'none';
+        if (coll === 'artworks') updateCatTargets();
         countEl.textContent = docs.length + ' 件' +
           (docs.length !== total ? ' (全 ' + total + ' 件中)' : '') +
           (total >= LIMIT ? ' (上限 ' + LIMIT + ' 件まで)' : '');
@@ -236,6 +267,78 @@
       });
       html += '</tbody></table></div>';
       resEl.innerHTML = html;
+    }
+
+    // ── AI 分類 (運営者専用。キャプション画面から移設) ──
+    // 作品画像を CF categorizeArtwork (Claude) に送り、結果を submitArtwork で作品データに保存する。
+    var catEx = '', catDocs = [], catStopFlag = false, catRunning = false;
+    function catTargetList() {
+      var force = document.getElementById('catForceRedo').checked;
+      return catDocs.filter(function (d) {
+        var a = d.data;
+        if (String(a.status) !== '1' || !a.image_url) return false;  // 作品情報が入っていて画像がある作品だけ
+        return force || !a.categorized_at;
+      });
+    }
+    function updateCatTargets() {
+      if (catRunning) return;
+      var n = catTargetList().length;
+      document.getElementById('catTargets').textContent = '対象 ' + n + ' 件';
+      document.getElementById('btnCategorize').disabled = n === 0;
+    }
+    function stopCategorization() { catStopFlag = true; }
+    function catLogMsg(msg) {
+      var el = document.getElementById('catLog');
+      el.textContent += msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+    function catSetProgress(done, total) {
+      document.getElementById('catProgressFill').style.width = total > 0 ? (100 * done / total) + '%' : '0%';
+      document.getElementById('catStat').textContent = total > 0 ? done + ' / ' + total + ' 件' : '';
+    }
+    async function runCategorization() {
+      var targets = catTargetList();
+      if (!catEx || targets.length === 0) return;
+      catStopFlag = false; catRunning = true;
+      document.getElementById('btnCategorize').disabled = true;
+      document.getElementById('btnLoad').disabled = true;
+      document.getElementById('btnCategorizeStop').style.display = 'inline-block';
+      document.getElementById('catLog').textContent = '';
+      catLogMsg('対象作品: ' + targets.length + ' 件 (' + catEx + ')');
+      var done = 0, ok = 0, ng = 0;
+      catSetProgress(0, targets.length);
+      var fns = firebase.app().functions('asia-northeast1');
+      var categorizeFn = fns.httpsCallable('categorizeArtwork');
+      var submitFn = fns.httpsCallable('submitArtwork');
+      for (var i = 0; i < targets.length; i++) {
+        if (catStopFlag) { catLogMsg('--- 中断 ---'); break; }
+        var a = targets[i].data, id = a.artwork_id || targets[i].id;
+        try {
+          var res = (await categorizeFn({ exCode: catEx, imageUrl: a.image_url })).data;
+          if (res && res.success) {
+            await submitFn({ exCode: catEx, artworkId: id, fields: {
+              category_media: res.media, category_motif: res.motif, category_style: res.style,
+              category_keywords: res.keywords, categorized_at: new Date().toISOString(),
+            } });
+            ok++;
+            catLogMsg('OK ' + id + ' [' + res.style + '] ' + (res.media || []).join(',') + ' / ' + (res.motif || []).join(','));
+          } else {
+            ng++;
+            catLogMsg('FAIL ' + id + ': ' + ((res && res.error) || 'unknown'));
+          }
+        } catch (e) {
+          ng++;
+          catLogMsg('ERROR ' + id + ': ' + (e && e.message ? e.message : e));
+        }
+        done++;
+        catSetProgress(done, targets.length);
+      }
+      catLogMsg('---');
+      catLogMsg('完了: 成功 ' + ok + ' / 失敗 ' + ng + ' — 表を読み直して結果 (category_*) を表示します');
+      catRunning = false;
+      document.getElementById('btnCategorizeStop').style.display = 'none';
+      document.getElementById('btnLoad').disabled = false;
+      loadCollection();  // 結果の列を表に出す (updateCatTargets も走る)
     }
 
     function toggleDetail(i) {
