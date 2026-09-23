@@ -971,6 +971,7 @@
           <span class="genre-chip" id="chip_print" onclick="toggleGenreChip('print')">🎨 版画・エディションがある</span>
           <span class="genre-chip" id="chip_photo" onclick="toggleGenreChip('photo')">📷 写真展</span>
           <span class="genre-chip" id="chip_intl" onclick="toggleGenreChip('intl')">🌐 国際展・英語併記</span>
+          <div id="genreChipMsg" style="display:none; margin-top:6px; font-size:0.82em; color:#7a5500;"></div>
         </div>
         <div id="sortContainer" class="collapsed"></div>
         <div id="showMoreFieldsLink" class="show-more-link" onclick="toggleShowMoreFields()">▼ 他の項目を見る</div>
@@ -1557,6 +1558,8 @@
     function buildFieldsGrid(savedFields) {
       const container = document.getElementById('sortContainer');
       container.innerHTML = '';
+      // 一覧を組み直したら、チップが足した項目の記憶も捨てる (今あるチェックは「前から選ばれていた」扱い)
+      if (typeof _genreChipAdded !== 'undefined') Object.keys(_genreChipAdded).forEach(k => delete _genreChipAdded[k]);
       if (sortableInst) { sortableInst.destroy(); sortableInst = null; }
       let savedMap = {}, savedOrder = null;
       if (savedFields && Array.isArray(savedFields) && savedFields.length > 0) {
@@ -1594,21 +1597,45 @@
       photo: ['shooting_location', 'shooting_year', 'camera'],
       intl:  ['title_en', 'artist_en']
     };
-    // チップは切り替え: 関連項目がすべてオン (チップが「オン」表示) なら全部オフ、それ以外なら全部オン。
-    // オフにしても入力済みの作品データは消えない (入力欄に出なくなるだけ。チェックを外すのと同じ)。
-    // 触った項目は .kept でその場に残す (オフにしても一覧から消えない)。
+    // チップは切り替え (2026-09-24 ユーザー仕様):
+    //   押す   → 関連項目を一覧に出してチェックを入れる。このとき「チップが足した項目」を覚える
+    //   再度押す → 覚えた項目だけチェックを外し、一覧からも消す (折りたたみに戻す)
+    //   押す前から選ばれていた項目 (保存済みの設定など) は、再度押しても外さない・消さない
+    // オフにしても入力済みの作品データは消えない (入力欄に出なくなるだけ)。
+    const _genreChipAdded = {};  // key → チップが足した項目名の配列
     function toggleGenreChip(key) {
       const names = GENRE_CHIP_FIELDS[key];
       if (!names) return;
-      const cards = names
-        .map(name => document.querySelector('#sortContainer .field-card[data-field="' + name + '"]'))
-        .filter(Boolean);
-      const allOn = cards.length > 0 && cards.every(c => c.classList.contains('active'));
-      cards.forEach(card => {
-        card.querySelector('input[type="checkbox"]').checked = !allOn;
-        card.classList.toggle('active', !allOn);
-        card.classList.add('kept');
-      });
+      const cardOf = name => document.querySelector('#sortContainer .field-card[data-field="' + name + '"]');
+      const msg = document.getElementById('genreChipMsg');
+      if (msg) msg.style.display = 'none';
+      const allOn = names.every(n => { const c = cardOf(n); return c && c.classList.contains('active'); });
+      if (!allOn) {
+        const added = [];
+        names.forEach(n => {
+          const card = cardOf(n);
+          if (!card || card.classList.contains('active')) return;
+          card.querySelector('input[type="checkbox"]').checked = true;
+          card.classList.add('active');
+          added.push(n);
+        });
+        _genreChipAdded[key] = [...new Set((_genreChipAdded[key] || []).concat(added))];
+      } else {
+        const added = _genreChipAdded[key] || [];
+        added.forEach(n => {
+          const card = cardOf(n);
+          if (!card) return;
+          card.querySelector('input[type="checkbox"]').checked = false;
+          card.classList.remove('active', 'kept');
+        });
+        _genreChipAdded[key] = [];
+        if (added.length === 0 && msg) {
+          // 3項目とも押す前から選ばれていた → 外さない。個別に外す方法を案内する
+          msg.textContent = 'これらの項目は前から選ばれていたので、そのままにしました。外したい項目は、個別にチェックを外してください。';
+          msg.style.display = 'block';
+          return;
+        }
+      }
       markFieldSettingsDirty();
       syncGenreChips();
     }
