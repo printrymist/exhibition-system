@@ -18,7 +18,7 @@
   // fields_confirmed_at の記録を始めた日。これより前に作られた展覧会は記録を持たないため、
   // 「初期値から変わっていれば確認済み」とみなす (進行中の展覧会に急に未完了を出さないため)。
   // これ以降の展覧会は記録のみで判定する (caption のテンプレ採用で項目が足されただけでは済みにしない)。
-  const FIELDS_CONFIRM_TRACKING_SINCE = '2026-09-24T00:00:00+09:00';
+  const FIELDS_CONFIRM_TRACKING_SINCE = '2026-09-23T17:00:00+09:00';
 
   function parseFieldNames(v) {
     if (!v) return [];
