@@ -61,6 +61,17 @@ test('価格を出さない指定なら価格の行が消える (group の中も
   const names = t => t.items.flatMap(i => i.type === 'group' ? i.children.map(c => c.name) : [i.name]);
   R.shortlist(pool, chips, p).forEach(t => assert.ok(!names(t).includes('price') && !names(t).includes('price_framed'), t.id));
 });
+test('作家コメントがあれば QR が中央下の型を後ろに回す (消さない)', () => {
+  const p = R.profile([{ title: '朝', artist_note: 'こめんと', price: '1' }]);
+  const list = R.shortlist(pool, R.inferChips(p), p, 40);
+  const firstCenter = list.findIndex(t => t.tags.qr === 'bottom-center');
+  assert.ok(list.slice(0, 6).every(t => t.tags.qr !== 'bottom-center'), '上位6件に中央下が無い');
+  assert.ok(firstCenter === -1 || firstCenter >= 6);
+});
+test('作家コメントが無ければ中央下も上位に出る', () => {
+  const p = R.profile(solo), list = R.shortlist(pool, R.inferChips(p), p);
+  assert.ok(list.slice(0, 6).some(t => t.tags.qr === 'bottom-center'));
+});
 test('元の母集団は書き換えない', () => {
   const before = JSON.stringify(pool.templates[0]);
   R.shortlist(pool, { mode: 'solo', bilingual: false, price: false, museum: false }, R.profile(solo));

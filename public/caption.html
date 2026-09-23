@@ -326,11 +326,11 @@
       color: #0d4a8c;
     }
 
-    /* C-2 Phase 1.5: テンプレ一覧は compact grid (固定位置)。inline プレビューは
-       下の専用領域に集約 (選択するたびにグリッドが動かない、画面が安定) */
+    /* C-2 Phase 1.5: テンプレ一覧は compact grid (固定位置)。
+       各カードに実データのプレビューを入れたので、読める大きさを保つよう列数は幅から自動 (PC で3列前後) */
     .template-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 8px;
       margin-bottom: 12px;
       align-items: start;
@@ -463,6 +463,19 @@
     .template-card .template-preview {
       display: none;
     }
+
+    /* ①テンプレートの選び方の切り替え (おすすめ / 公式 / 自分) */
+    .tpl-seg { display: flex; gap: 0; margin: 4px 0 12px; border: 1px solid #c5d9f7; border-radius: 8px; overflow: hidden; }
+    .tpl-seg-btn { flex: 1; padding: 8px 6px; border: none; background: #fff; color: #1a73e8; font-size: 0.88em; cursor: pointer;
+      font-family: inherit; border-right: 1px solid #c5d9f7; }
+    .tpl-seg-btn:last-child { border-right: none; }
+    .tpl-seg-btn.active { background: #1a73e8; color: #fff; font-weight: bold; }
+    .tpl-pane { display: none; }
+    .tpl-pane.active { display: block; }
+    .tpl-empty { font-size: 0.85em; color: #888; padding: 16px; background: #f7f7f9; border-radius: 8px; line-height: 1.6; }
+    /* 公式テンプレのカードに入れる、この展覧会の作品でのプレビューと説明文 */
+    .template-card .tpl-thumb { margin: 6px 0; }
+    .template-card .tpl-desc { font-size: 0.72em; color: #777; line-height: 1.45; margin-bottom: 6px; }
 
     /* 共通プレビュー領域 (グリッド下に固定で1つ) */
     .selected-tpl-preview-wrap {
@@ -1125,6 +1138,36 @@
       }
     }
 
+    /* 展覧会を読み込んだ後は入力欄と見出しをたたむ */
+    .ex-card.loaded { padding: 10px 16px; }
+    .ex-card.loaded .card-title, .ex-card.loaded .ex-row { display: none; }
+    /* エラー欄・名前欄は空でも高さを取るので、たたんだ状態では詰める */
+    .ex-card.loaded #exError:empty { display: none; }
+    .ex-card.loaded #exName { margin-top: 0; }
+
+    /* 広い画面: 左に設定、右にプレビュー (スクロールしても右に残る)。
+       狭い画面は従来どおり上下 (プレビューが上)。 */
+    @media (min-width: 1180px) {
+      /* .main-tab-bar の max-width:700px はこの後ろで定義されているので、id で指定を強める */
+      .card, #mainTabs.main-tab-bar, #loggedInBar { max-width: 1180px; }
+      .cap-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 460px;
+        gap: 16px;
+        max-width: 1180px;
+        margin: 0 auto;
+        align-items: start;
+      }
+      .cap-layout > .card { max-width: none; margin: 0; }
+      .cap-layout > .cap-settings { grid-column: 1; grid-row: 1; border-radius: 0 0 12px 12px; }
+      .cap-layout > #previewArea {
+        grid-column: 2; grid-row: 1;
+        position: sticky; top: 12px;
+        max-height: calc(100vh - 24px); overflow-y: auto;
+      }
+      #previewFrame { height: 520px; }
+    }
+
     /* 詳細編集の「PCが楽」ヒントは狭い画面 (スマホ) でだけ表示する。 */
     .mobile-edit-hint { display: none; }
     @media (max-width: 768px) {
@@ -1211,17 +1254,21 @@
 
   <div id="sandboxBadge" style="display:none;"></div>
 
-  <div class="card">
+  <!-- 展覧会を読み込んだ後は入力欄をたたみ、展覧会名の1行だけにする (.loaded)。
+       「別の展覧会を開く」で入力欄に戻す。 -->
+  <div class="card ex-card" id="exCard">
     <div class="card-title">Exhibition</div>
     <div class="ex-row">
       <input type="text" id="exCodeInput" placeholder="展覧会コードを入力 (例: IT26)" value="">
       <button class="btn-load" id="btnLoad" onclick="loadExhibition()">読込</button>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
       <div id="exName"></div>
       <button id="btnEditExName" onclick="startEditExName()"
         style="display:none; padding:4px 10px; font-size:0.8em; border:1px solid #ccc; border-radius:6px; cursor:pointer; background:#f5f5f5;">✏️
         展覧会名を編集</button>
+      <button id="btnSwitchEx" type="button" onclick="showExInput()"
+        style="display:none; padding:4px 10px; font-size:0.8em; border:1px solid #c5d9f7; border-radius:6px; cursor:pointer; background:#fff; color:#1a73e8;">別の展覧会を開く</button>
     </div>
     <div id="exNameEditArea" style="display:none; margin-top:8px;">
       <input type="text" id="exNameInput"
@@ -1285,6 +1332,9 @@
 
   <!-- キャプション印刷エリア -->
   <div id="settingsArea" style="display:none;">
+   <!-- 広い画面ではプレビューを右に固定し、左の設定と並べる (設定を変えるとすぐ横で仕上がりが見える)。
+        狭い画面は従来どおりプレビューが上の縦並び。 -->
+   <div class="cap-layout">
 
     <!-- C-2 Phase 1: プレビューを最上部に。設定変更で自動更新されるので Refresh ボタンは
          「強制再生成」用 (普段は押さなくて済む) -->
@@ -1319,7 +1369,7 @@
         style="display:none; margin-top:12px; background:#fff3e0; border:1px solid #ffb74d; padding:12px; border-radius:8px;"></div>
     </div>
 
-    <div class="card" style="border-radius:0 0 12px 12px; margin-top:0;">
+    <div class="card cap-settings" style="border-radius:0 0 12px 12px; margin-top:0;">
       <div class="card-title">キャプション設定</div>
       <!-- 公式テンプレ使用中の控えめなナッジ: 意識的に保存して「この展覧会専用」にできる。
            採用は非破壊なので、保存しない限り公式参照のまま (規定が preset: のとき表示)。 -->
@@ -1576,12 +1626,18 @@
         <details id="usageHint" class="usage-hint">
           <summary>💡 はじめての方へ（おすすめの手順）</summary>
           <ol>
-            <li><strong>① テンプレート</strong>: <strong>✨ おすすめ</strong>を展覧会の作品で見比べて「これにする」、または <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong>（カードのクリックはプレビューだけ。採用で確定）</li>
-            <li><strong>② 載せる項目</strong>: キャプションに載せる項目を確認・調整</li>
-            <li>上の「<strong>🖨️ プレビュー（実際の仕上がり）</strong>」で確認 → 良ければ「<strong>💾 この展覧会のテンプレとして保存</strong>」</li>
-            <li style="color:#888;">（必要なときだけ）<strong>③ 詳細編集</strong>で並び・大きさ、<strong>④ ページ設定</strong>で用紙・余白・QR を調整。作家から集める項目は「作品登録・設定」画面で。</li>
+            <li><strong>✨ おすすめ</strong>を展覧会の作品で見比べて「これにする」（<strong>⭐ 公式テンプレ</strong>から「📥 採用」でも可）</li>
+            <li>「<strong>🖨️ プレビュー（実際の仕上がり）</strong>」で確認して「<strong>🖨️ 印刷</strong>」</li>
+            <li style="color:#888;">（細かく変えたいときだけ）<strong>② 載せる項目</strong>・<strong>③ 詳細編集</strong>で並び・大きさ、<strong>④ ページ設定</strong>で用紙・余白・QR。作家から集める項目は「作品登録・設定」画面で。</li>
           </ol>
         </details>
+        <!-- 選び方の切り替え: おすすめ / 公式テンプレ / 自分のテンプレ を縦に積まず1つずつ見せる -->
+        <div class="tpl-seg" role="tablist" aria-label="テンプレートの選び方">
+          <button type="button" class="tpl-seg-btn" data-pane="rec" onclick="showTplPane('rec')">✨ おすすめ</button>
+          <button type="button" class="tpl-seg-btn" data-pane="official" onclick="showTplPane('official')">⭐ 公式テンプレ</button>
+          <button type="button" class="tpl-seg-btn" data-pane="saved" onclick="showTplPane('saved')">💾 自分のテンプレ</button>
+        </div>
+        <div class="tpl-pane" data-pane="rec">
         <!-- おすすめ: テンプレ母集団 (data/caption-pool.json) から、この展覧会の作品で収まるものを
              実データのプレビューで並べる。チップ = 主催者の意図 (データから推定した初期選択、ワンタップで変更)。
              js/caption-recommend.js が選び、ここでは描画と収まり確認と採用だけ行う。 -->
@@ -1594,10 +1650,14 @@
           <div id="recStatus" class="rec-status"></div>
           <div id="recGrid" class="rec-grid"></div>
         </div>
-        <!-- テンプレ一覧 (すべて公式テンプレ)。⭐ マーク = 運営が用意した既製テンプレ ('自分のテンプレ' と区別)。 -->
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-          <span style="font-size:0.95em; font-weight:bold; color:#444;">📋 テンプレ一覧</span>
-          <span style="font-size:0.78em; color:#aaa;">⭐ は公式テンプレ (項目とサイズが詰めてあり、そのまま使えます)</span>
+        <div id="recUnavailable" class="tpl-empty" style="display:none;">おすすめを準備できませんでした。「⭐ 公式テンプレ」から選んでください。</div>
+        </div><!-- /pane rec -->
+        <div class="tpl-pane" data-pane="official">
+        <!-- 公式テンプレ (運営が用意した既製テンプレ)。各カードに、この展覧会の作品を流し込んだ
+             プレビュー (.tpl-thumb、renderOfficialThumbs) と説明文を出す。以前の「テンプレ見本」欄
+             (見本データで1枚表示) はこのカードのプレビューで置き換えた。 -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+          <span style="font-size:0.78em; color:#888;">運営が用意した既製テンプレです (項目とサイズが詰めてあり、そのまま使えます)。</span>
         </div>
         <div class="template-grid">
           <div class="template-card official selected" id="tpl_official_solo" onclick="selectTemplate('official_solo')"
@@ -1762,14 +1822,13 @@
             <button class="btn-adopt" onclick="event.stopPropagation(); adoptTemplate('official_qronly')">📥 採用</button>
           </div>
         </div>
-        <div class="selected-tpl-preview-wrap">
-          <div class="label">テンプレ見本 (選ぶ参考。実データではありません):</div>
-          <div id="selectedTplPreview" class="selected-tpl-preview"></div>
-        </div>
+        </div><!-- /pane official -->
 
         <!-- 旧「🏛️ 公式テンプレ (運営者作成)」セクションは official-presets.json (新公式 4 つ) に置換済みのため削除。
              「💾 自分のテンプレ」は引き続き利用するため復活。 -->
-        <div id="savedTemplatesSection" style="margin-top:16px;display:none;">
+        <div class="tpl-pane" data-pane="saved">
+        <div id="savedEmpty" class="tpl-empty">まだありません。「✨ おすすめ」の「これにする」や、プレビュー下の「💾 この展覧会のテンプレとして保存」で増えます。</div>
+        <div id="savedTemplatesSection" style="margin-top:4px;display:none;">
           <!-- officialTemplatesWrap は使われないが loadSavedTemplates() の DOM 参照を生かすため
                空のスタブとして残しておく (display:none で見えない)。 -->
           <div id="officialTemplatesWrap" style="display:none;">
@@ -1790,6 +1849,7 @@
             </div>
           </div>
         </div>
+        </div><!-- /pane saved -->
       </div>
 
       <div id="customTab" style="display:none;">
@@ -1843,6 +1903,7 @@
       </div>
     </div>
 
+   </div><!-- /.cap-layout -->
   </div>
 
   <!-- QR Print エリア -->
@@ -2380,7 +2441,8 @@
           + (missing.length > 0
               ? '\n項目設定タブで「' + missingLabels.join('・') + '」が追加されています。'
               : '')
-          + '\n\n→ 上の「🖨️ プレビュー」で仕上がりを確認し、良ければ「💾 この展覧会のテンプレとして保存」してください。');
+          + '\n\n→ 「🖨️ プレビュー」で仕上がりを確認し、良ければ「💾 この展覧会のテンプレとして保存」してください。');
+        revealPreview();
       } catch (err) {
         console.error('adoption save failed:', err);
         await window.showAlertModal(friendlyError(err, '保存'));
@@ -2765,6 +2827,8 @@
           document.getElementById('linkToRegister').href = 'register.html?ex=' + ex;
           document.getElementById('linkToReports').href = 'reports.html?ex=' + ex;
           document.getElementById('btnEditExName').style.display = 'inline-block';
+          document.getElementById('exCard').classList.add('loaded');
+          document.getElementById('btnSwitchEx').style.display = 'inline-block';
           buildFieldSettingGrid(data.captionFields, data.registrationFields);
           // テンプレ初期化はプリセット JSON の読み込み完了を待つ (PRESETS_READY)。
           // 待たないと、展覧会データが先に届いたとき selectTemplate が PRESETS 未ロードで
@@ -2816,6 +2880,7 @@
     async function initRecommendations() {
       const sec = document.getElementById('recommendSection');
       if (!sec || !window.QriineCaptionRecommend || !artworkData) return;
+      try { renderOfficialThumbs(); } catch (e) { console.warn('公式テンプレのプレビュー描画に失敗:', e); }
       try {
         if (!_recPool) {
           const r = await fetch('data/caption-pool.json');
@@ -2824,8 +2889,10 @@
         }
       } catch (e) {
         console.warn('caption-pool の読み込みに失敗 (おすすめは出さない):', e);
+        document.getElementById('recUnavailable').style.display = 'block';
         return;
       }
+      document.getElementById('recUnavailable').style.display = 'none';
       const R = window.QriineCaptionRecommend;
       _recChips = R.inferChips(R.profile(artworkData.artworks));
       sec.style.display = 'block';
@@ -2957,6 +3024,74 @@
         : 'この条件で作品が収まるおすすめが見つかりませんでした。チップを変えるか、下の公式テンプレから選んでください。';
     }
 
+    // ①テンプレートの選び方の切り替え (おすすめ / 公式テンプレ / 自分のテンプレ)
+    function showTplPane(key) {
+      document.querySelectorAll('.tpl-pane').forEach(el => el.classList.toggle('active', el.dataset.pane === key));
+      document.querySelectorAll('.tpl-seg-btn').forEach(el => {
+        const on = el.dataset.pane === key;
+        el.classList.toggle('active', on);
+        el.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      updateSavedEmpty();
+    }
+    // 自分のテンプレが1件も無いときは案内を出す。一覧の表示は loadSavedTemplates があちこちで切り替えるので、
+    // その表示状態 (style) の変化を見て追随する
+    function updateSavedEmpty() {
+      const sec = document.getElementById('savedTemplatesSection');
+      const empty = document.getElementById('savedEmpty');
+      if (sec && empty) empty.style.display = sec.style.display === 'none' ? 'block' : 'none';
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      showTplPane('rec');
+      const sec = document.getElementById('savedTemplatesSection');
+      if (sec && window.MutationObserver) new MutationObserver(updateSavedEmpty).observe(sec, { attributes: true, attributeFilter: ['style'] });
+    });
+
+    // 公式テンプレ (JSON) を印刷設定の形にする。展覧会名の帯 (fixedText.autoFillExName) は展覧会名を入れる
+    function presetToSettings(p) {
+      const s = window.QriineCaptionRecommend.toSettings(p);
+      s.paperMode = p.paperMode || 'full';
+      s.qrStickerLabel = p.qrStickerLabel || 'artist_id';
+      const ft = (p.pageSettings || {}).fixedText;
+      s.fixedText = ft ? Object.assign({ marginH: 0, marginV: 0 }, ft,
+        { value: ft.autoFillExName ? ((artworkData && artworkData.exName) || '展覧会名') : (ft.value || '') }) : null;
+      return s;
+    }
+
+    // 公式テンプレの各カードに、この展覧会の作品 (未入力なら見本) を流し込んだプレビューと説明文を入れる。
+    // 以前はカードのクリックで「テンプレ見本」欄に見本データの見た目を出していたが、それをカード自身で見せる
+    function renderOfficialThumbs() {
+      if (!window.QriineCaptionRecommend || typeof OFFICIAL_PRESETS === 'undefined') return;
+      const real = (artworkData && artworkData.artworks) || [];
+      document.querySelectorAll('.template-card.official').forEach(card => {
+        const name = (card.id || '').replace(/^tpl_/, '');
+        const p = OFFICIAL_PRESETS[name];
+        if (!p) return;
+        card.querySelectorAll('.tpl-thumb, .tpl-desc').forEach(el => el.remove());
+        // 作品が無ければそのテンプレ用の見本作品で
+        const sample = Object.assign({}, (OFFICIAL_SAMPLES || {})[name] || {}, { artwork_id: 'sample' });
+        const art = real.length ? real[0] : sample;
+        const thumb = document.createElement('div');
+        thumb.className = 'tpl-thumb';
+        thumb.appendChild(recPreviewEl(presetToSettings(p), art));
+        const desc = document.createElement('div');
+        desc.className = 'tpl-desc';
+        desc.textContent = card.dataset.description || '';
+        const btn = card.querySelector('.btn-adopt');
+        card.insertBefore(thumb, btn);
+        card.insertBefore(desc, btn);
+      });
+    }
+
+    // 採用した後、プレビューが画面の外 (狭い画面で上) にあれば見える位置までスクロールする。
+    // 広い画面ではプレビューは右に固定で見えているので動かさない
+    function revealPreview() {
+      const pv = document.getElementById('previewArea');
+      if (!pv) return;
+      const r = pv.getBoundingClientRect();
+      if (r.bottom < 80 || r.top > window.innerHeight - 80) pv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     // 採用: この展覧会の保存テンプレとして書き込み、既存の保存テンプレ読込 (persist) で画面・登録項目・採用状態に反映する。
     // 母集団を作り直しても採用済みのキャプションが変わらないよう、参照ではなく中身ごと保存する。
     async function adoptRecommended(idx, btn) {
@@ -2986,12 +3121,22 @@
         await loadSavedTemplates();
         highlightSavedCard(docId);
         schedulePreviewUpdate();
-        document.getElementById('recStatus').textContent = '✓ 「' + name + '」をこの展覧会のキャプションにしました。上のプレビューで仕上がりを確認できます。';
+        document.getElementById('recStatus').textContent = '✓ 「' + name + '」をこの展覧会のキャプションにしました。プレビューで仕上がりを確認できます。';
+        revealPreview();
       } catch (e) {
         await window.showAlertModal(friendlyError(e, '保存'));
       } finally {
         if (btn) btn.disabled = false;
       }
+    }
+
+    // たたんだ展覧会欄を開き直して、別の展覧会コードを入力できるようにする
+    function showExInput() {
+      document.getElementById('exCard').classList.remove('loaded');
+      document.getElementById('btnSwitchEx').style.display = 'none';
+      const input = document.getElementById('exCodeInput');
+      input.focus();
+      input.select();
     }
 
     function startEditExName() {
@@ -3772,6 +3917,7 @@
         if (!isPhone) {
           const overflow = autoFitText(frame.contentWindow.document, frame.contentWindow);
           showOverflowWarning(overflow);
+          fitPreviewFrame();
         } else {
           // phone preview ではカード overflow は概念上発生しない
           showOverflowWarning([]);
@@ -3780,6 +3926,29 @@
         if (status) status.innerText = '✓ 最新';
       }, { once: true });
     }
+
+    // 紙のプレビューは A4 の実寸 (約 794px 幅) で描かれるので、枠が狭いとき (右列・スマホ) は
+    // 枠の幅に合わせて縮めて全体を見せる。transform は見た目だけを縮め、レイアウト寸法は変えないので、
+    // autoFitText の「入りきらない」判定には影響しない。縮めた分の余白は margin で詰めてスクロールを合わせる。
+    function fitPreviewFrame() {
+      const frame = document.getElementById('previewFrame');
+      if (!frame || frame.style.display === 'none') return;
+      const doc = frame.contentDocument;
+      if (!doc || !doc.body || !doc.querySelector('.page')) return;
+      const body = doc.body;
+      body.style.transform = ''; body.style.marginBottom = ''; body.style.marginRight = '';
+      const pageW = doc.querySelector('.page').getBoundingClientRect().width;
+      const avail = frame.clientWidth - 4;
+      const s = pageW > avail ? avail / pageW : 1;
+      if (s >= 1) return;
+      const h = body.scrollHeight;
+      body.style.transformOrigin = '0 0';
+      body.style.transform = `scale(${s})`;
+      body.style.marginBottom = `-${Math.round(h * (1 - s))}px`;
+      body.style.marginRight = `-${Math.round(pageW * (1 - s))}px`;
+      doc.documentElement.style.overflowX = 'hidden';
+    }
+    window.addEventListener('resize', () => { clearTimeout(window._fitPrevTimer); window._fitPrevTimer = setTimeout(fitPreviewFrame, 150); });
 
     // Preview タブの明示選択 (null = auto)。adopt 時 / 初期は null。
     let _previewTabExplicit = null;

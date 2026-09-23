@@ -96,7 +96,10 @@
       const shown = shownFields(t);
       let s = 0;
       p.fields.forEach(f => { if (shown.has(f)) s += 1; });
-      return s * 10 - recipes.indexOf(t.tags.recipe);
+      // 作家コメントがある展示では、QR が中央下の型を後ろに回す (コメントの下に QR が割り込むより
+      // 端に寄せたほうが読みやすい、2026-09-23 ユーザー評価)。消さずに順位だけ下げる
+      const qrPenalty = (p.hasNote && t.tags.qr === 'bottom-center') ? 1000 : 0;
+      return s * 10 - recipes.indexOf(t.tags.recipe) - qrPenalty;
     };
     const sorted = cands.map(t => ({ t, s: score(t) })).sort((a, b) => b.s - a.s || (a.t.id < b.t.id ? -1 : 1)).map(x => x.t);
     // 型ごとの列に分け、型を順番に回しながら1件ずつ取る (1つの型が上位を独占しないように)。
