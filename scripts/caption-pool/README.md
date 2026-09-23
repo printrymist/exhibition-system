@@ -4,7 +4,34 @@
 状況に合う推奨パターンをそこから引き出せるようにする。このフォルダはその準備物を置く。
 
 - `samples.json` — テンプレに流し込む見本データ。会場の種類ごとの典型データ (`typical`) と、
-  収まり確認用の極端なデータ (`stress`)。項目名は `public/field-defs.js` と同じ。
+  収まり確認用の極端なデータ (`stress`、`focus` = どの項目の試験か)。項目名は `public/field-defs.js` と同じ。
+- `generate.js` / `evaluate.js` / `contact.js` — 候補の生成・判定・目視用一覧 (下の「使い方」)。
+
+## 使い方 (生成 → 判定 → 一覧)
+
+```
+node scripts/caption-pool/generate.js      # 候補を生成 → out/candidates.json
+NODE_PATH=<playwright-core のある node_modules> node scripts/caption-pool/evaluate.js   # 判定 → out/results.json
+NODE_PATH=... node scripts/caption-pool/contact.js       # 合格の代表を画像にした一覧 → out/contact/index.html
+```
+`out/` は再生成できるのでリポジトリに入れない。判定と一覧は本物の `public/caption.html` を
+ヘッドレス Chrome で開き、その描画関数 (buildPrintHtml / autoFitText) に候補と見本データを渡している。
+
+- **generate.js** — 会場の種類ごとの書き方の型 (recipe) × 大きさ × 書体 × 揃え × 区切り線 × QR 位置 × 文字の大きさ。
+  現実に無い組み合わせは `allowed()` で作らない (英語のみを明朝にしない、美術館ラベルを小さくしない 等)。
+- **evaluate.js** — 典型データが1件でも次に当たれば母集団から落とす: 入りきらない (caption.html の検出) /
+  カードの高さ超過 / QR と文字の重なり / 1行にまとめた行の折り返し。極端なデータの合否は `capacity` に
+  「可 / 不可 / 対象外 (その項目を表示しない型)」で残し、推奨時に展覧会の実データで絞り込むのに使う。
+  見た目の良し悪し (余白の偏り等) は機械では判定しない → 一覧を人が見る。
+
+## 作っていて分かった caption.html 側の制約 (未修正)
+
+- **1行にまとめる部品 (group) は自動縮小・入りきらない検出の対象外。** 長い値で折り返してカードの高さを
+  超えると、下が黙って切れる (「作品情報を黙って切り捨てない」方針に反する)。evaluate.js はカード全体の
+  高さ超過を自前で見て補っている。
+- **group の入れ子は描画されない** (中の部品が黙って消える)。generate.js は入れ子を作ると止まるようにした。
+- **条件付きの書き方ができない。** 例: 存命なら「1948年生」、没年があれば「1931–2008」と出し分けられない。
+- 書体は「ゴシック」「明朝」の2択 (欧文セリフ体は選べない)。
 
 ## 美術館と普通のギャラリーは分けて扱う
 
