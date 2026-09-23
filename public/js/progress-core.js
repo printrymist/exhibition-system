@@ -160,7 +160,19 @@
 
     // 任意項目 (やらなくても展示はできる)
     const vis = ex.gallery_visibility || 'closed';
+    // 作品リスト (会場に置く一覧表の印刷・PDF)。保存済みのリスト設定 (artwork_list_configs、JSON 配列) の件数を出す
+    let listCount = 0;
+    try {
+      const lists = typeof ex.artwork_list_configs === 'string' ? JSON.parse(ex.artwork_list_configs) : ex.artwork_list_configs;
+      if (Array.isArray(lists)) listCount = lists.length;
+    } catch (e) { /* 壊れた値は未作成扱い */ }
     const optional = [
+      {
+        key: 'artworkList',
+        label: '作品リスト (一覧表)',
+        status: listCount > 0 ? '保存済み ' + listCount + ' 件' : '未作成',
+        href: 'artwork-list.html?ex=' + q,
+      },
       {
         key: 'gallery',
         label: 'Web展覧会',

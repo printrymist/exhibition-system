@@ -105,9 +105,16 @@ test('練習モードなら本番切替を任意項目に出す', () => {
   assert.ok(run({ is_sandbox: true }).optional.some(o => o.key === 'graduate'));
   assert.ok(!run({ is_sandbox: false }).optional.some(o => o.key === 'graduate'));
 });
+const opt = (r, k) => r.optional.find(o => o.key === k);
 test('Web展覧会の公開状態', () => {
-  assert.strictEqual(run({ gallery_visibility: 'public' }).optional[0].status, '公開中');
-  assert.strictEqual(run({}).optional[0].status, '未公開');
+  assert.strictEqual(opt(run({ gallery_visibility: 'public' }), 'gallery').status, '公開中');
+  assert.strictEqual(opt(run({}), 'gallery').status, '未公開');
+});
+test('作品リスト: 保存済みのリスト数を出す・無ければ未作成', () => {
+  assert.strictEqual(opt(run({ artwork_list_configs: JSON.stringify([{ name: 'A' }, { name: 'B' }]) }), 'artworkList').status, '保存済み 2 件');
+  assert.strictEqual(opt(run({}), 'artworkList').status, '未作成');
+  assert.strictEqual(opt(run({ artwork_list_configs: '壊れた値' }), 'artworkList').status, '未作成');
+  assert.strictEqual(opt(P.computeProgress({ exCode: 'A&B', ex: {}, artworks: [] }), 'artworkList').href, 'artwork-list.html?ex=A%26B');
 });
 test('会期までの日数 (YYYY/MM/DD)', () => {
   assert.strictEqual(run({ start_date: '2026/10/10' }).daysToStart, 5);
