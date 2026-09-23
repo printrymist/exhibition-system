@@ -539,6 +539,7 @@
   <script src="/sessionid.js"></script>
   <script src="/js/friendly-error.js"></script>
   <script src="/js/confirm-modal.js"></script>
+  <script src="/js/derived-fields.js"></script>
   <script>
     // =========================================================
     // 🌟 URL パラメータ取得
@@ -1221,8 +1222,14 @@
       return `<span style="font-size:${sc}em;">${_captionEscape(text)}</span>`;
     }
 
+    // 表示用の自動項目 (生没年など) は元の項目から組み立てる (js/derived-fields.js、caption.html と共通)
+    function _captionRaw(art, name) {
+      const derived = window.QriineDerived ? window.QriineDerived.resolve(art, name) : null;
+      return derived !== null ? derived : art[name];
+    }
+
     function _captionFieldHtml(item, art) {
-      const raw = art[item.name];
+      const raw = _captionRaw(art, item.name);
       const val = raw == null ? '' : String(raw).trim();
       if (!val) return '';
       const formatted = _captionFormatValue(val, item.currency || '', item.comma || false);
@@ -1242,7 +1249,7 @@
           html += _captionFieldHtml(item, art);
         } else if (item.type === 'group') {
           const parts = (item.children || []).map(c => {
-            const raw = art[c.name];
+            const raw = _captionRaw(art, c.name);
             const val = raw == null ? '' : String(raw).trim();
             if (!val) return null;
             const formatted = _captionFormatValue(val, c.currency || '', c.comma || false);

@@ -41,6 +41,11 @@ const FIELD_DEFS = [
   { name: 'artist_en',   label: '作家名（英語）',   desc: '作家名（英語）',                                      textarea: false, isArtist: true },
   { name: 'birth_year',  label: '生年',             desc: '作家の生まれ年（例：1965）',                          textarea: false, isArtist: true },
   { name: 'death_year',  label: '没年',             desc: '作家の没年。存命の場合は空欄',                        textarea: false, isArtist: true },
+  // 表示用の項目 (入力はしない)。生年・没年から js/derived-fields.js が組み立てる。
+  // isSystem なので項目設定グリッド・入力フォームには出ず、キャプションで選べる。
+  // sources = 元になる項目 (テンプレ採用時に登録項目へ足す)。
+  { name: 'lifespan',    label: '生没年 (自動)',    desc: '生年・没年から自動表示（例：1931–2008 / 1948年生）',   textarea: false, isSystem: true, isDerived: true, sources: ['birth_year', 'death_year'] },
+  { name: 'lifespan_en', label: '生没年・英語 (自動)', desc: '生年・没年から自動表示（例：1931–2008 / b. 1948）', textarea: false, isSystem: true, isDerived: true, sources: ['birth_year', 'death_year'] },
   { name: 'birthplace',  label: '出身地',           desc: '作家の出身地（例：東京都、Paris）',                   textarea: false, isArtist: true },
 
   // 価格・販売情報

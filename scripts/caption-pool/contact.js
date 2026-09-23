@@ -19,7 +19,7 @@ const picks = [];
 for (const k in groups) {
   const g = groups[k];
   // 軸をばらす: ゴシック左 → 明朝中央 → … の順に1件ずつ
-  const order = [['gothic', 'left'], ['mincho', 'center'], ['mincho', 'left'], ['gothic', 'center']];
+  const order = [['gothic', 'left'], ['serif', 'left'], ['mincho', 'center'], ['mincho', 'left'], ['serif', 'center'], ['gothic', 'center']];
   for (const [font, align] of order) {
     const hit = g.find(r => r.tags.font === font && r.tags.align === align && !picks.includes(r));
     if (hit) picks.push(hit);

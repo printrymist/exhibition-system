@@ -1404,7 +1404,7 @@
           </div>
           <div class="layout-item">
             <label>QR サイズ</label>
-            <input type="number" id="qrSize" min="8" max="50" value="20" style="width:60px;" oninput="updateQrSizeWarn()">
+            <input type="number" id="qrSize" min="8" max="50" value="16" style="width:60px;" oninput="updateQrSizeWarn()">
             <span id="qrSizeWarn" style="display:none; color:#c62828; font-size:0.8em; margin-left:6px;">⚠️ 10mm 未満は読み取りが不安定になるおそれがあります</span>
             <span>mm</span>
           </div>
@@ -1429,6 +1429,8 @@
             <select id="fontFamily">
               <option value="sans-serif">ゴシック</option>
               <option value="'Yu Mincho', 'Hiragino Mincho ProN', serif">明朝</option>
+              <!-- 英語のキャプション向け。欧文は Georgia 等のセリフ体、和文は明朝で出る -->
+              <option value="Georgia, 'Times New Roman', 'Yu Mincho', 'Hiragino Mincho ProN', serif">欧文セリフ (英語向け・和文は明朝)</option>
             </select>
           </div>
           <div class="layout-item">
@@ -1910,6 +1912,7 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="offline-banner.js"></script>
   <script src="field-defs.js"></script>
+  <script src="js/derived-fields.js"></script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -2227,6 +2230,17 @@
       return Array.from(new Set(out));
     }
 
+    // 表示用の自動項目 (生没年など) の元になる項目も含めて返す。テンプレ採用時に、
+    // 自動項目の元 (生年・没年) を登録項目へ足すために使う (自動項目自体は isSystem で登録しない)。
+    function _withDerivedSources(names) {
+      const out = names.slice();
+      names.forEach(n => {
+        const def = FIELD_MAP[n];
+        if (def && def.isDerived && Array.isArray(def.sources)) def.sources.forEach(s => { if (!out.includes(s)) out.push(s); });
+      });
+      return out;
+    }
+
     async function adoptTemplate(name) {
       const preset = PRESETS[name];
       if (!preset) {
@@ -2248,7 +2262,7 @@
       const currentRegNames = new Set(currentRegFields.map(f => f && f.name).filter(Boolean));
       // isSystem フィールド (artwork_id 等) は自動値なので registration_fields の判定対象外
       // (operator が register.html で編集する項目ではない、caption ラベルにだけ使う)
-      const missing = neededFields.filter(n =>
+      const missing = _withDerivedSources(neededFields).filter(n =>
         !currentRegNames.has(n) && !(FIELD_MAP[n] && FIELD_MAP[n].isSystem)
       );
 
@@ -3593,18 +3607,21 @@
         return `<li style="margin-bottom:4px;">
           <strong>${escape(o.artworkId)}</strong>
           / ${escape(o.field)}
-          ${o.cardLevel ? '(カードの高さに収まらず、下の行が切れます)' : `(${o.origSize}pt → ${o.finalSize}pt でも収まらず)`}
+          ${o.qrOverlap ? '(文字が QR コードに重なり、読み取れなくなるおそれがあります)'
+            : o.cardLevel ? '(カードの高さに収まらず、下の行が切れます)'
+            : `(${o.origSize}pt → ${o.finalSize}pt でも収まらず)`}
           <div style="color:#666;font-size:0.88em;margin-left:1em;">「${escape(text)}」</div>
         </li>`;
       }).join('');
       warnArea.innerHTML = `
         <div style="color:#d93025;font-weight:bold;font-size:1.05em;margin-bottom:8px;">
-          ⚠ ${list.length} 件がカードに収まりません (指定の最小サイズでも入りきらない項目・カード)
+          ⚠ 印刷前に確認が必要な点が ${list.length} 件あります (入りきらない項目・カード / QR コードへの重なり)
         </div>
         <ul style="font-size:0.9em;margin:8px 0 8px 22px;color:#333;line-height:1.55;">${items}</ul>
         <div style="font-size:0.88em;color:#555;margin-top:10px;line-height:1.55;">
           作品タイトル等は省略せず、このまま印刷するとカード枠から文字がはみ出ます。<br>
-          <strong>対応案:</strong> 作家にタイトル短縮を相談 / テンプレの最小サイズ・最大行数を見直す / フォントサイズを下げる。
+          <strong>対応案:</strong> 作家にタイトル短縮を相談 / テンプレの最小サイズ・最大行数を見直す / フォントサイズを下げる /
+          QR コードの位置 (文字を回り込ませる配置) や大きさを変える。
         </div>
         <label style="display:block;margin-top:14px;cursor:pointer;font-size:0.92em;">
           <input type="checkbox" id="ackOverflow" onchange="onAckOverflow(this)"
@@ -3708,6 +3725,9 @@
       // いたが、それが印刷にもそのまま出てしまうため廃止 (実作品の未入力欄は印刷に出さない)。
       // 公式テンプレの見本は generatePreview がダミー作品にサンプルをマージして見せるので
       // ここで補完しなくても見本プレビューは出る。
+      // 表示用の自動項目 (生没年など) は元の項目から組み立てる (js/derived-fields.js)
+      const derived = window.QriineDerived ? window.QriineDerived.resolve(art, fieldName) : null;
+      if (derived !== null) return { value: derived, isSample: false };
       const real = (art[fieldName] || '').toString().trim();
       return { value: real, isSample: false };
     }
@@ -4243,6 +4263,30 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           text: (card.textContent || '').replace(/\s+/g, ' ').trim()
         });
       });
+      // 第4パス: QR と文字の重なり。QR を角に固定する配置 (回り込みでない) で文字が長いと、
+      // 文字が QR の上に重なって印刷され、QR が読み取れなくなる。行の中の実際の文字の範囲
+      // (Range の矩形) と QR 画像の矩形が交わるかで判定する。
+      doc.querySelectorAll('.cap-card').forEach(function (card) {
+        var qr = card.querySelector('img');
+        if (!qr) return;
+        var q = qr.getBoundingClientRect();
+        if (!q.width) return;
+        var hit = Array.prototype.some.call(card.querySelectorAll('.auto-fit, div[style*="line-height:1.3"]'), function (el) {
+          var rg = doc.createRange();
+          rg.selectNodeContents(el);
+          return Array.prototype.some.call(rg.getClientRects(), function (t) {
+            return t.width > 0 && t.left < q.right - 1 && t.right > q.left + 1 && t.top < q.bottom - 1 && t.bottom > q.top + 1;
+          });
+        });
+        if (!hit) return;
+        card.classList.add('has-overflow');
+        overflowList.push({
+          artworkId: card.dataset.artworkId || '?',
+          field: 'QRコード',
+          qrOverlap: true,
+          text: (card.textContent || '').replace(/\s+/g, ' ').trim()
+        });
+      });
       return overflowList;
     }
 
@@ -4571,7 +4615,7 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
           const neededFields = _extractTemplateFieldNames(settings.items);
           const currentRegFields = Array.isArray(artworkData.registrationFields) ? artworkData.registrationFields : [];
           const currentRegNames = new Set(currentRegFields.map(f => f && f.name).filter(Boolean));
-          const missing = neededFields.filter(n =>
+          const missing = _withDerivedSources(neededFields).filter(n =>
             FIELD_MAP[n] && !FIELD_MAP[n].isSystem && !currentRegNames.has(n)
           );
           const newRegFields = [...currentRegFields, ...missing.map(n => ({ name: n, required: false }))];

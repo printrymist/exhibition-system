@@ -86,7 +86,10 @@ const server = http.createServer((req, res) => {
       doc.querySelectorAll('.cap-card').forEach(card => {
         const id = card.dataset.artworkId;
         const reasons = [];
-        if (overflow.some(o => o.artworkId === id)) reasons.push('入りきらない: ' + overflow.filter(o => o.artworkId === id).map(o => o.field).join(','));
+        // caption.html の警告のうち項目単位のもの。カード全体の超過・QR 重なり (cardLevel / qrOverlap) は
+        // 下で自前に判定するので重ねて数えない
+        const fieldOver = overflow.filter(o => o.artworkId === id && !o.cardLevel && !o.qrOverlap);
+        if (fieldOver.length) reasons.push('入りきらない: ' + fieldOver.map(o => o.field).join(','));
         if (card.scrollHeight > card.clientHeight + 2) reasons.push('カードの高さ超過');
         const qr = card.querySelector('img');
         if (qr) {

@@ -58,7 +58,7 @@ const RECIPES = {
       G(', ', [F('year', d), F('technique', d), F('size', d)]), SP(1.5), F('price', d * 1.1, { currency: '¥', comma: true }), F('courtesy', d * 0.85, { maxLines: 2 })] },
   // 海外の商業画廊: 作家名(生年) → タイトル(斜体), 年 → 素材 → 寸法 → エディション → 価格
   intl_gallery: { venue: 'gallery_intl', lang: 'en', label: '海外画廊',
-    items: ({ t, d, a, div }) => [SP(2), G(' ', [F('artist_en', a, { bold: true }), F('birth_year', d, { prefix: '(b. ', suffix: ')' })]), SP(1),
+    items: ({ t, d, a, div }) => [SP(2), G(' ', [F('artist_en', a, { bold: true }), F('lifespan_en', d, { prefix: '(', suffix: ')' })]), SP(1),
       // 英題は group に入れない (group は自動縮小・はみ出し検出の対象外のため)
       F('title_en', t * 0.85, { italic: true, maxLines: 3, title: true }), F('year', d * 1.1), SP(1.5), ...(div ? [DIV, SP(1.5)] : []),
       F('technique', d, { maxLines: 2 }), F('size', d, { maxLines: 2 }), F('edition', d), SP(2), F('price', d * 1.05)] },
@@ -70,13 +70,13 @@ const RECIPES = {
       F('edition', d, { prefix: 'ed. ' }), SP(1.5), G('　', [F('price', d * 1.05, { currency: '¥', comma: true }), F('price_framed', d, { prefix: '額装 ', currency: '¥', comma: true })])] },
   // 国内の美術館: 作家名(生没年) → 作品名 → 英題 → 制作年 → 素材 → 寸法 → 所蔵。価格なし
   museum_jp: { venue: 'museum_jp', lang: 'ja+en', label: '美術館・国内',
-    // 生没年は別の小さい行 (group の入れ子は caption.html が描画しないので使わない)。存命なら生年だけ出る
-    items: ({ t, d, a, div }) => [SP(2), F('artist', a), G('–', [F('birth_year', d * 0.9), F('death_year', d * 0.9)]), SP(1),
+    // 生没年は表示用の自動項目 lifespan (「1931–2008」/ 存命なら「1948年生」)
+    items: ({ t, d, a, div }) => [SP(2), G(' ', [F('artist', a), F('lifespan', d * 0.9, { prefix: '(', suffix: ')' })]), SP(1),
       F('title', t, { bold: true, maxLines: 2, title: true }), F('title_en', d * 1.05, { italic: true, maxLines: 2 }), SP(1.5), ...(div ? [DIV, SP(1.5)] : []),
       F('year', d), F('technique', d, { maxLines: 2 }), F('size', d), F('collection', d)] },
   // 海外の美術館: クレジット行。価格なし
   museum_intl: { venue: 'museum_intl', lang: 'en', label: '美術館・海外',
-    items: ({ t, d, a, div }) => [SP(2), F('artist_en', a, { bold: true }), G(', ', [F('birthplace', d * 0.9), F('birth_year', d * 0.9, { prefix: 'born ' })]), SP(1.5),
+    items: ({ t, d, a, div }) => [SP(2), F('artist_en', a, { bold: true }), G(', ', [F('birthplace', d * 0.9), F('lifespan_en', d * 0.9)]), SP(1.5),
       F('title_en', t * 0.85, { italic: true, maxLines: 3, title: true }), F('year', d * 1.1), SP(1.5), ...(div ? [DIV, SP(1.5)] : []),
       F('technique', d, { maxLines: 3 }), F('size', d, { maxLines: 2 }), SP(1.5), F('courtesy', d * 0.9, { maxLines: 2 }), F('collection', d * 0.9)] },
 };
@@ -92,13 +92,16 @@ const FORMATS = {
   xsmall: { cols: 3, rows: 6, t: 12, qr: 12, label: '極小 (約63×44mm・18枚)' },
   tall:   { cols: 4, rows: 4, t: 14, qr: 13, label: '縦長 (約46×68mm・16枚)' },
 };
-const FONTS = { gothic: 'sans-serif', mincho: "'Yu Mincho', 'Hiragino Mincho ProN', serif" };
+// 値は caption.html の書体の選択肢 (#fontFamily の option value) と完全に一致させる
+const FONTS = { gothic: 'sans-serif', mincho: "'Yu Mincho', 'Hiragino Mincho ProN', serif",
+  serif: "Georgia, 'Times New Roman', 'Yu Mincho', 'Hiragino Mincho ProN', serif" };
 const SCALES = { std: 1, large: 1.15 };
 
 // ── 現実に無い組み合わせを除く規則 ──
 function allowed(r, fmtKey, font, align, qr) {
   const R = RECIPES[r];
-  if (R.lang === 'en' && font === 'mincho') return false;                         // 英語のみを明朝にしない
+  if (R.lang === 'en' && font === 'mincho') return false;                         // 英語のみを明朝にしない (欧文セリフを使う)
+  if (R.lang === 'ja' && font === 'serif') return false;                          // 和文のみなら欧文セリフは明朝と同じ見た目
   if (R.venue.startsWith('museum') && (fmtKey === 'xsmall' || fmtKey === 'small')) return false; // 美術館ラベルは小さくしない
   if ((R.venue === 'art_fair_jp' || R.venue === 'print_photo') && fmtKey === 'xsmall') return false; // 情報量が多い型は極小にしない
   if (r === 'jp_solo_basic' && fmtKey === 'xsmall') return false;                  // 極小は1行まとめ型で
@@ -119,7 +122,7 @@ for (const r in RECIPES) for (const fk in FORMATS) for (const font in FONTS)
       const id = ['pool', r, fk, font, align, qr.replace('wrap-bottom-right', 'wrap').replace('bottom-', ''), div ? 'div' : 'nodiv', sc].join('_');
       out.push({
         id,
-        label: `${R.label} / ${fm.label} / ${font === 'gothic' ? 'ゴシック' : '明朝'} / ${align === 'left' ? '左揃え' : '中央揃え'}${div ? ' / 区切り線' : ''}${sc === 'large' ? ' / 大きめ' : ''}`,
+        label: `${R.label} / ${fm.label} / ${({ gothic: 'ゴシック', mincho: '明朝', serif: '欧文セリフ' })[font]} / ${align === 'left' ? '左揃え' : '中央揃え'}${div ? ' / 区切り線' : ''}${sc === 'large' ? ' / 大きめ' : ''}`,
         tags: { recipe: r, venue: R.venue, lang: R.lang, format: fk, cols: fm.cols, rows: fm.rows, font, align, qr, divider: div, scale: sc },
         qrPosition: qr, qrOffset: 0, textAlign: align,
         pageSettings: {

@@ -313,7 +313,9 @@
     const QR_COL = '_qr';
     const SEQ_COL = '_seq';   // 通し番号 (印刷順に 1 から振り直す疑似列。artwork_id とは無関係)
     const COLUMN_CANDIDATES = FIELD_DEFS
-      .filter(d => d.type !== 'image' && !d.isPureSns)
+      // isDerived (生没年など表示用の自動項目) はキャプション用。この一覧は作品データの値を
+      // そのまま出すので、候補に入れると空の列になる
+      .filter(d => d.type !== 'image' && !d.isPureSns && !d.isDerived)
       .map(d => d.name)
       .concat([QR_COL, SEQ_COL]);
     const DEFAULT_ON = ['artwork_id', 'title', 'artist', 'year', 'technique', 'size', 'price'];

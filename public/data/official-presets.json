@@ -10,7 +10,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif"
       },
@@ -39,7 +39,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 3, "rows": 5,
-        "qrSize": 16, "qrMarginH": 2, "qrMarginV": 2,
+        "qrSize": 14, "qrMarginH": 2, "qrMarginV": 2,
         "textMarginLeft": 3, "textMarginRight": 3,
         "fontFamily": "sans-serif"
       },
@@ -67,7 +67,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 5, "textMarginRight": 5,
         "fontFamily": "sans-serif"
       },
@@ -95,7 +95,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif"
       },
@@ -131,7 +131,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif"
       },
@@ -162,7 +162,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 18, "qrMarginH": 2, "qrMarginV": 2,
+        "qrSize": 16, "qrMarginH": 2, "qrMarginV": 2,
         "textMarginLeft": 5, "textMarginRight": 5,
         "fontFamily": "sans-serif"
       },
@@ -193,7 +193,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 20, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif",
         "fixedText": {
@@ -235,7 +235,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif"
       },
@@ -300,7 +300,7 @@
       "pageSettings": {
         "paperSize": "A4", "orientation": "portrait",
         "cols": 2, "rows": 4,
-        "qrSize": 22, "qrMarginH": 3, "qrMarginV": 3,
+        "qrSize": 16, "qrMarginH": 3, "qrMarginV": 3,
         "textMarginLeft": 6, "textMarginRight": 6,
         "fontFamily": "sans-serif"
       },
