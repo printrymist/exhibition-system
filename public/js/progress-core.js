@@ -144,7 +144,8 @@
       label: 'キャプションを決める',
       state: tplId ? 'done' : 'todo',
       detail: tplId ? '' : 'キャプションのデザイン(テンプレート)を選んでください。',
-      action: { label: 'キャプションを選ぶ', href: captionUrl, page: 'caption' },
+      // section: キャプション画面の中の行き先 (①テンプレートのおすすめ欄)
+      action: { label: 'キャプションを選ぶ', href: captionUrl, page: 'caption', section: 'recommend' },
     });
 
     // 4. 印刷

@@ -13,7 +13,16 @@
 node scripts/caption-pool/generate.js      # 候補を生成 → out/candidates.json
 NODE_PATH=<playwright-core のある node_modules> node scripts/caption-pool/evaluate.js   # 判定 → out/results.json
 NODE_PATH=... node scripts/caption-pool/contact.js       # 合格の代表を画像にした一覧 → out/contact/index.html
+node scripts/caption-pool/build-pool.js    # 合格したものをアプリの母集団に → public/data/caption-pool.json
 ```
+
+**母集団の使われ方 (2026-09-23〜)**: キャプション画面「①テンプレート」の「✨ おすすめ」が
+`public/data/caption-pool.json` を読み、`public/js/caption-recommend.js` (純粋関数・テスト
+`functions/scripts/test-caption-recommend.js`) で選ぶ。流れ: 作品データの特徴 → チップの初期値
+(個展/グループ展・日英併記・価格を出す・美術館風。データから推定、主催者がワンタップで変更) → 型の絞り込み
+(型を順番に回して見た目の軸もばらけさせる) → その展覧会で一番厳しい作品を本物の描画で流し込み、印刷前の
+警告が出ないものだけを 6 件表示 → 「これにする」でその展覧会の保存テンプレとして中身ごと保存
+(母集団を作り直しても採用済みのキャプションは変わらない)。母集団を更新したら build-pool.js まで流してデプロイ。
 `out/` は再生成できるのでリポジトリに入れない。判定と一覧は本物の `public/caption.html` を
 ヘッドレス Chrome で開き、その描画関数 (buildPrintHtml / autoFitText) に候補と見本データを渡している。
 

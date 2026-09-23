@@ -339,6 +339,27 @@
       .template-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
+    /* おすすめ (テンプレ母集団から、この展覧会の作品で選ぶ) */
+    .rec-section { border: 1px solid #d2e3fc; background: #f8fbff; border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; }
+    .rec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .rec-title { font-weight: bold; color: #1a73e8; }
+    .rec-sub { font-size: 0.8em; color: #666; }
+    .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .rec-chip { border: 1px solid #c5d9f7; background: #fff; color: #1a73e8; border-radius: 999px; padding: 5px 12px;
+      font-size: 0.85em; cursor: pointer; font-family: inherit; }
+    .rec-chip.on { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    .rec-status { font-size: 0.8em; color: #666; min-height: 1.2em; margin-bottom: 6px; }
+    /* 列数は欄の幅に合わせて自動 (プレビューは最大 180px 幅に縮小して描く) */
+    .rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+    @media (max-width: 480px) { .rec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .rec-card { min-width: 0; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .rec-frame { position: relative; overflow: hidden; background: #fff; margin: 0 auto; }
+    .rec-frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; }
+    .rec-meta { font-size: 0.72em; color: #666; line-height: 1.4; }
+    .rec-adopt { padding: 6px 10px; border: none; border-radius: 6px; background: #1a73e8; color: #fff; font-size: 0.85em;
+      font-weight: bold; cursor: pointer; font-family: inherit; }
+    .rec-adopt:disabled { background: #aaa; cursor: default; }
+
     /* 非採用カードはグレー目で控えめに、採用中だけ緑で浮き上がる。
        バッジ (長丸) は撤去 — 緑グラデと採用ボタンの色だけで状態を示す。 */
     .template-card {
@@ -1555,12 +1576,24 @@
         <details id="usageHint" class="usage-hint">
           <summary>💡 はじめての方へ（おすすめの手順）</summary>
           <ol>
-            <li><strong>① テンプレート</strong>: 目的に近い <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong>（カードのクリックはプレビューだけ。採用で確定）</li>
+            <li><strong>① テンプレート</strong>: <strong>✨ おすすめ</strong>を展覧会の作品で見比べて「これにする」、または <strong>⭐ 公式テンプレ</strong>を選んで <strong>📥 採用</strong>（カードのクリックはプレビューだけ。採用で確定）</li>
             <li><strong>② 載せる項目</strong>: キャプションに載せる項目を確認・調整</li>
             <li>上の「<strong>🖨️ プレビュー（実際の仕上がり）</strong>」で確認 → 良ければ「<strong>💾 この展覧会のテンプレとして保存</strong>」</li>
             <li style="color:#888;">（必要なときだけ）<strong>③ 詳細編集</strong>で並び・大きさ、<strong>④ ページ設定</strong>で用紙・余白・QR を調整。作家から集める項目は「作品登録・設定」画面で。</li>
           </ol>
         </details>
+        <!-- おすすめ: テンプレ母集団 (data/caption-pool.json) から、この展覧会の作品で収まるものを
+             実データのプレビューで並べる。チップ = 主催者の意図 (データから推定した初期選択、ワンタップで変更)。
+             js/caption-recommend.js が選び、ここでは描画と収まり確認と採用だけ行う。 -->
+        <div id="recommendSection" class="rec-section" style="display:none;">
+          <div class="rec-head">
+            <span class="rec-title">✨ おすすめのキャプション</span>
+            <span id="recSubtitle" class="rec-sub">この展覧会の作品で見比べて選べます</span>
+          </div>
+          <div id="recChips" class="rec-chips"></div>
+          <div id="recStatus" class="rec-status"></div>
+          <div id="recGrid" class="rec-grid"></div>
+        </div>
         <!-- テンプレ一覧 (すべて公式テンプレ)。⭐ マーク = 運営が用意した既製テンプレ ('自分のテンプレ' と区別)。 -->
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <span style="font-size:0.95em; font-weight:bold; color:#444;">📋 テンプレ一覧</span>
@@ -1913,6 +1946,7 @@
   <script src="offline-banner.js"></script>
   <script src="field-defs.js"></script>
   <script src="js/derived-fields.js"></script>
+  <script src="js/caption-recommend.js"></script>
   <script>
     // =========================================================
     // 設定値 (Config) — チューニング可能な定数を一箇所に集約
@@ -2639,7 +2673,14 @@
     function navigateFromProgress(action) {
       if (action.page !== 'caption') return false;
       switchMainTab('caption');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // 「キャプションを選ぶ」は ①テンプレートのおすすめへ。印刷は画面上部の印刷ボタンへ
+      const rec = document.getElementById('recommendSection');
+      if (action.section === 'recommend' && rec && rec.style.display !== 'none') {
+        switchTab('template');
+        rec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return true;
     }
 
@@ -2746,10 +2787,211 @@
               nameInput.value = data.exName;
               if (typeof onTemplateNameInput === 'function') onTemplateNameInput();
             }
+            // おすすめは公式テンプレ・保存テンプレの初期化が済んでから (見本データに OFFICIAL_SAMPLES を使うため)
+            initRecommendations();
           });
           document.getElementById('mainTabs').style.display = 'block';
           switchMainTab('caption');
         });
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // おすすめ: テンプレ母集団 (data/caption-pool.json) から、この展覧会の作品で収まるものを見せる
+    // 選び方は js/caption-recommend.js (純粋関数)。ここは 描画 / 実データでの収まり確認 / 採用 だけ。
+    // ─────────────────────────────────────────────────────────
+    const REC_SHOW = 6;              // 見せる件数
+    let _recPool = null;             // 母集団 (初回だけ fetch)
+    let _recChips = null;            // 現在のチップ
+    let _recShown = [];              // 表示中のテンプレ
+    let _recRun = 0;                 // 描画の世代 (チップを連打したとき古い描画を捨てる)
+
+    const REC_CHIP_DEFS = [
+      { key: 'mode', value: 'solo', label: '個展' },
+      { key: 'mode', value: 'group', label: 'グループ展' },
+      { key: 'bilingual', label: '日英併記' },
+      { key: 'price', label: '価格を出す' },
+      { key: 'museum', label: '美術館風' },
+    ];
+
+    async function initRecommendations() {
+      const sec = document.getElementById('recommendSection');
+      if (!sec || !window.QriineCaptionRecommend || !artworkData) return;
+      try {
+        if (!_recPool) {
+          const r = await fetch('data/caption-pool.json');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          _recPool = await r.json();
+        }
+      } catch (e) {
+        console.warn('caption-pool の読み込みに失敗 (おすすめは出さない):', e);
+        return;
+      }
+      const R = window.QriineCaptionRecommend;
+      _recChips = R.inferChips(R.profile(artworkData.artworks));
+      sec.style.display = 'block';
+      renderRecommendations();
+    }
+
+    function toggleRecChip(i) {
+      const d = REC_CHIP_DEFS[i];
+      if (d.key === 'mode') _recChips.mode = d.value;
+      else _recChips[d.key] = !_recChips[d.key];
+      renderRecommendations();
+    }
+
+    // 見本の作品 (作品が未入力の展覧会用)。公式テンプレの見本データを合成して使う
+    function recSampleArtworks() {
+      const s = (typeof OFFICIAL_SAMPLES !== 'undefined' && OFFICIAL_SAMPLES) || {};
+      const base = Object.assign({}, s.official_intl || {}, {
+        artwork_id: 'sample', edition: '12/30',
+        artist_note: (s.official_with_comment || {}).artist_note || '',
+      });
+      return [base];
+    }
+
+    // artworkData を一時的に差し替えて印刷用 HTML を作る (buildPrintHtml は同期なので差し替えは漏れない)
+    function recBuildHtml(settings, arts) {
+      const saved = artworkData;
+      artworkData = Object.assign({}, saved, { artworks: arts });
+      try { return buildPrintHtml(settings); } finally { artworkData = saved; }
+    }
+
+    // 実データで収まるか: 一番厳しい作品たちを流し込み、印刷前の警告 (入りきらない / カード超過 / QR 重なり) が出ないか
+    async function recFits(settings, arts) {
+      let fr = document.getElementById('__recFitFrame');
+      if (!fr) {
+        fr = document.createElement('iframe');
+        fr.id = '__recFitFrame';
+        fr.setAttribute('aria-hidden', 'true');
+        fr.style.cssText = 'position:fixed;left:-4000px;top:0;width:900px;height:1300px;border:0;';
+        document.body.appendChild(fr);
+      }
+      const doc = fr.contentDocument;
+      doc.open(); doc.write(recBuildHtml(settings, arts)); doc.close();
+      if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+      await Promise.all([...doc.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+      return autoFitText(doc, fr.contentWindow).length === 0;
+    }
+
+    // 1枚分のプレビュー: 代表作品1件だけの印刷 HTML を、カード1枚の大きさに切り詰めて縮小表示する
+    function recPreviewEl(settings, art) {
+      const ps = settings;
+      const pageW = ps.orientation === 'landscape' ? 297 : 210, pageH = ps.orientation === 'landscape' ? 210 : 297;
+      const cardW = (pageW - 16 - 3 * (ps.cols - 1)) / ps.cols, cardH = (pageH - 16 - 3 * (ps.rows - 1)) / ps.rows;
+      const pxW = cardW * 3.7795, pxH = cardH * 3.7795;
+      const html = recBuildHtml(ps, [art]).replace('</head>',
+        `<style>.page{padding:0 !important;width:${cardW}mm !important;height:${cardH}mm !important;` +
+        `grid-template-columns:${cardW}mm !important;grid-template-rows:${cardH}mm !important;}` +
+        `.cap-card.has-overflow::after{display:none;}</style></head>`);
+      // 枠はカードと同じ縦横比で、欄の幅いっぱい (最大 180px・高さ 170px まで)。
+      // 中の iframe は実寸で描いて、枠の幅に合わせて縮める (画面の回転・幅の変化にも追従)
+      const wrap = document.createElement('div');
+      wrap.className = 'rec-frame';
+      wrap.style.width = '100%';
+      wrap.style.maxWidth = Math.min(180, 170 * pxW / pxH) + 'px';
+      wrap.style.aspectRatio = pxW + ' / ' + pxH;
+      const fr = document.createElement('iframe');
+      fr.setAttribute('tabindex', '-1');
+      fr.setAttribute('aria-hidden', 'true');
+      fr.style.width = Math.ceil(pxW) + 'px';
+      fr.style.height = Math.ceil(pxH) + 'px';
+      const fit = () => { if (wrap.clientWidth) fr.style.transform = `scale(${wrap.clientWidth / pxW})`; };
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+      requestAnimationFrame(fit);
+      fr.srcdoc = html;
+      wrap.appendChild(fr);
+      return wrap;
+    }
+
+    async function renderRecommendations() {
+      const R = window.QriineCaptionRecommend;
+      if (!R || !_recPool || !_recChips) return;
+      const run = ++_recRun;
+      const chipsEl = document.getElementById('recChips');
+      chipsEl.innerHTML = REC_CHIP_DEFS.map((d, i) => {
+        const on = d.key === 'mode' ? _recChips.mode === d.value : !!_recChips[d.key];
+        return `<button type="button" class="rec-chip${on ? ' on' : ''}" aria-pressed="${on}" onclick="toggleRecChip(${i})">${on ? '✓ ' : ''}${d.label}</button>`;
+      }).join('');
+
+      const real = (artworkData && artworkData.artworks) || [];
+      const arts = real.length ? real : recSampleArtworks();
+      const p = R.profile(arts);
+      document.getElementById('recSubtitle').textContent = real.length
+        ? `この展覧会の作品 (${real.length} 点) で見比べて選べます。一番長いタイトルなども入るものだけを出しています。`
+        : 'まだ作品が入力されていないので見本の作品で表示しています。作品を入力すると、その作品で見比べられます。';
+      const statusEl = document.getElementById('recStatus');
+      const grid = document.getElementById('recGrid');
+      grid.innerHTML = '';
+      statusEl.innerHTML = '<span class="spinner-sm"></span> この展覧会の作品が収まるものを探しています…';
+      _recShown = [];
+
+      const candidates = R.shortlist(_recPool, _recChips, p, 24);
+      const heavy = R.heaviest(arts);
+      const rep = arts[0];
+      for (const t of candidates) {
+        if (_recShown.length >= REC_SHOW) break;
+        const settings = R.toSettings(t);
+        let ok = false;
+        try { ok = await recFits(settings, heavy); } catch (e) { console.warn('おすすめの収まり確認に失敗:', t.id, e); }
+        if (run !== _recRun) return;  // チップが変わった
+        if (!ok) continue;
+        const idx = _recShown.push(t) - 1;
+        const card = document.createElement('div');
+        card.className = 'rec-card';
+        card.appendChild(recPreviewEl(settings, rep));
+        const meta = document.createElement('div');
+        meta.className = 'rec-meta';
+        meta.textContent = t.label.split(' / ').slice(1).join(' / ');
+        card.appendChild(meta);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rec-adopt';
+        btn.textContent = 'これにする';
+        btn.onclick = () => adoptRecommended(idx, btn);
+        card.appendChild(btn);
+        grid.appendChild(card);
+      }
+      if (run !== _recRun) return;
+      statusEl.textContent = _recShown.length
+        ? '気に入ったものの「これにする」で、この展覧会のキャプションとして保存されます (あとから③詳細編集で調整もできます)。'
+        : 'この条件で作品が収まるおすすめが見つかりませんでした。チップを変えるか、下の公式テンプレから選んでください。';
+    }
+
+    // 採用: この展覧会の保存テンプレとして書き込み、既存の保存テンプレ読込 (persist) で画面・登録項目・採用状態に反映する。
+    // 母集団を作り直しても採用済みのキャプションが変わらないよう、参照ではなく中身ごと保存する。
+    async function adoptRecommended(idx, btn) {
+      const t = _recShown[idx];
+      if (!t || !window._currentEx) return;
+      if (!navigator.onLine) { await window.showAlertModal('オフラインです。ネットワーク接続を確認してください。'); return; }
+      const name = ((artworkData && artworkData.exName) || window._currentEx) + ' (おすすめ)';
+      const ok = await window.showConfirmModal(
+        'このデザインをこの展覧会のキャプションにしますか?\n\n自分のテンプレ「' + name + '」として保存されます。'
+        + (savedTemplateNames.has(name) ? '\n(前に「おすすめ」から選んだものは置き換わります)' : ''),
+        { okLabel: 'これにする' });
+      if (!ok) return;
+      const settings = window.QriineCaptionRecommend.toSettings(t);
+      const json = JSON.stringify(settings);
+      const docId = sanitizeTplId(window._currentEx + '__' + name);
+      const user = firebase.auth && firebase.auth().currentUser;
+      if (btn) btn.disabled = true;
+      try {
+        await firebase.firestore().collection('caption_templates').doc(docId).set({
+          name: name, settingsJson: json,
+          createdBy: user ? ((user.email || '').trim().toLowerCase()) : '',
+          exCode: window._currentEx, exName: (artworkData && artworkData.exName) || '',
+          createdAt: new Date().toLocaleString('ja-JP'), updatedAt: new Date().toISOString(),
+          source: 'pool:' + t.id,
+        }, { merge: true });
+        await loadSavedTemplate({ dataset: { tplId: docId, tplName: name, settings: json } }, { persist: true });
+        await loadSavedTemplates();
+        highlightSavedCard(docId);
+        schedulePreviewUpdate();
+        document.getElementById('recStatus').textContent = '✓ 「' + name + '」をこの展覧会のキャプションにしました。上のプレビューで仕上がりを確認できます。';
+      } catch (e) {
+        await window.showAlertModal(friendlyError(e, '保存'));
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     function startEditExName() {
@@ -4647,6 +4889,8 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
         if (settings.qrMarginV !== undefined) document.getElementById('qrMarginV').value = settings.qrMarginV;
         if (settings.textMarginLeft !== undefined) document.getElementById('textMarginLeft').value = settings.textMarginLeft;
         if (settings.textMarginRight !== undefined) document.getElementById('textMarginRight').value = settings.textMarginRight;
+        // 書体も復元する (以前は抜けていて、明朝で保存したテンプレを読み込むとその時の書体のままだった)
+        if (settings.fontFamily) document.getElementById('fontFamily').value = settings.fontFamily;
         // 旧テンプレ (textColor 未保存) は黒にリセット、新テンプレは保存値を適用
         document.getElementById('textColor').value = settings.textColor || '#000000';
         // paperMode: 旧テンプレは 'full' default。新フィールドがあれば反映。
