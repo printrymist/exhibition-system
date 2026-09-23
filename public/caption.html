@@ -3593,13 +3593,13 @@
         return `<li style="margin-bottom:4px;">
           <strong>${escape(o.artworkId)}</strong>
           / ${escape(o.field)}
-          (${o.origSize}pt → ${o.finalSize}pt でも収まらず)
+          ${o.cardLevel ? '(カードの高さに収まらず、下の行が切れます)' : `(${o.origSize}pt → ${o.finalSize}pt でも収まらず)`}
           <div style="color:#666;font-size:0.88em;margin-left:1em;">「${escape(text)}」</div>
         </li>`;
       }).join('');
       warnArea.innerHTML = `
         <div style="color:#d93025;font-weight:bold;font-size:1.05em;margin-bottom:8px;">
-          ⚠ ${list.length} 件のフィールドが指定の最小サイズに収まりません
+          ⚠ ${list.length} 件がカードに収まりません (指定の最小サイズでも入りきらない項目・カード)
         </div>
         <ul style="font-size:0.9em;margin:8px 0 8px 22px;color:#333;line-height:1.55;">${items}</ul>
         <div style="font-size:0.88em;color:#555;margin-top:10px;line-height:1.55;">
@@ -4226,6 +4226,22 @@ ${pages.map(p => `<div class="page">${p.join('')}</div>`).join('')}
             });
           });
         }
+      });
+      // 第3パス: カード全体の高さ超過。「1行にまとめる」(group) 行は上の自動縮小の対象外で、
+      // 長い値で折り返すとカードの下が overflow:hidden で黙って切れていた (作品情報を黙って
+      // 切り捨てない方針に反する)。上で警告済みのカード以外もカードの物理高さで判定し、
+      // 超えていれば警告に載せて印刷前に確認させる。
+      doc.querySelectorAll('.cap-card').forEach(function (card) {
+        if (card.scrollHeight <= card.clientHeight + 2) return;
+        var id = card.dataset.artworkId || '?';
+        if (overflowList.some(function (o) { return o.artworkId === id; })) return;
+        card.classList.add('has-overflow');
+        overflowList.push({
+          artworkId: id,
+          field: 'カード全体',
+          cardLevel: true,
+          text: (card.textContent || '').replace(/\s+/g, ' ').trim()
+        });
       });
       return overflowList;
     }

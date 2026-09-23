@@ -83,13 +83,14 @@ const RECIPES = {
 
 // ── 1枚の大きさ (A4 縦の面数)。t = タイトル基準 pt、qr = QR 一辺 mm ──
 // カード寸法は caption.html の印刷 CSS (余白 8mm・間隔 3mm) から: 幅 (194-3(c-1))/c、高さ (281-3(r-1))/r
+// QR はユーザー評価 (2026-09-23「全体に大きめ」) で 14〜22mm → 12〜18mm に縮小。短縮 QR は 12mm で実機読み取り確認済み
 const FORMATS = {
-  L:      { cols: 2, rows: 3, t: 20, qr: 22, label: '大 (約96×92mm・A4に6枚)' },
-  A7:     { cols: 2, rows: 4, t: 18, qr: 20, label: 'A7相当 (約96×68mm・8枚)' },
-  card:   { cols: 2, rows: 5, t: 15, qr: 18, label: '名刺相当 (約96×54mm・10枚)' },
-  small:  { cols: 3, rows: 5, t: 14, qr: 16, label: '小 (約63×54mm・15枚)' },
-  xsmall: { cols: 3, rows: 6, t: 12, qr: 14, label: '極小 (約63×44mm・18枚)' },
-  tall:   { cols: 4, rows: 4, t: 14, qr: 16, label: '縦長 (約46×68mm・16枚)' },
+  L:      { cols: 2, rows: 3, t: 20, qr: 18, label: '大 (約96×92mm・A4に6枚)' },
+  A7:     { cols: 2, rows: 4, t: 18, qr: 16, label: 'A7相当 (約96×68mm・8枚)' },
+  card:   { cols: 2, rows: 5, t: 15, qr: 15, label: '名刺相当 (約96×54mm・10枚)' },
+  small:  { cols: 3, rows: 5, t: 14, qr: 14, label: '小 (約63×54mm・15枚)' },
+  xsmall: { cols: 3, rows: 6, t: 12, qr: 12, label: '極小 (約63×44mm・18枚)' },
+  tall:   { cols: 4, rows: 4, t: 14, qr: 13, label: '縦長 (約46×68mm・16枚)' },
 };
 const FONTS = { gothic: 'sans-serif', mincho: "'Yu Mincho', 'Hiragino Mincho ProN', serif" };
 const SCALES = { std: 1, large: 1.15 };
