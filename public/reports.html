@@ -229,6 +229,12 @@
       <p>Firestore コレクション (展覧会 / 作品 / 問い合わせ) の中身をそのまま表で確認。サポート時の状況確認用。運営者専用・閲覧のみ。</p>
       <a id="linkDataViewer" href="#" class="hub-button">→ 開く</a>
     </div>
+
+    <div class="hub-card" id="cardLedger" style="display:none;">
+      <h2>📒 展覧会台帳 (運営者)</h2>
+      <p>全展覧会の一覧 (主催者・会場・練習/本番・作品数・未解決の問い合わせ など)。スプレッドシートの台帳の代わり。並べ替え・検索・CSV 書き出し。運営者専用・閲覧のみ。</p>
+      <a href="admin/ledger.html" class="hub-button">→ 開く</a>
+    </div>
   </div>
 
   <script>
@@ -325,6 +331,8 @@
           var dvLink = document.getElementById('linkDataViewer');
           if (dvCard) dvCard.style.display = '';
           if (dvLink && currentEx) dvLink.href = 'admin/data-viewer.html?ex=' + currentEx;
+          var ledgerCard = document.getElementById('cardLedger');
+          if (ledgerCard) ledgerCard.style.display = '';
         }
         return;
       }

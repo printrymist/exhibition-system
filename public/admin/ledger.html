@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>展覧会台帳 (運営者) - Qriine</title>
+  <!-- マスター・スプレッドシートの exhibitions シートに代わる、運営者用の一覧 (2026-09-24〜)。
+       Firestore (exhibitions / artworks / inquiries) から組み立てて表示するだけで、何も書き込まない。 -->
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 1400px; margin: 0 auto; color: #1a2a4a; }
+    h1 { font-size: 1.3em; margin: 6px 0; }
+    .note { font-size: 0.82em; color: #888; margin: 6px 0 12px; }
+    select, button, input { padding: 8px 12px; font-size: 14px; border-radius: 6px; border: 1px solid #ddd; font-family: inherit; }
+    button { background: #1a73e8; color: #fff; border-color: #1a73e8; cursor: pointer; }
+    button.sub { background: #fff; color: #1a73e8; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .auth-card { padding: 20px; background: #f7faff; border: 1px solid #c5d9f7; border-radius: 10px; margin: 20px 0; }
+    .auth-row { display: flex; gap: 10px; align-items: center; }
+    .auth-row input { flex: 1; }
+    .auth-status { padding: 8px 14px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 0.88em; margin-bottom: 10px; }
+    .auth-msg { font-size: 0.85em; margin-top: 6px; min-height: 1.2em; }
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 12px; }
+    .tabs button { background: none; color: #666; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; border-radius: 0; }
+    .tabs button.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: bold; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+    .count { color: #666; font-size: 0.88em; }
+    .empty { padding: 24px; text-align: center; color: #999; background: #f5f5f5; border-radius: 8px; }
+    .table-wrap { overflow: auto; max-height: 72vh; border: 1px solid #e0e0e0; border-radius: 8px; }
+    table { border-collapse: collapse; font-size: 0.84em; white-space: nowrap; width: 100%; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background: #f7faff; color: #1a4f9c; position: sticky; top: 0; z-index: 2; cursor: pointer; user-select: none; }
+    th .arrow { color: #aaa; font-size: 0.85em; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody tr:hover { background: #f7faff; }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.85em; }
+    .badge.prod { background: #e6f4ea; color: #137333; }
+    .badge.sandbox { background: #fff3e0; color: #b06000; }
+    .warn { color: #d93025; font-weight: bold; }
+    .links a { color: #1a73e8; margin-right: 8px; font-size: 0.92em; }
+    .name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <a href="../reports.html" style="display:inline-block; margin-bottom:6px; padding:6px 14px; background:#fff; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:13px; text-decoration:none;">&larr; 出力・レポートへ</a>
+  <h1>📒 展覧会台帳 (運営者)</h1>
+  <p class="note">全展覧会の一覧です (運営者専用・閲覧のみ)。以前スプレッドシートで見ていた台帳の代わりに、Firestore のデータから組み立てています。見出しをクリックすると並べ替えできます。</p>
+
+  <div id="authCard" class="auth-card" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px;">運営者ログイン</div>
+    <div class="auth-row">
+      <input type="email" id="operatorEmailInput" placeholder="メールアドレス" autocomplete="email">
+      <button id="btnSendLink" onclick="requestOperatorSignInLink()">リンクを送信</button>
+    </div>
+    <div id="emailLinkMsg" class="auth-msg"></div>
+  </div>
+  <div id="denied" class="empty" style="display:none; color:#d93025;">この画面は運営者専用です。</div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="operatorAuthStatus" class="auth-status" style="display:none;"></div>
+    <div class="tabs">
+      <button type="button" id="tabEx" class="active" onclick="showTab('ex')">展覧会</button>
+      <button type="button" id="tabApp" onclick="showTab('app')">申請</button>
+    </div>
+
+    <div id="paneEx">
+      <div class="toolbar">
+        <input id="q" placeholder="展覧会名 / コード / 主催者 / メール / 会場で検索" style="min-width:300px;" oninput="render()">
+        <select id="modeFilter" onchange="render()">
+          <option value="all">本番・練習すべて</option>
+          <option value="prod">本番だけ</option>
+          <option value="sandbox">練習だけ</option>
+        </select>
+        <button type="button" id="btnReload" onclick="loadAll()">読み直す</button>
+        <button type="button" class="sub" onclick="downloadCsv()">CSV を書き出す</button>
+        <span class="count" id="rowCount"></span>
+      </div>
+      <div id="result"><div class="empty">読み込み中…</div></div>
+    </div>
+
+    <div id="paneApp" style="display:none;">
+      <div class="empty">申請の一覧は、展覧会作成の仕組みを Firebase に移したあと (第2段) から表示されます。<br>
+        それまでの申請はスプレッドシートの applications シートに残っています。</div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
+      authDomain: "rohei-printer-system.firebaseapp.com",
+      projectId: "rohei-printer-system",
+      storageBucket: "rohei-printer-system.firebasestorage.app",
+      messagingSenderId: "762429995901",
+      appId: "1:762429995901:web:f3b330d26897dc3214ea14"
+    });
+    var db = firebase.firestore();
+    var rows = [];                       // 表示用に組み立てた行
+    var sortKey = 'created', sortDir = -1;
+
+    // 列: key / 見出し / 値の取り出し / 数値か
+    var COLS = [
+      { key: 'name', label: '展覧会名' },
+      { key: 'code', label: 'コード' },
+      { key: 'organizer', label: '主催者' },
+      { key: 'email', label: 'メール' },
+      { key: 'venue', label: '会場' },
+      { key: 'start', label: '開始日' },
+      { key: 'mode', label: '練習/本番' },
+      { key: 'expire', label: '削除予定日' },
+      { key: 'entered', label: '作品 (入力済み)', num: true },
+      { key: 'slots', label: '作品 (枠)', num: true },
+      { key: 'openInq', label: '未解決の問い合わせ', num: true },
+      { key: 'created', label: '作成日' },
+    ];
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    // 日付っぽい値 (ISO / 'yyyy/MM/dd, HH:mm:ss' / Timestamp) を 'yyyy-MM-dd' にそろえる。並べ替え用の数値も返す
+    function toDay(v) {
+      if (v == null || v === '') return { text: '', t: 0 };
+      if (typeof v === 'object' && typeof v.toDate === 'function') v = v.toDate();
+      var t = (v instanceof Date) ? v.getTime() : Date.parse(String(v).replace(/,/, '').replace(/\//g, '-'));
+      if (isNaN(t)) return { text: String(v), t: 0 };
+      var d = new Date(t + 9 * 3600 * 1000);  // JST の日付
+      var p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return { text: d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()), t: t };
+    }
+
+    async function loadAll() {
+      var btn = document.getElementById('btnReload');
+      btn.disabled = true;
+      document.getElementById('result').innerHTML = '<div class="empty">読み込み中…</div>';
+      try {
+        // 運営者は全件を読める (Rules: isOperator)。件数が大きくなったら集計値のキャッシュを検討
+        var res = await Promise.all([
+          db.collection('exhibitions').limit(2000).get(),
+          db.collection('artworks').get(),
+          db.collection('inquiries').get(),
+        ]);
+        var counts = {};
+        res[1].docs.forEach(function (d) {
+          var a = d.data(), ex = a.exCode || '';
+          if (!ex || a.seed === true) return;
+          var c = counts[ex] || (counts[ex] = { entered: 0, slots: 0 });
+          c.slots++;
+          if (String(a.status) === '1') c.entered++;
+        });
+        var inq = {};
+        res[2].docs.forEach(function (d) {
+          var q = d.data(), ex = q.ex_code || '';
+          if (ex && (q.status || 'open') !== 'resolved') inq[ex] = (inq[ex] || 0) + 1;
+        });
+        rows = res[0].docs.map(function (d) {
+          var e = d.data(), code = d.id, c = counts[code] || { entered: 0, slots: 0 };
+          var sandbox = e.is_sandbox === true || String(e.is_sandbox).toUpperCase() === 'TRUE';
+          var start = toDay(e.start_date), expire = sandbox ? toDay(e.expire_at) : { text: '', t: 0 };
+          var created = toDay(e.createdAt || e.created_at);
+          return {
+            name: e.ex_name || '', code: code, organizer: e.organizer || '', email: e.email || '', venue: e.venue || '',
+            start: start.text, startT: start.t, mode: sandbox ? '練習' : '本番', expire: expire.text, expireT: expire.t,
+            entered: c.entered, slots: c.slots, openInq: inq[code] || 0, created: created.text, createdT: created.t,
+          };
+        });
+        render();
+      } catch (e) {
+        console.error(e);
+        document.getElementById('result').innerHTML = '<div class="empty" style="color:#d93025;">読み込みに失敗しました: ' + esc(e.message || e) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function filtered() {
+      var q = (document.getElementById('q').value || '').trim().toLowerCase();
+      var mode = document.getElementById('modeFilter').value;
+      return rows.filter(function (r) {
+        if (mode === 'prod' && r.mode !== '本番') return false;
+        if (mode === 'sandbox' && r.mode !== '練習') return false;
+        if (!q) return true;
+        return [r.name, r.code, r.organizer, r.email, r.venue].some(function (v) { return String(v).toLowerCase().indexOf(q) !== -1; });
+      });
+    }
+
+    function sortVal(r, key) {
+      if (key === 'start') return r.startT;
+      if (key === 'expire') return r.expireT;
+      if (key === 'created') return r.createdT;
+      return r[key];
+    }
+
+    function render() {
+      var list = filtered().slice().sort(function (a, b) {
+        var x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+        if (typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir;
+        return String(x).localeCompare(String(y), 'ja') * sortDir;
+      });
+      document.getElementById('rowCount').textContent = list.length + ' 件' + (list.length !== rows.length ? ' (全 ' + rows.length + ' 件中)' : '');
+      if (!list.length) { document.getElementById('result').innerHTML = '<div class="empty">該当する展覧会はありません。</div>'; return; }
+      var html = '<div class="table-wrap"><table><thead><tr>';
+      COLS.forEach(function (c) {
+        var arrow = c.key === sortKey ? (sortDir > 0 ? '▲' : '▼') : '';
+        html += '<th onclick="sortBy(\'' + c.key + '\')">' + esc(c.label) + ' <span class="arrow">' + arrow + '</span></th>';
+      });
+      html += '<th>開く</th></tr></thead><tbody>';
+      list.forEach(function (r) {
+        var q = encodeURIComponent(r.code);
+        html += '<tr>'
+          + '<td class="name" title="' + esc(r.name) + '">' + esc(r.name) + '</td>'
+          + '<td><code>' + esc(r.code) + '</code></td>'
+          + '<td>' + esc(r.organizer) + '</td>'
+          + '<td>' + esc(r.email) + '</td>'
+          + '<td>' + esc(r.venue) + '</td>'
+          + '<td>' + esc(r.start) + '</td>'
+          + '<td><span class="badge ' + (r.mode === '練習' ? 'sandbox' : 'prod') + '">' + r.mode + '</span></td>'
+          + '<td>' + esc(r.expire) + '</td>'
+          + '<td class="num">' + r.entered + '</td>'
+          + '<td class="num">' + r.slots + '</td>'
+          + '<td class="num">' + (r.openInq ? '<span class="warn">' + r.openInq + '</span>' : '0') + '</td>'
+          + '<td>' + esc(r.created) + '</td>'
+          + '<td class="links"><a href="../register.html?ex=' + q + '" target="_blank" rel="noopener">作品登録</a>'
+          + '<a href="../caption.html?ex=' + q + '" target="_blank" rel="noopener">キャプション</a>'
+          + '<a href="data-viewer.html?ex=' + q + '" target="_blank" rel="noopener">データ</a></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function sortBy(key) {
+      if (sortKey === key) sortDir = -sortDir;
+      else { sortKey = key; sortDir = (key === 'name' || key === 'code' || key === 'organizer' || key === 'email' || key === 'venue' || key === 'mode') ? 1 : -1; }
+      render();
+    }
+
+    // 表示中 (検索・絞り込み・並べ替え後) の行を CSV に。Excel で文字化けしないよう BOM 付き UTF-8
+    function downloadCsv() {
+      var list = filtered().slice().sort(function (a, b) {
+        var x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+        if (typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir;
+        return String(x).localeCompare(String(y), 'ja') * sortDir;
+      });
+      var cell = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      var lines = [COLS.map(function (c) { return cell(c.label); }).join(',')];
+      list.forEach(function (r) { lines.push(COLS.map(function (c) { return cell(r[c.key]); }).join(',')); });
+      var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      var d = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      a.href = URL.createObjectURL(blob);
+      a.download = 'qriine-展覧会台帳-' + d + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+
+    function showTab(t) {
+      document.getElementById('tabEx').classList.toggle('active', t === 'ex');
+      document.getElementById('tabApp').classList.toggle('active', t === 'app');
+      document.getElementById('paneEx').style.display = t === 'ex' ? '' : 'none';
+      document.getElementById('paneApp').style.display = t === 'app' ? '' : 'none';
+    }
+  </script>
+  <script src="../js/operator-auth.js"></script>
+  <script>
+    (function () {
+      function setMsg(text, color) {
+        var el = document.getElementById('emailLinkMsg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = color || '#888';
+      }
+      window.operatorAuth.completeSignInIfNeeded()
+        .then(function (user) { if (user) setMsg('ログインしました: ' + user.email, '#1a73e8'); })
+        .catch(function (err) { setMsg('ログインに失敗しました: ' + (err && err.message ? err.message : err), '#d93025'); });
+      var loaded = false;
+      window.operatorAuth.onAuthChange(function (user) {
+        var isOp = window.operatorAuth.isOperatorUser(user);
+        document.getElementById('authCard').style.display = user ? 'none' : 'block';
+        document.getElementById('denied').style.display = (user && !isOp) ? 'block' : 'none';
+        document.getElementById('mainArea').style.display = (user && isOp) ? 'block' : 'none';
+        if (user && isOp) {
+          var st = document.getElementById('operatorAuthStatus');
+          st.innerHTML = esc(user.email) + ' でログイン中 <a href="#" onclick="window.operatorAuth.signOut();return false;" style="color:#1a73e8;margin-left:8px;">ログアウト</a>';
+          st.style.display = 'block';
+          if (!loaded) { loaded = true; loadAll(); }
+        }
+      });
+      window.requestOperatorSignInLink = function () {
+        var input = document.getElementById('operatorEmailInput');
+        var btn = document.getElementById('btnSendLink');
+        var email = (input.value || '').trim();
+        if (!email) { setMsg('メールアドレスを入力してください。', '#d93025'); return; }
+        btn.disabled = true;
+        setMsg('送信中...', '#888');
+        window.operatorAuth.sendSignInLink(email)
+          .then(function () { btn.disabled = false; setMsg('ログイン用リンクを送信しました: ' + email, '#1a73e8'); })
+          .catch(function (err) { btn.disabled = false; setMsg('送信に失敗しました: ' + (err && err.message ? err.message : err), '#d93025'); });
+      };
+    })();
+  </script>
+</body>
+</html>
