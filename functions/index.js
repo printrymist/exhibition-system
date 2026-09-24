@@ -82,6 +82,14 @@ const RESEND_FROM = "\"Qriine\" <noreply@qriine.com>";
 // 追加依存なし)。業者を変える場合はこの関数だけ差し替える。
 // 呼び出し側は RESEND_API_KEY を onCall の secrets に含めること。
 async function sendMailViaResend({ to, subject, text, html, replyTo }) {
+  // Firebase エミュレータでのテスト時は本当には送らず、エミュレータ内の Firestore
+  // (_emulator_mail) に記録する (本番の FUNCTIONS_EMULATOR は未設定なので通らない)
+  if (process.env.FUNCTIONS_EMULATOR === "true") {
+    await admin.firestore().collection("_emulator_mail").add({
+      to: Array.isArray(to) ? to[0] : to, subject, text: text || "", at: new Date().toISOString(),
+    });
+    return { id: "emulator" };
+  }
   const apiKey = RESEND_API_KEY.value();
   if (!apiKey) {
     throw new Error("RESEND_API_KEY が未設定です");
