@@ -2,7 +2,11 @@
   "_comment": "functions/scripts/e2e-setup-emulator.js 用のエミュレータ設定 (本番の firebase.json は変えない)。firebase emulators:exec --config firebase.e2e.json ... で使う",
   "hosting": {
     "public": "public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
   },
   "firestore": {
     "rules": "firestore.rules"
@@ -11,12 +15,37 @@
     "source": "functions"
   },
   "emulators": {
-    "auth": { "host": "127.0.0.1", "port": 19099 },
-    "firestore": { "host": "127.0.0.1", "port": 18080 },
-    "functions": { "host": "127.0.0.1", "port": 15001 },
-    "hosting": { "host": "127.0.0.1", "port": 15000 },
-    "ui": { "enabled": false },
-    "logging": { "port": 14500 },
-    "hub": { "port": 14400 }
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 19099
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 18080
+    },
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 15001
+    },
+    "hosting": {
+      "host": "127.0.0.1",
+      "port": 15000
+    },
+    "ui": {
+      "enabled": false
+    },
+    "logging": {
+      "port": 14500
+    },
+    "hub": {
+      "port": 14400
+    },
+    "storage": {
+      "host": "127.0.0.1",
+      "port": 19199
+    }
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

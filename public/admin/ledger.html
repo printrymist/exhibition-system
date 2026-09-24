@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>展覧会台帳 (運営者) - Qriine</title>
   <!-- マスター・スプレッドシートの exhibitions シートに代わる、運営者用の一覧 (2026-09-24〜)。
-       Firestore (exhibitions / artworks / inquiries) から組み立てて表示するだけで、何も書き込まない。 -->
+       Firestore (exhibitions / artworks / inquiries) から組み立てて表示する。
+       書き込むのは練習モードの展覧会の「削除日を変更」(exhibitions を運営者として直接更新、監査トリガーが記録) と
+       「今すぐ削除」(運営者専用 Cloud Function purgeExhibition) だけ。 -->
   <style>
     body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 1400px; margin: 0 auto; color: #1a2a4a; }
     h1 { font-size: 1.3em; margin: 6px 0; }
@@ -38,12 +40,20 @@
     .warn { color: #d93025; font-weight: bold; }
     .links a { color: #1a73e8; margin-right: 8px; font-size: 0.92em; }
     .name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .ops button { padding: 3px 9px; font-size: 0.92em; margin-right: 4px; }
+    .ops button.danger { background: #fff; color: #d93025; border-color: #d93025; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,.25); font-size: 0.92em; line-height: 1.6; }
+    .modal h3 { margin: 0 0 10px; font-size: 1.05em; }
+    .modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .modal .hint { color: #666; font-size: 0.9em; margin-top: 8px; }
+    .modal .caution { color: #b06000; font-size: 0.9em; margin-top: 6px; }
   </style>
 </head>
 <body>
   <a href="../reports.html" style="display:inline-block; margin-bottom:6px; padding:6px 14px; background:#fff; color:#1a73e8; border:1px solid #1a73e8; border-radius:8px; font-size:13px; text-decoration:none;">&larr; 出力・レポートへ</a>
   <h1>📒 展覧会台帳 (運営者)</h1>
-  <p class="note">全展覧会の一覧です (運営者専用・閲覧のみ)。以前スプレッドシートで見ていた台帳の代わりに、Firestore のデータから組み立てています。見出しをクリックすると並べ替えできます。</p>
+  <p class="note">全展覧会の一覧です (運営者専用)。以前スプレッドシートで見ていた台帳の代わりに、Firestore のデータから組み立てています。見出しをクリックすると並べ替えできます。練習モードの展覧会は、右端のボタンで削除日の変更・今すぐ削除ができます。</p>
 
   <div id="authCard" class="auth-card" style="display:none;">
     <div style="font-weight:bold; margin-bottom:10px;">運営者ログイン</div>
@@ -89,6 +99,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+  <script src="../js/confirm-modal.js"></script>
   <script>
     firebase.initializeApp({
       apiKey: "AIzaSyBdwIxKuT6MYJalWUIEgMZVanvrLEMKcRg",
@@ -164,6 +176,7 @@
           var start = toDay(e.start_date), expire = sandbox ? toDay(e.expire_at) : { text: '', t: 0 };
           var created = toDay(e.createdAt || e.created_at);
           return {
+            sandbox: sandbox, expireRaw: e.expire_at || '',
             name: e.ex_name || '', code: code, organizer: e.organizer || '', email: e.email || '', venue: e.venue || '',
             start: start.text, startT: start.t, mode: sandbox ? '練習' : '本番', expire: expire.text, expireT: expire.t,
             entered: c.entered, slots: c.slots, openInq: inq[code] || 0, created: created.text, createdT: created.t,
@@ -209,7 +222,7 @@
         var arrow = c.key === sortKey ? (sortDir > 0 ? '▲' : '▼') : '';
         html += '<th onclick="sortBy(\'' + c.key + '\')">' + esc(c.label) + ' <span class="arrow">' + arrow + '</span></th>';
       });
-      html += '<th>開く</th></tr></thead><tbody>';
+      html += '<th>開く</th><th>練習モードの操作</th></tr></thead><tbody>';
       list.forEach(function (r) {
         var q = encodeURIComponent(r.code);
         html += '<tr>'
@@ -228,6 +241,10 @@
           + '<td class="links"><a href="../register.html?ex=' + q + '" target="_blank" rel="noopener">作品登録</a>'
           + '<a href="../caption.html?ex=' + q + '" target="_blank" rel="noopener">キャプション</a>'
           + '<a href="data-viewer.html?ex=' + q + '" target="_blank" rel="noopener">データ</a></td>'
+          + '<td class="ops">' + (r.sandbox
+            ? '<button type="button" class="sub" onclick="openExpireDialog(\'' + esc(r.code) + '\')">削除日を変更</button>'
+              + '<button type="button" class="danger" onclick="purgeNow(\'' + esc(r.code) + '\')">今すぐ削除</button>'
+            : '') + '</td>'
           + '</tr>';
       });
       html += '</tbody></table></div>';
@@ -258,6 +275,99 @@
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     }
+
+    // ── 練習モードの操作 ──
+    // 削除は Cloud Function scheduledSandboxCleanup が毎朝 5:00 (JST) に expire_at を過ぎたものを消す。
+    // 「明日削除」メールは、期限まで 24 時間を切った朝の実行で 1 回だけ送る (送った印 = sandbox_warned_at)。
+    // 削除日は「その日の 0:00 (JST)」として保存 → その日の朝 5:00 に削除、前日の朝 5:00 にメール。
+    function jstYmd(t) { return new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10); }
+    function ymdAddDays(ymd, n) { return jstYmd(Date.parse(ymd + 'T12:00:00+09:00') + n * 86400000); }
+    function findRow(code) { return rows.find(function (r) { return r.code === code; }); }
+
+    function expireHint(ymd) {
+      if (!ymd) return '';
+      var warnAt = Date.parse(ymdAddDays(ymd, -1) + 'T05:00:00+09:00');
+      var msg = ymd + ' の朝 5:00 ごろに削除されます。';
+      if (warnAt > Date.now()) {
+        msg += '前日 (' + ymdAddDays(ymd, -1) + ') の朝に「明日削除されます」のメールが主催者に届きます。';
+        return '<div class="hint">' + esc(msg) + '</div>';
+      }
+      return '<div class="hint">' + esc(msg) + '</div>'
+        + '<div class="caution">前日の朝のメール送信はもう過ぎているため、「明日削除されます」のメールは届きません (削除後の「削除しました」メールは届きます)。</div>';
+    }
+
+    window.openExpireDialog = function (code) {
+      var r = findRow(code);
+      if (!r || !r.sandbox) return;
+      var min = ymdAddDays(jstYmd(Date.now()), 1);
+      var cur = r.expireRaw ? toDay(r.expireRaw).text : '';
+      var init = (cur && cur >= min) ? cur : min;
+      var bg = document.createElement('div');
+      bg.className = 'modal-bg';
+      bg.innerHTML = '<div class="modal"><h3>削除日を変更</h3>'
+        + '<div>' + esc(r.name) + ' (<code>' + esc(r.code) + '</code>)</div>'
+        + '<div style="margin-top:6px;">今の削除予定日: <b>' + esc(cur || '未設定') + '</b></div>'
+        + '<div style="margin-top:12px;">新しい削除日: <input type="date" id="expireInput" min="' + min + '" value="' + init + '"></div>'
+        + '<div id="expireHint">' + expireHint(init) + '</div>'
+        + '<div class="hint">今すぐ消したいときは「今すぐ削除」を使ってください。</div>'
+        + '<div class="row"><button type="button" class="sub" id="expireCancel">キャンセル</button><button type="button" id="expireSave">変更する</button></div>'
+        + '</div>';
+      document.body.appendChild(bg);
+      var input = bg.querySelector('#expireInput');
+      input.addEventListener('input', function () { bg.querySelector('#expireHint').innerHTML = expireHint(input.value); });
+      bg.querySelector('#expireCancel').onclick = function () { bg.remove(); };
+      bg.querySelector('#expireSave').onclick = async function () {
+        var ymd = input.value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd) || ymd < min) {
+          await window.showAlertModal('削除日は明日以降の日付を選んでください。');
+          return;
+        }
+        var btn = this;
+        btn.disabled = true;
+        try {
+          var ref = db.collection('exhibitions').doc(code);
+          var snap = await ref.get();
+          var e = snap.exists ? snap.data() : null;
+          if (!e || !(e.is_sandbox === true || String(e.is_sandbox).toUpperCase() === 'TRUE')) {
+            throw new Error('この展覧会は練習モードではなくなっています (本番に切り替え済みか、削除済み)。');
+          }
+          await ref.update({
+            expire_at: new Date(Date.parse(ymd + 'T00:00:00+09:00')).toISOString(),
+            // 日付を変えたら「明日削除」メールを新しい日付に合わせて送り直せるように、送った印を消す
+            sandbox_warned_at: firebase.firestore.FieldValue.delete(),
+            updatedAt: new Date().toISOString(),
+          });
+          bg.remove();
+          await loadAll();
+        } catch (err) {
+          console.error(err);
+          btn.disabled = false;
+          await window.showAlertModal('変更できませんでした: ' + (err && err.message ? err.message : err));
+        }
+      };
+    };
+
+    window.purgeNow = async function (code) {
+      var r = findRow(code);
+      if (!r || !r.sandbox) return;
+      var ok = await window.showConfirmModal(
+        r.name + ' (' + r.code + ') を今すぐ削除します。\n\n'
+        + '作品 ' + r.slots + ' 件 (入力済み ' + r.entered + ' 件) と、いいね・感想・作品画像がすべて消えます。元には戻せません。\n'
+        + '主催者へのメールは送られません。',
+        { okLabel: '削除する' });
+      if (!ok) return;
+      try {
+        var fn = firebase.app().functions('asia-northeast1').httpsCallable('purgeExhibition');
+        var res = await fn({ exCode: code });
+        var st = res.data || {};
+        await window.showAlertModal(r.name + ' (' + r.code + ') を削除しました。\n'
+          + '作品 ' + (st.artworks || 0) + ' 件・いいね ' + (st.likes || 0) + ' 件・画像 ' + ((st.artworkImages || 0) + (st.galleryImages || 0)) + ' 枚');
+        await loadAll();
+      } catch (err) {
+        console.error(err);
+        await window.showAlertModal('削除できませんでした: ' + (err && err.message ? err.message : err));
+      }
+    };
 
     // 申請の一覧 (applications、doc id = 確認メールの token)。token は表示しない
     var appsLoaded = false;
