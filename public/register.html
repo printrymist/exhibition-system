@@ -1082,6 +1082,18 @@
           <div id="commentWindowMsg" style="margin-top:6px; font-size:0.82em; min-height:18px;"></div>
         </div>
 
+        <div data-regtab="manage" style="margin-top:24px; padding-top:20px; border-top:1px solid #eee;">
+          <p style="color:#888; font-size:0.85em; margin:0 0 6px 0;">作家の提出のお知らせ (メール)</p>
+          <p style="color:#888; font-size:0.78em; margin:0 0 12px 0;">作家が作品を提出したとき・提出した後に内容を変えたときに、主催者のメールアドレスへまとめて知らせます。作家ごとに 1 行にまとめ、何もなければ送りません。</p>
+          <select id="submitNotifyMode" onchange="saveSubmitNotifyMode()"
+            style="padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+            <option value="daily">毎朝 7 時にまとめて知らせる</option>
+            <option value="hourly">1 時間ごとにまとめて知らせる</option>
+            <option value="off">知らせない</option>
+          </select>
+          <div id="submitNotifyMsg" style="margin-top:6px; font-size:0.82em; min-height:18px;"></div>
+        </div>
+
         <div id="graduateSection" style="margin-top:24px; padding:16px; border:1px solid #ffd54f; background:#fff8e1; border-radius:8px; display:none;">
           <p style="color:#7a5500; font-size:0.95em; font-weight:bold; margin:0 0 6px 0;">🎓 練習モードを終了して本番運用に切替</p>
           <p style="color:#666; font-size:0.85em; margin:0 0 12px 0; line-height:1.6;">
@@ -1497,6 +1509,13 @@
       buildInputForm();
       loadArtistList();
       loadCommentWindow();
+      loadSubmitNotifyMode();
+      // メールのリンク (…&tab=artworks / &tab=manage) から開いたときは、そのタブを最初に開く (1 回だけ)
+      if (!window._initialTabApplied) {
+        window._initialTabApplied = true;
+        const t = new URLSearchParams(location.search).get('tab');
+        if (['fields', 'invite', 'artworks', 'manage'].indexOf(t) !== -1) switchTab(t);
+      }
     }
 
     // ── 作家一覧ロード ──
@@ -1735,6 +1754,26 @@
         .then(() => { msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。'; })
         .catch(err => { msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '処理'); })
         .finally(() => { document.getElementById('btnSaveCommentWindow').disabled = false; });
+    }
+    // 作家の提出のお知らせの頻度 (exhibitions.submit_notify、既定 daily)。送るのは Cloud Function scheduledSubmitDigest
+    function loadSubmitNotifyMode() {
+      if (!currentEx) return;
+      fsDb.collection('exhibitions').doc(currentEx).get()
+        .then(snap => {
+          const v = snap.exists ? (snap.data() || {}).submit_notify : '';
+          document.getElementById('submitNotifyMode').value = ['daily', 'hourly', 'off'].indexOf(v) !== -1 ? v : 'daily';
+        })
+        .catch(err => console.warn('loadSubmitNotifyMode failed:', err));
+    }
+    function saveSubmitNotifyMode() {
+      const sel = document.getElementById('submitNotifyMode');
+      const msg = document.getElementById('submitNotifyMsg');
+      msg.style.color = '#888'; msg.innerText = '保存中...';
+      sel.disabled = true;
+      fsDb.collection('exhibitions').doc(currentEx).set({ submit_notify: sel.value, updatedAt: new Date().toISOString() }, { merge: true })
+        .then(() => { msg.style.color = '#1a73e8'; msg.innerText = '✅ 保存しました。'; })
+        .catch(err => { msg.style.color = '#d93025'; msg.innerText = friendlyError(err, '処理'); })
+        .finally(() => { sel.disabled = false; });
     }
     function clearCommentWindow() {
       document.getElementById('commentsStartAt').value = '';

@@ -2152,6 +2152,20 @@ exports.scheduledSandboxCleanup = onSchedule(
   },
 );
 
+// 作家の提出のお知らせ (主催者向け、2026-09-24)。毎時動き、展覧会ごとの設定に合わせて
+// 毎朝 7:00 (既定) / 毎時 にまとめて 1 通送る。本体は submit-digest.js (テストから直接呼べるように分けてある)。
+exports.scheduledSubmitDigest = onSchedule(
+  { schedule: "0 * * * *", timeZone: "Asia/Tokyo", secrets: [RESEND_API_KEY] },
+  async () => {
+    await require("./submit-digest").runSubmitDigest({
+      db: admin.firestore(),
+      sendMail: ({ to, subject, text }) => sendMailViaResend({ to, subject, text, replyTo: SETUP_REPLY_TO }),
+      now: new Date(),
+      logger,
+    });
+  },
+);
+
 exports.submitArtwork = onCall(
   { secrets: [ARTIST_TOKEN_SECRET] },
   async (request) => {

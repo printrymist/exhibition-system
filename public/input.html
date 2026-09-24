@@ -506,6 +506,7 @@
         <div class="section-title" id="listTitle">登録済みの作品</div>
         <button class="btn-add" onclick="showNewForm()">＋ 作品を追加</button>
       </div>
+      <div id="bulkSubmitArea"></div>
       <div id="artworkCards"></div>
     </div>
 
@@ -785,6 +786,89 @@
       document.getElementById('listCard').style.display = 'block';
       if (existingWorks.length === 0) { container.innerHTML = '<div class="empty-state">登録済みの作品はありません。</div>'; return; }
       existingWorks.forEach(art => container.appendChild(makeArtworkCard(art)));
+      renderBulkSubmit();
+    }
+
+    // 未提出 (または提出後に変更した) で、ロックされていない作品
+    function unsubmittedWorks() {
+      return (existingWorks || []).filter(a => a && !a.is_locked && (!a.submitted_at || a.changed_after_submit_at));
+    }
+    // 必須項目のうち空欄のもの (作家系の項目は作家名だけ見る。提出ボタンと同じ判定)
+    function missingRequiredLabels(art) {
+      const out = [];
+      (activeFields || []).forEach(f => {
+        if (!f || !f.required) return;
+        const def = FIELD_MAP[f.name];
+        if (ALL_ARTIST_FIELDS.indexOf(f.name) !== -1 && f.name !== 'artist') return;
+        const v = art[f.name];
+        if (v === undefined || v === null || String(v).trim() === '') out.push((def && def.label) ? def.label : f.name);
+      });
+      return out;
+    }
+    // 作品が多い作家向け: 未提出の作品を確認 1 回でまとめて提出する (2 点以上あるときだけ出す)
+    function renderBulkSubmit() {
+      const area = document.getElementById('bulkSubmitArea');
+      if (!area) return;
+      const n = unsubmittedWorks().length;
+      if (n < 2) { area.innerHTML = ''; return; }
+      area.innerHTML = '<div style="margin:0 0 12px; padding:10px 12px; background:#e8f5e9; border:1px solid #66bb6a; border-radius:6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:0.85em; color:#2e7d32; line-height:1.5;">'
+        + '<span style="flex:1; min-width:200px;">入力が終わった作品は、まとめて提出できます。提出した後も、主催者がロックするまでは直せます。</span>'
+        + '<button type="button" id="btnBulkSubmit" style="padding:6px 14px; background:#2e7d32; color:white; border:none; border-radius:5px; font-size:0.95em; font-weight:bold; cursor:pointer; white-space:nowrap;">✓ 未提出の ' + n + ' 点をまとめて提出</button>'
+        + '</div>';
+      document.getElementById('btnBulkSubmit').addEventListener('click', bulkSubmit);
+    }
+    async function bulkSubmit() {
+      const targets = unsubmittedWorks();
+      const ok = [], blocked = [];
+      targets.forEach(a => {
+        const miss = missingRequiredLabels(a);
+        (miss.length ? blocked : ok).push({ art: a, miss: miss });
+      });
+      const label = (a) => '「' + (a.title || a.title_en || a.artwork_id) + '」';
+      const blockedText = blocked.length
+        ? '\n\n次の作品は必須項目が空欄なので提出しません (空欄を埋めてから提出してください):\n'
+          + blocked.map(b => '  - ' + label(b.art) + ' … ' + b.miss.join('・')).join('\n')
+        : '';
+      if (!ok.length) {
+        await window.showAlertModal('提出できる作品がありません。' + blockedText);
+        return;
+      }
+      const go = await window.showConfirmModal(
+        ok.length + ' 点を提出します。\n' + ok.map(o => '  - ' + label(o.art)).join('\n')
+        + '\n\n提出した後も、主催者がロックするまでは直せます。' + blockedText,
+        { okLabel: ok.length + ' 点を提出する' });
+      if (!go) return;
+      if (!navigator.onLine) {
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+      const btn = document.getElementById('btnBulkSubmit');
+      if (btn) btn.disabled = true;
+      let done = 0;
+      const failed = [];
+      for (const o of ok) {
+        if (btn) btn.textContent = '提出中… (' + (done + failed.length + 1) + '/' + ok.length + ')';
+        try {
+          await window.fsSetArtwork(ex, o.art.artwork_id, { submit: true });
+          existingWorks = existingWorks.map(a => {
+            if (a.artwork_id !== o.art.artwork_id) return a;
+            const n = Object.assign({}, a, { submitted_at: new Date().toISOString() });
+            delete n.changed_after_submit_at;
+            return n;
+          });
+          refreshCard(o.art.artwork_id);
+          done++;
+        } catch (e) {
+          console.error('bulk submit failed:', o.art.artwork_id, e);
+          failed.push(label(o.art));
+        }
+      }
+      renderBulkSubmit();
+      if (failed.length) {
+        await window.showAlertModal(done + ' 点を提出しました。\n次の作品は提出できませんでした。通信環境を確認して、もう一度お試しください:\n' + failed.join('\n'));
+      } else {
+        showTopToast('✅ ' + done + ' 点を提出しました。主催者がロックするまでは、あとから直すこともできます。');
+      }
     }
 
     function makeArtworkCard(art) {
@@ -818,6 +902,7 @@
       if (st) st.innerHTML = cardStatusIcons(art);
       const area = document.getElementById('submitArea_' + artworkId);
       if (area) renderSubmitArea(area, art);
+      renderBulkSubmit();
     }
     function fmtJst(iso) {
       const t = Date.parse(iso || '');
