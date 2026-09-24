@@ -484,16 +484,24 @@
         <div style="font-size:56px; margin-bottom:12px;">🚫</div>
         <h2 style="color:#d93025; margin:0 0 8px 0;">認証エラー</h2>
         <p style="color:#666; font-size:0.9em;" id="confirmErrorMsg"></p>
+        <a href="/setup.html" style="display:inline-block; margin-top:10px; padding:10px 20px; background:#1a73e8; color:#fff; border-radius:8px; text-decoration:none; font-weight:bold;">申請画面へ</a>
+      </div>
+    </div>
+
+    <!-- この申請の展覧会はもう作成済み (確認メールのリンクをもう一度開いた等) -->
+    <div id="alreadyView" style="display:none;">
+      <div style="text-align:center; padding:20px 0;">
+        <div style="font-size:56px; margin-bottom:12px;">✅</div>
+        <h2 style="color:#1a73e8; margin:0 0 8px 0;">この展覧会は作成済みです</h2>
+        <p style="color:#666; font-size:0.9em;"><span id="alreadyExName"></span></p>
+        <a id="alreadyRegisterLink" href="/register.html" style="display:inline-block; margin-top:10px; padding:10px 20px; background:#1a73e8; color:#fff; border-radius:8px; text-decoration:none; font-weight:bold;">作品登録・設定へ</a>
       </div>
     </div>
 
     <!-- 入力フォーム -->
     <div id="formView" style="display:none;">
-      <!-- 展覧会コード (URL/QR用の内部識別子) は自動生成し、画面には出さない。
-           2026-09-20 ユーザー判断: 一般利用者には「何のことか分からない」項目で、
-           使う場面(手入力での再アクセス)もほぼ無いため入力自体を不要にした。
-           完了画面のリンクとして渡されるだけで、人が読んで覚える必要は無い。 -->
-      <input type="hidden" id="exCode">
+      <!-- 展覧会コード (URL/QR用の内部識別子) は画面に出さない (2026-09-20 ユーザー判断)。
+           2026-09-24〜 サーバー (createExhibition) が決めて、重複しないことも確かめる。 -->
 
       <label>展覧会名
         <input type="text" id="exName" value="<?= exName ?>" readonly style="background:#f0f0f0; color:#555;">
@@ -548,23 +556,19 @@
   </div>
 
   <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyZgi8PuS8aq7empliidJahNwYRjm_bWYi6cdLI0tugEH91Gtk7NAJxDKwzn7JPacnF/exec';
-
-    function gasCall(params) {
-      const body = new URLSearchParams(params);
-      return fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body
-      })
-        .then(r => {
-          if (!r.ok) throw new Error('HTTP error: ' + r.status);
-          return r.json();
-        })
-        .catch(err => {
-          console.error('gasCall error:', err.message);
-          return { success: false, error: err.message };
-        });
+    // 展覧会の作成は Cloud Function (申請 submitApplication → メール確認 confirmApplication →
+    // 作成 createExhibition) で行う。2026-09-24 に GAS (マスター・スプレッドシート) から移設。
+    // 以前は GAS が約1/3の確率で応答せず、「画面が固まって認証エラー」になることがあった。
+    // 失敗は HttpsError の日本語メッセージ (CF 側で用意) をそのまま画面に出す。
+    function callSetupFn(name, data) {
+      return firebase.app().functions('asia-northeast1').httpsCallable(name)(data)
+        .then(r => r.data || {});
+    }
+    function setupErrorText(err, fallback) {
+      // CF が返す日本語の理由はそのまま出す。通信エラー等の英語の例外は friendlyError で日本語に
+      const msg = err && err.message ? String(err.message) : '';
+      if (/[぀-ヿ一-鿿]/.test(msg)) return msg;
+      return friendlyError(err, fallback);
     }
 
     function getUrlParam(name) {
@@ -577,38 +581,34 @@
     document.addEventListener('DOMContentLoaded', () => {
       const token = getUrlParam('token');
       if (token) {
-        // トークンがあれば検証
-        gasCall({ action: 'confirmToken', token: token })
+        // 確認メールのリンクから来た → token を確かめる
+        callSetupFn('confirmApplication', { token: token })
           .then(res => {
-            if (!res.success) {
-              document.getElementById('confirmErrorMsg').innerText = res.error || 'リンクの確認に失敗しました。お手数ですが、もう一度お試しください。';
-              document.getElementById('confirmErrorView').style.display = 'block';
+            if (res.alreadySetup && res.exCode) {
+              // この申請の展覧会はもう作成済み (完了後にもう一度リンクを開いた等)
+              document.getElementById('alreadyExName').innerText = res.exName || '';
+              document.getElementById('alreadyRegisterLink').href = '/register.html?ex=' + encodeURIComponent(res.exCode);
+              document.getElementById('alreadyView').style.display = 'block';
               return;
             }
-            // 認証済み → セットアップフォームを表示
+            // 確認済み → セットアップフォームを表示
             document.getElementById('formView').style.display = 'block';
             document.getElementById('exName').value = res.exName || '';
             document.getElementById('email').value = res.email || '';
-            // Firebase 認証用メアド欄に申請メアドを自動入力
-            const authInput = document.getElementById('setupAuthEmailInput');
-            if (authInput && res.email) authInput.value = res.email;
-            // 認証済みメッセージを表示
             const msg = document.createElement('div');
             msg.style.cssText = 'background:#e6f4ea;border:1px solid #a8d5b5;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#2e7d32;font-size:0.88em;';
             msg.innerText = '✅ メールアドレスが確認されました。セットアップを開始してください。';
             document.getElementById('formView').insertBefore(msg, document.getElementById('formView').firstChild);
-            // tokenを保持
-            window._confirmedToken = res.token;
-            // GAS token でメール所有が確認済みなので Firebase Email Link は不要
-            // 認証カードを隠す (submit の有効化は展覧会コードの自動決定が終わってから)
+            window._confirmedToken = token;
+            // メールの確認リンクで本人確認済みなので、Firebase のメールリンク認証は不要
             const authCardEl = document.getElementById('firebaseAuthCard');
             if (authCardEl) authCardEl.style.display = 'none';
-            // 展覧会コードを裏側で自動決定 (画面には出さない、ユーザー操作不要)。
-            // Firestore の重複確認を含む非同期処理なので、終わるまで submit を押させない。
-            assignExCode(res.exName || '').then(() => {
-              const submitBtnEl = document.getElementById('btnSetupSubmit');
-              if (submitBtnEl) submitBtnEl.disabled = false;
-            });
+            document.getElementById('btnSetupSubmit').disabled = false;
+          })
+          .catch(err => {
+            // 見つからない token (切り替え前のスプレッドシート時代の申請を含む) は再申請の案内
+            document.getElementById('confirmErrorMsg').innerText = setupErrorText(err, 'リンクの確認');
+            document.getElementById('confirmErrorView').style.display = 'block';
           });
       } else {
         // 通常アクセス → 申請フォームを表示
@@ -625,7 +625,7 @@
       const startDate = document.getElementById('applyStartDate').value;
       const organizer = document.getElementById('applyOrganizer').value.trim();
       const email = document.getElementById('applyEmail').value.trim();
-      const sandbox = document.getElementById('applySandbox').checked ? '1' : '';
+      const sandbox = document.getElementById('applySandbox').checked;
 
       const errEl = document.getElementById('applyError');
       errEl.style.display = 'none';
@@ -640,92 +640,17 @@
       btn.disabled = true;
       btn.innerText = '送信中...';
 
-      gasCall({ action: 'submitApplication', exName, venue, startDate, organizer, email, sandbox })
-        .then(res => {
-          if (!res.success) {
-            errEl.innerText = res.error || 'セットアップに失敗しました。通信環境を確認して、もう一度お試しください。';
-            errEl.style.display = 'block';
-            btn.disabled = false;
-            btn.innerText = '申請する';
-            return;
-          }
+      callSetupFn('submitApplication', { exName, venue, startDate, organizer, email, sandbox })
+        .then(() => {
           document.getElementById('applyView').style.display = 'none';
           document.getElementById('appliedView').style.display = 'block';
+        })
+        .catch(err => {
+          errEl.innerText = setupErrorText(err, '申請');
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.innerText = '申請する';
         });
-    }
-
-    // =========================================================
-    // 展覧会コード — 自動決定 (画面には出さない)
-    // =========================================================
-    // 展覧会名から英数字を拾えるだけ拾う (英語名なら意味のあるコードになる)。
-    // 日本語だけの名前だと何も拾えないことが多いので、戻り値が空でも呼び出し側が
-    // ランダムで埋める前提。
-    function suggestExCode(exName) {
-      const tokens = exName
-        .replace(/[^\x00-\x7F]/g, '')
-        .replace(/[^A-Za-z0-9\s]/g, '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-      const yearToken = tokens.find(t => /^20\d{2}$/.test(t));
-      const yearSuffix = yearToken ? yearToken.slice(2) : '';
-      const nonYear = tokens.filter(t => !/^20\d{2}$/.test(t));
-      const allCaps = nonYear.filter(t => t.length >= 3 && t === t.toUpperCase() && /[A-Z]/.test(t));
-      let base = '';
-      if (allCaps.length > 0) {
-        base = allCaps[0].slice(0, 6);
-      } else {
-        const cap = nonYear.filter(t => t.length >= 2 && /^[A-Z]/.test(t));
-        if (cap.length > 0) {
-          cap.sort((a, b) => b.length - a.length);
-          base = cap[0].slice(0, 6).toUpperCase();
-        } else if (nonYear.length > 0) {
-          base = nonYear[0].slice(0, 6).toUpperCase();
-        }
-      }
-      if (!base) return '';
-      let code = (base + yearSuffix).slice(0, 10);
-      // 数字だけのコードは保存時に先頭ゼロが落ちる (0612→612) ため、
-      // 英字が 1 文字も無いときは EX を前置して数字のみを避ける。
-      if (!/[A-Za-z]/.test(code)) {
-        code = ('EX' + code).slice(0, 10);
-      }
-      return code;
-    }
-
-    // 紛らわしい 0/O/1/I を除いた英数字 (短縮QRコード等、他機能と同じ発想の文字種)。
-    const EXCODE_RANDOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    function randomExCodeChars(n) {
-      let s = '';
-      for (let i = 0; i < n; i++) {
-        s += EXCODE_RANDOM_ALPHABET[Math.floor(Math.random() * EXCODE_RANDOM_ALPHABET.length)];
-      }
-      return s;
-    }
-
-    // 展覧会コードを裏側で自動決定して #exCode (hidden) にセットする。
-    // 名前から拾える文字があれば活用しつつ、必ずランダム4文字を付けて重複を避ける
-    // (ユーザーがコードを見ないので、名前由来の見た目より衝突しないことを優先)。
-    // 万一 Firestore 上で衝突していたら作り直す (最大8回、実際にはまず起きない)。
-    async function assignExCode(exName) {
-      const base = suggestExCode(exName || '') || 'EX';
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const candidate = (base + randomExCodeChars(4)).slice(0, 10).toUpperCase();
-        try {
-          const snap = await window.fsDb.collection('exhibitions').doc(candidate).get();
-          if (!snap.exists) {
-            document.getElementById('exCode').value = candidate;
-            return;
-          }
-        } catch (e) {
-          // オフライン等で確認できないときはそのまま採用 (サーバー側の実処理は
-          // 既存の GAS/CF が exCode 一致検証をしており、丸ごと無防備にはならない)。
-          document.getElementById('exCode').value = candidate;
-          return;
-        }
-      }
-      // 8回連続衝突は天文学的に低確率。ランダム部分を伸ばして最後の候補を使う。
-      document.getElementById('exCode').value = (base + randomExCodeChars(6)).slice(0, 10).toUpperCase();
     }
 
     function showError(msg) {
@@ -739,86 +664,41 @@
     }
 
     // =========================================================
-    // フォーム送信
+    // フォーム送信 → 展覧会を作成
+    // 展覧会コードはサーバー (createExhibition) が決め、重複しないことも確かめる。
     // =========================================================
     function submitForm() {
       hideError();
-      const exCode = document.getElementById('exCode').value.trim();
-      const exName = document.getElementById('exName').value.trim();
       const workCount = parseInt(document.getElementById('workCount').value) || 30;
-      const email = document.getElementById('email').value.trim();
-
-      // exCode は assignExCode が自動決定する (画面には出さない)。ボタンはそれが
-      // 終わるまで disabled のはずだが、念のための防御チェックとして残す。
-      if (!exCode) return showError('準備中です。少し待ってからもう一度お試しください。');
-      if (!exName) return showError('展覧会名が取得できていません。');
-      if (!email) return showError('メールアドレスが取得できていません。');
+      if (!window._confirmedToken) return showError('メールの確認リンクから開き直してください。');
       if (workCount < 1 || workCount > 100) return showError('作品数は 1〜100 の範囲で入力してください。');
 
       document.getElementById('formView').style.display = 'none';
       document.getElementById('loadingView').style.display = 'block';
 
-      gasCall({
-        action: 'runSetup',
-        exCode,
-        exName,
-        workCount,
-        email,
-        token: window._confirmedToken || ''
-      })
+      callSetupFn('createExhibition', { token: window._confirmedToken, workCount })
         .then(onSetupComplete)
         .catch(onSetupError);
     }
 
     function onSetupComplete(result) {
-      if (!result.success) {
-        document.getElementById('loadingView').style.display = 'none';
-        document.getElementById('formView').style.display = 'block';
-        showError('エラー: ' + result.error);
-        return;
-      }
-
-      // exhibition doc + artwork スロット をまとめて Cloud Function 経由で書き込む。
-      // setup フローは GAS token 認証のみ (Firebase Auth 無し) なので、
-      // Firestore Rules を満たすには Cloud Function 経由 (admin SDK) が必須。
-      // クライアントから渡す artworks は GAS が同じセットアップ実行で生成したものを
-      // そのままパススルー。Cloud Function 側で exCode 一致と shape を検証する。
-      const finalizePromise = (window.fsDb && result.exCode)
-        ? firebase.app().functions('asia-northeast1')
-          .httpsCallable('finalizeExhibitionSetup')({
-            token: window._confirmedToken || '',
-            exCode: result.exCode,
-            // 初期作品枠は CF 側で initialCount から採番生成する (SS seeding 廃止)。
-            initialCount: parseInt(document.getElementById('workCount').value) || 0,
-          })
-          .then(() => null)
-          .catch(err => {
-            console.error('finalizeExhibitionSetup failed:', err);
-            return err;
-          })
-        : Promise.resolve(null);
-
-      finalizePromise.then(err => {
-        showDone(result);
-        if (err) {
-          const box = document.getElementById('infoBox');
-          if (box) {
-            const warn = document.createElement('div');
-            warn.style.cssText = 'background:#fff3e0; border:1px solid #ffb74d; border-radius:8px; padding:10px 12px; margin-top:12px; color:#bf360c; font-size:0.85em; line-height:1.5;';
-            warn.innerText = '⚠ Firestore へのデータ登録に失敗しました ('
-              + (err.message || err) + ')。'
-              + 'GAS 側のセットアップは完了していますが、主催者ログインができない可能性があります。'
-              + 'サポートにお問い合わせください。';
-            box.parentNode.insertBefore(warn, box.nextSibling);
-          }
+      showDone(result);
+      if (result.mailFailed) {
+        // 展覧会は作成済み。完了メールだけ送れなかった → 画面のリンクから進めることを伝える
+        const box = document.getElementById('infoBox');
+        if (box) {
+          const warn = document.createElement('div');
+          warn.style.cssText = 'background:#fff3e0; border:1px solid #ffb74d; border-radius:8px; padding:10px 12px; margin-top:12px; color:#bf360c; font-size:0.85em; line-height:1.5;';
+          warn.innerText = '⚠ 展覧会は作成できましたが、完了のお知らせメールを送れませんでした。下のボタンから作品登録に進めます。';
+          box.parentNode.insertBefore(warn, box.nextSibling);
         }
-      });
+      }
     }
 
     function onSetupError(err) {
       document.getElementById('loadingView').style.display = 'none';
       document.getElementById('formView').style.display = 'block';
-      showError(friendlyError(err, '処理'));
+      showError(setupErrorText(err, '展覧会の作成'));
     }
 
     // =========================================================
@@ -883,14 +763,12 @@
         var authCard = document.getElementById('firebaseAuthCard');
         var submitBtn = document.getElementById('btnSetupSubmit');
         var statusEl = document.getElementById('firebaseAuthStatus');
-        // 展覧会コードの自動決定 (assignExCode, Firestore重複確認込み) が終わるまでは
-        // ここで submit を有効化しない (認証状態の変化はそれより先に発火し得るため)。
-        var exCodeReady = !!document.getElementById('exCode').value;
-        // GAS token 確認済みなら、Firebase 認証カードは表示せず submit も常に有効
+        // メールの確認リンク (token) で確認済みなら、Firebase 認証カードは出さず submit も有効
+        var exCodeReady = true;  // 展覧会コードはサーバー側で決めるので待つものは無い
         if (window._confirmedToken) {
           if (statusEl) statusEl.style.display = 'none';
           if (authCard) authCard.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = !exCodeReady;
+          if (submitBtn) submitBtn.disabled = false;
           return;
         }
         if (user && user.email) {

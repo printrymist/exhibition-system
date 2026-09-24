@@ -3065,39 +3065,21 @@
       const saveBtn = document.querySelector('#exNameEditArea button');
       saveBtn.disabled = true;
 
-      // Master SS (運用台帳) と Firestore (アプリの表示元) の両方を並列更新。
-      // 片方だけ失敗するケースを見えるようにする。
-      const gasPromise = gasCallAuthed('updateExName', { ex: ex, newName: newName });
-      const fsPromise = firebase.firestore().collection('exhibitions').doc(ex).set({
+      // 展覧会名は Firestore だけを更新する (2026-09-24 にマスター・スプレッドシートを退役。
+      // 以前は SS と Firestore を並列更新して、片方だけの失敗を知らせていた)。
+      firebase.firestore().collection('exhibitions').doc(ex).set({
         ex_name: newName,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      Promise.allSettled([gasPromise, fsPromise]).then(async ([gasRes, fsRes]) => {
-        const gasOk = gasRes.status === 'fulfilled' && gasRes.value && gasRes.value.success;
-        const fsOk  = fsRes.status === 'fulfilled';
-        const gasErr = gasRes.status === 'rejected' ? (gasRes.reason && gasRes.reason.message || gasRes.reason)
-                     : (gasRes.value && gasRes.value.error) || '';
-        const fsErr  = fsRes.status === 'rejected' ? (fsRes.reason && fsRes.reason.message || fsRes.reason) : '';
-
-        // Firestore が OK なら表示は更新する (アプリの表示元なので)
-        if (fsOk) {
+      }, { merge: true })
+        .then(() => {
           artworkData.exName = newName;
           document.getElementById('exName').innerText = '✅ ' + newName + ' (' + artworkData.artworks.length + ' artworks)';
           cancelEditExName();
-        }
-
-        if (gasOk && fsOk) {
-          // 両方成功、追加メッセージなし
-        } else if (!gasOk && !fsOk) {
-          await window.showAlertModal('保存に失敗しました。\nMaster SS: ' + gasErr + '\nFirestore: ' + fsErr);
-        } else if (!gasOk) {
-          await window.showAlertModal('⚠ Master SS への反映に失敗しました。アプリ表示 (Firestore) は更新済みですが、運用台帳が古いままです。\n' + gasErr);
-        } else {
-          // Firestore 失敗 = アプリ表示が古いまま
-          await window.showAlertModal('⚠ Firestore への同期に失敗しました。Master SS は更新済みですが、次回読み込み時に古い名前が出る可能性があります。\n' + fsErr);
-        }
-      }).finally(() => { saveBtn.disabled = false; });
+        })
+        .catch(async (err) => {
+          await window.showAlertModal(friendlyError(err, '保存'));
+        })
+        .finally(() => { saveBtn.disabled = false; });
     }
 
     // 親コンテナ直下の data-row のみを対象にするヘルパ

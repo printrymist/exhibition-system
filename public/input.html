@@ -1503,8 +1503,6 @@
       }
       const targetId = findData.artworkId;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
-      gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: 1 })
-        .catch(e => console.warn('bumpArtworkCount failed:', e));
       return { success: true, artworkId: targetId };
     };
     window.fsUpdateArtwork = async (exCode, artworkId, artworkData, artistData, originalArtist) => {
@@ -1560,16 +1558,6 @@
       if (!accessToken) {
         throw new Error('招待リンクが古いか、正しくありません。主催者から新しい招待リンクを受け取ってください。');
       }
-      let wasRegistered = false;
-      try {
-        const res = await _getArtworkFn({ exCode: exCode, artworkId: artworkId, accessToken: accessToken });
-        const aData = res && res.data;
-        if (aData && aData.success && aData.artwork) {
-          wasRegistered = (String(aData.artwork.status || '').trim() === '1');
-        }
-      } catch (e) {
-        console.warn('fsDeleteArtwork: existing status 確認失敗', e);
-      }
       await window.fsSetArtwork(exCode, artworkId, {
         status: "0",
         title: "", title_en: "",
@@ -1580,10 +1568,6 @@
         image_url: "",
         insta: "", x: "", facebook: "", web: "", shop_url: "",
       });
-      if (wasRegistered) {
-        gasCall({ action: 'bumpArtworkCount', ex: exCode, dT: 0, dR: -1 })
-          .catch(e => console.warn('bumpArtworkCount failed:', e));
-      }
     };
   </script>
   <div id="versionFooter"></div>

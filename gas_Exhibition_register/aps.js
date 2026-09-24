@@ -174,6 +174,15 @@ function doPost(e) {
       return output;
     }
 
+    // 2026-09-24 退役: 展覧会の作成 (申請・メール確認・作成) は Cloud Function + Firestore に移設し、
+    // マスター・スプレッドシートには書かなくなった。古い画面や外部から呼ばれても何も書かない。
+    var RETIRED_ACTIONS = ['submitApplication', 'confirmToken', 'runSetup', 'verifyTokenForFinalize',
+      'getCanonicalExhibitionDocAdmin', 'graduateExhibition'];
+    if (RETIRED_ACTIONS.indexOf(action) !== -1) {
+      output.setContent(JSON.stringify({ success: false, error: 'この機能は移転しました。お手数ですが、https://qriine.com/setup.html から操作してください。' }));
+      return output;
+    }
+
     // --- 施錠 (2026-06-12): graduateExhibition は正規の呼び出し元が無く、無認証で叩くと
     //     sandbox 自動削除の停止を招く。ADMIN_SECRET 必須化。(regenerateQrUrls は 2026-06-22 撤去)
     var PROTECTED_ACTIONS = ['graduateExhibition'];
@@ -523,6 +532,12 @@ Qriine
 //     完全な Firestore クリーンアップは将来 Cloud Functions 移行時に実装予定。
 // =========================================================
 function dailySandboxMaintenance() {
+  // 2026-09-24 退役: 練習モードの「明日削除」「削除しました」メールと削除は Cloud Function
+  // scheduledSandboxCleanup (毎日 5:00 JST、Firestore が正) に統合した。ここで送ると二重になるので
+  // 何もしない (時刻トリガーが残っていても害が無いように関数自体は残す)。
+  Logger.log('dailySandboxMaintenance: 退役済み (Cloud Function scheduledSandboxCleanup に移設)');
+  return;
+  // eslint-disable-next-line no-unreachable
   try {
     const ss = SpreadsheetApp.openById(MASTER_SS_ID);
     const sheet = ss.getSheetByName('exhibitions');

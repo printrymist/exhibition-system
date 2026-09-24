@@ -78,8 +78,11 @@
     </div>
 
     <div id="paneApp" style="display:none;">
-      <div class="empty">申請の一覧は、展覧会作成の仕組みを Firebase に移したあと (第2段) から表示されます。<br>
-        それまでの申請はスプレッドシートの applications シートに残っています。</div>
+      <p class="note" style="margin-top:0;">setup.html からの申請です (2026-09-24 以降。それより前の申請はスプレッドシートの applications シートに残っています)。新しい順。</p>
+      <div class="toolbar">
+        <span class="count" id="appCount"></span>
+      </div>
+      <div id="appResult"><div class="empty">読み込み中…</div></div>
     </div>
   </div>
 
@@ -256,11 +259,48 @@
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     }
 
+    // 申請の一覧 (applications、doc id = 確認メールの token)。token は表示しない
+    var appsLoaded = false;
+    async function loadApplications() {
+      var el = document.getElementById('appResult');
+      el.innerHTML = '<div class="empty">読み込み中…</div>';
+      try {
+        var snap = await db.collection('applications').get();
+        var list = snap.docs.map(function (d) { return d.data(); });
+        list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+        document.getElementById('appCount').textContent = list.length + ' 件';
+        if (!list.length) { el.innerHTML = '<div class="empty">まだ申請はありません。</div>'; return; }
+        var html = '<div class="table-wrap"><table><thead><tr>'
+          + ['申請日', '展覧会名', '主催者', 'メール', '会場', '開始日', '練習/本番', 'メール確認', '作成した展覧会'].map(function (h) { return '<th style="cursor:default;">' + h + '</th>'; }).join('')
+          + '</tr></thead><tbody>';
+        list.forEach(function (a) {
+          var code = a.ex_code || '';
+          html += '<tr>'
+            + '<td>' + esc(toDay(a.created_at).text) + '</td>'
+            + '<td class="name" title="' + esc(a.ex_name) + '">' + esc(a.ex_name) + '</td>'
+            + '<td>' + esc(a.organizer) + '</td>'
+            + '<td>' + esc(a.email) + '</td>'
+            + '<td>' + esc(a.venue) + '</td>'
+            + '<td>' + esc(a.start_date) + '</td>'
+            + '<td><span class="badge ' + (a.sandbox ? 'sandbox' : 'prod') + '">' + (a.sandbox ? '練習' : '本番') + '</span></td>'
+            + '<td>' + (a.confirmed ? '✓ 確認済み' : '<span style="color:#b06000;">未確認</span>') + '</td>'
+            + '<td>' + (code ? '<a href="../register.html?ex=' + encodeURIComponent(code) + '" target="_blank" rel="noopener"><code>' + esc(code) + '</code></a>' : '<span style="color:#999;">まだ</span>') + '</td>'
+            + '</tr>';
+        });
+        html += '</tbody></table></div>';
+        el.innerHTML = html;
+      } catch (e) {
+        console.error(e);
+        el.innerHTML = '<div class="empty" style="color:#d93025;">読み込みに失敗しました: ' + esc(e.message || e) + '</div>';
+      }
+    }
+
     function showTab(t) {
       document.getElementById('tabEx').classList.toggle('active', t === 'ex');
       document.getElementById('tabApp').classList.toggle('active', t === 'app');
       document.getElementById('paneEx').style.display = t === 'ex' ? '' : 'none';
       document.getElementById('paneApp').style.display = t === 'app' ? '' : 'none';
+      if (t === 'app' && !appsLoaded) { appsLoaded = true; loadApplications(); }
     }
   </script>
   <script src="../js/operator-auth.js"></script>

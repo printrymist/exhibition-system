@@ -667,16 +667,6 @@
           // allInquiries 側も更新
           const idx = allInquiries.findIndex(q => q.id === id);
           if (idx !== -1) allInquiries[idx].status = 'in_progress';
-          // SS 側 inquiries_index も更新（fire-and-forget）
-          const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
-          gasCall({
-            action: 'updateInquiryInIndex',
-            payload: JSON.stringify({
-              inquiry_id: id,
-              status: 'in_progress',
-              last_message_at: nowStr
-            })
-          }).catch(e => console.warn('updateInquiryInIndex failed:', e));
         }
       } catch (err) {
         showReplyMsg('Error: ' + err.message, 'error');
@@ -697,14 +687,6 @@
         if (idx !== -1) allInquiries[idx].status = 'resolved';
         showReplyMsg('✅ 解決済みにしました。', 'success');
         setTimeout(() => showDetail(id), 600);
-        // SS 側 inquiries_index も更新（fire-and-forget）
-        gasCall({
-          action: 'updateInquiryInIndex',
-          payload: JSON.stringify({
-            inquiry_id: id,
-            status: 'resolved'
-          })
-        }).catch(e => console.warn('updateInquiryInIndex failed:', e));
       } catch (err) {
         showReplyMsg('Error: ' + err.message, 'error');
       }

@@ -204,6 +204,15 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // 展覧会の申請 (setup.html)。doc id = 確認メールの token (UUID) なので、読めると
+    // 他人の申請を確認できてしまう。読むのは運営者 (展覧会台帳) だけ、書き込みは CF
+    // (submitApplication / confirmApplication / createExhibition, admin SDK) だけ。
+    // 2026-09-24 にマスター・スプレッドシートの applications シートから移設。
+    match /applications/{token} {
+      allow read: if isOperator();
+      allow create, update, delete: if false;
+    }
+
     // Web展覧会の短縮QR (gallery.html?c=code)。galleryPage (CF, admin SDK) が
     // サーバー側で ex/exp/sig を解決してページに埋め込むため、qr_codes と違い
     // 来場者ブラウザが直接このコレクションを引く経路が無い→ get も operator限定でよい。

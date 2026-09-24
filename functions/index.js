@@ -8,12 +8,10 @@
  *   呼び出し側 (operator-auth.js) は firebase.functions().httpsCallable("sendSignInLink")
  *   から呼ぶ。
  *
- * - finalizeExhibitionSetup:
- *   setup.html から runSetup 完了後に呼ばれ、Admin SDK で
- *   exhibitions/{exCode} doc を書き込む。Firestore Security Rules は
- *   Firebase Auth (organizer email) を要求するが、setup.html フローでは
- *   GAS 確認トークンしか持たないためルールをパスできない。ここで GAS に
- *   token + exCode の整合性を問い合わせて検証 → admin で書き込み。
+ * - submitApplication / confirmApplication / createExhibition:
+ *   setup.html の展覧会作成 (申請 → メール確認 → 作成)。申請と確認 token は
+ *   Firestore の applications に置き、展覧会データも Admin SDK で直接作る
+ *   (2026-09-24 に GAS + マスター・スプレッドシートから移設。旧 finalizeExhibitionSetup は廃止)。
  */
 
 const { setGlobalOptions } = require("firebase-functions");
@@ -32,18 +30,6 @@ const path = require("path");
 
 admin.initializeApp();
 
-// GAS Exhibition Register Web App の exec URL。
-// 公開エンドポイントなのでクライアントに見えてもよい (token は UUID で
-// 推測不能なので、エンドポイントの秘匿には依存しない)。
-// `clasp deploy --deploymentId` で同じデプロイにリビジョンを上書きする
-// 運用なので URL は基本的に変わらないが、入れ替えのときに 1 箇所で済むよう
-// defineString に外出し。デプロイ時に `--set-config` か Functions の
-// 構成パラメータで上書き可能。
-const GAS_EXEC_URL = defineString("GAS_EXEC_URL", {
-  default:
-    "https://script.google.com/macros/s/AKfycbyZgi8PuS8aq7empliidJahNwYRjm_bWYi6cdLI0tugEH91Gtk7NAJxDKwzn7JPacnF/exec",
-});
-
 // Caption Manager GAS の exec URL。callGasAuthed (受付 CF) が
 // ログイン必須の操作をここに中継する。クライアントが直叩きしていた経路を
 // Firebase Auth + organizer/operator 認可 + ADMIN_SECRET の後ろに移すため。
@@ -59,8 +45,8 @@ setGlobalOptions({ maxInstances: 10, region: "asia-northeast1" });
 // Gmail SMTP からの移行 (2026-07-06)。単一差し替え点 = sendMailViaResend。
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
-// adminRecoverExhibitionDoc 専用: GAS の getCanonicalExhibitionDocAdmin を
-// 叩く際に必要な共有秘密。Script Property `ADMIN_SECRET` と同じ値を入れる。
+// GAS と共有する秘密 (Script Property `ADMIN_SECRET` と同じ値)。callGasAuthed の中継と、
+// GAS から呼ばれる HTTP エンドポイントの認証に使う。
 const GAS_ADMIN_SECRET = defineSecret("GAS_ADMIN_SECRET");
 
 // gallery.html (web 展覧会) の会場 QR token 用 HMAC 鍵。
@@ -471,252 +457,340 @@ exports.submitContact = onCall(
 );
 
 // =========================================================
-// finalizeExhibitionSetup
+// 展覧会の作成 (setup.html): 申請 → メール確認 → 作成
+//   2026-09-24 に GAS (マスター・スプレッドシート) から移設。以前は申請・token が
+//   スプレッドシートの applications シートにしか無く、GAS の応答不安定 (約1/3で無応答)
+//   で主催者の操作が止まっていた。申請と token は Firestore の applications に置き、
+//   展覧会データもここで直接作る (スプレッドシートには書かない。台帳は admin/ledger.html)。
+//   applications/{token}: token (推測不能な UUID) を doc id にする。クライアントからは
+//   読み書きさせない (Rules で運営者の read のみ)。すべて admin SDK で扱う。
 // =========================================================
-async function verifyTokenWithGas(token, exCode) {
-  const params = new URLSearchParams({
-    action: "verifyTokenForFinalize",
-    token: token,
-    exCode: exCode,
-  });
-  const res = await fetch(GAS_EXEC_URL.value(), {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params,
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error("GAS verify HTTP " + res.status);
+const SETUP_SANDBOX_DAYS = 14;
+const SETUP_DEFAULT_FIELDS = JSON.stringify([
+  { name: "title", required: true },
+  { name: "year", required: false },
+  { name: "technique", required: false },
+  { name: "size", required: false },
+  { name: "price", required: false },
+]);
+const SETUP_REPLY_TO = "ryohei.miyagawa.art@gmail.com";
+
+// 回数制限 (key ごとに windowSec 秒で max 回まで)。email_throttle コレクションを共用。
+// 失敗時は fail-open (本来の処理を止めない)。
+async function checkRateLimit(rawKey, windowSec, max, message) {
+  const now = Math.floor(Date.now() / 1000);
+  const key = crypto.createHash("sha256").update(rawKey).digest("hex").slice(0, 32);
+  const docRef = admin.firestore().collection("email_throttle").doc(key);
+  let limited = false;
+  try {
+    await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const prev = snap.exists ? (snap.data().attempts || []) : [];
+      const recent = prev.filter((t) => typeof t === "number" && (now - t) < windowSec);
+      if (recent.length >= max) {
+        limited = true;
+        return;
+      }
+      recent.push(now);
+      tx.set(docRef, { attempts: recent, updatedAt: now });
+    });
+  } catch (e) {
+    logger.warn("rate limit txn failed (fail-open)", { error: e && e.message });
+    return;
   }
-  return res.json();
+  if (limited) throw new HttpsError("resource-exhausted", message);
 }
 
-async function finalizeExhibitionSetupImpl(request) {
-  const data = request.data || {};
-  const token = String(data.token || "").trim();
-  const exCode = String(data.exCode || "").trim();
+// JST の今日 (YYYY-MM-DD)
+function jstToday() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+// JST の日時文字列 (以前スプレッドシートに入れていた書式 "yyyy/MM/dd HH:mm:ss")
+function jstStamp() {
+  const s = new Date(Date.now() + 9 * 3600 * 1000).toISOString();
+  return s.slice(0, 10).replace(/-/g, "/") + " " + s.slice(11, 19);
+}
 
-  if (!token) throw new HttpsError("invalid-argument", "token が必要です");
-  if (!exCode) throw new HttpsError("invalid-argument", "exCode が必要です");
-
-  // GAS 側で token + exCode を検証し、authoritative な email + canonical な
-  // exhibitionDoc を得る。クライアントから受け取った doc は採用しない
-  // (クライアントは exhibitionDoc を渡す必要がない)。
-  let verify;
-  try {
-    verify = await verifyTokenWithGas(token, exCode);
-  } catch (err) {
-    logger.error("verifyTokenWithGas threw", { exCode, error: err.message });
-    throw new HttpsError(
-      "internal",
-      "GAS との通信に失敗しました: " + err.message,
-    );
-  }
-  if (!verify || !verify.success) {
-    logger.warn("token verification rejected", {
-      exCode,
-      error: verify && verify.error,
-    });
-    throw new HttpsError(
-      "permission-denied",
-      (verify && verify.error) || "token verification failed",
-    );
-  }
-  const verifiedEmail = String(verify.email || "").trim().toLowerCase();
-  if (!verifiedEmail) {
-    throw new HttpsError("internal", "GAS から email が返されませんでした");
-  }
-  const canonicalDoc = verify.exhibitionDoc;
-  if (!canonicalDoc || typeof canonicalDoc !== "object") {
-    throw new HttpsError(
-      "internal",
-      "GAS から exhibitionDoc が返されませんでした",
-    );
-  }
-
-  // Admin SDK で書き込み (Security Rules はバイパス)。
-  // ex_code / email は GAS の authoritative 値で上書き。
-  // skipExhibitionWrite=true の場合は exhibition doc を再書き込みせず、
-  // artworks のみ書き込む (setup.html の追加スロット作成用)。
-  const db = admin.firestore();
-  const exRef = db.collection("exhibitions").doc(exCode);
-  const ts = new Date().toISOString();
-  // 初期作品枠数 (案「う」: セットアップで入力した作品数を CF 側で採番生成する。
-  //   {ex}_artworks SS は使わない)。0〜100 にクランプ。
-  const initialCount = Math.max(
-    0, Math.min(100, Math.floor(Number(data.initialCount) || 0)),
-  );
-
-  // exhibition doc を書き込む。last_artwork_seq = 初期枠数 (以後 addArtworkSlots が
-  // この続きから採番する)。
-  const exDoc = Object.assign({}, canonicalDoc, {
-    ex_code: exCode,
-    email: verifiedEmail,
-    createdAt: ts,
-    last_artwork_seq: initialCount,
-  });
-  try {
-    await exRef.set(exDoc, { merge: true });
-  } catch (err) {
-    logger.error("exhibitions write failed", { exCode, error: err.message });
-    throw new HttpsError(
-      "internal",
-      "Firestore 書き込みに失敗しました: " + err.message,
-    );
-  }
-
-  // 初期作品スロット (w001..wN) を CF 側で生成して書き込む (addArtworkSlots と
-  // 同じ buildArtworkSlot を共用)。旧来は GAS が {ex}_artworks SS に seeding して
-  // いたが、SS を廃止し Firestore に一本化した。
-  let artworkCount = 0;
-  if (initialCount > 0) {
-    const secret = ARTIST_TOKEN_SECRET.value();
-    if (!secret) {
-      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+// 展覧会コード: 展覧会名の英数字 (あれば) + ランダム4文字。setup.html にあった
+// suggestExCode / randomExCodeChars をサーバー側に移したもの (重複確認をトランザクション内で行うため)。
+const EXCODE_RANDOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function suggestExCodeBase(exName) {
+  const tokens = String(exName || "")
+    .replace(/[^ -~]/g, "") // 英数字記号 (ASCII の表示文字) 以外を捨てる
+    .replace(/[^A-Za-z0-9\s]/g, "")
+    .trim().split(/\s+/).filter(Boolean);
+  const yearToken = tokens.find((t) => /^20\d{2}$/.test(t));
+  const yearSuffix = yearToken ? yearToken.slice(2) : "";
+  const nonYear = tokens.filter((t) => !/^20\d{2}$/.test(t));
+  const allCaps = nonYear.filter((t) => t.length >= 3 && t === t.toUpperCase() && /[A-Z]/.test(t));
+  let base = "";
+  if (allCaps.length > 0) {
+    base = allCaps[0].slice(0, 6);
+  } else {
+    const cap = nonYear.filter((t) => t.length >= 2 && /^[A-Z]/.test(t));
+    if (cap.length > 0) {
+      cap.sort((a, b) => b.length - a.length);
+      base = cap[0].slice(0, 6).toUpperCase();
+    } else if (nonYear.length > 0) {
+      base = nonYear[0].slice(0, 6).toUpperCase();
     }
-    const exp = Math.floor(Date.now() / 1000) +
-      ARTWORK_QR_DEFAULT_DAYS * 86400;
+  }
+  if (!base) return "EX";
+  let code = (base + yearSuffix).slice(0, 6);
+  // 数字だけのコードは避ける
+  if (!/[A-Za-z]/.test(code)) code = ("EX" + code).slice(0, 6);
+  return code.toUpperCase();
+}
+function randomExCodeChars(n) {
+  let s = "";
+  const bytes = crypto.randomBytes(n);
+  for (let i = 0; i < n; i++) s += EXCODE_RANDOM_ALPHABET[bytes[i] % EXCODE_RANDOM_ALPHABET.length];
+  return s;
+}
+
+function sendSetupConfirmationEmail(app, token) {
+  const confirmUrl = "https://qriine.com/setup.html?token=" + token;
+  const subject = (app.sandbox ? "[練習モード] " : "") + "[Exhibition Setup] メールアドレスの確認";
+  const sandboxNote = app.sandbox ? [
+    "",
+    "[練習] これは練習モードでの申請です:",
+    "・14 日後に自動的に削除されます (期限が来る前に「本番運用に切替」も可能)",
+    "・案内メールは作家には送られず、運営者宛にのみ届きます",
+    "・気軽に試行錯誤してください",
+    "",
+  ].join("\n") : "";
+  const text = [
+    app.organizer + " 様",
+    "",
+    "以下の展覧会のセットアップ申請を受け付けました。",
+    sandboxNote,
+    "展覧会名　: " + app.ex_name,
+    "開催場所　: " + app.venue,
+    "開催予定日: " + app.start_date,
+    "",
+    "下のURLをクリックしてメールアドレスを確認し、セットアップを開始してください。",
+    "",
+    confirmUrl,
+    "",
+    "このリンクは申請者本人のみ使用してください。",
+    "",
+    "──",
+    "セットアップ画面に進んだ後、もう 1 通「展覧会セットアップの確認」メール",
+    "が届きます。迷惑メールフォルダに振り分けられる場合がありますので、",
+    "受信トレイに届かない場合はそちらもご確認ください。",
+    "──",
+    "",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "このメールは送信専用です。返信はできません。",
+    "お問い合わせは " + SETUP_REPLY_TO + " までご連絡ください。",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "Qriine",
+  ].join("\n");
+  return sendMailViaResend({ to: app.email, subject, text, replyTo: SETUP_REPLY_TO });
+}
+
+function sendSetupCompletionEmail(email, exCode, exName, isSandbox) {
+  const registerUrl = "https://qriine.com/register.html?ex=" + exCode;
+  const captionUrl = "https://qriine.com/caption.html?ex=" + exCode;
+  const inquiryUrl = "https://qriine.com/inquiry.html?ex=" + exCode;
+  const subject = (isSandbox ? "[練習モード] " : "") + "[Exhibition Setup Complete] " + exName + " (" + exCode + ")";
+  const sandboxNote = isSandbox ? [
+    "",
+    "[練習] これは練習モードで作成された展覧会です:",
+    "・14 日後に自動的に削除されます",
+    "・作家への案内メール送信は無効化されており、運営者宛にだけ届きます",
+    "・気に入った設定で本番運用したい場合は、作品登録画面の「④ 展覧会の設定」から「本番運用に切替」できます",
+    "",
+  ].join("\n") : "";
+  const text = [
+    "展覧会のセットアップが完了しました。",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "展覧会コード : " + exCode,
+    "展覧会名     : " + exName,
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    sandboxNote,
+    "■ 作品登録・設定",
+    registerUrl,
+    "",
+    "■ キャプション作成・印刷",
+    captionUrl,
+    "",
+    "【手順】",
+    "1. 上の「作品登録・設定」の URL を開き、このメールアドレスでログインしてください (届いたリンクを押すと自動でログインします)。",
+    "2. 「① 項目を決める」で、作品について記録する項目を確認して保存してください。",
+    "3. 作品を入力します (自分で入力するか、「② 作家を招待」で作家に入力してもらいます)。",
+    "4. 「キャプション作成・印刷」でキャプションを選び、印刷してください。",
+    "画面右下の「準備」ボタンで、次に何をすればよいかを確認できます。",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "このメールは送信専用です。返信はできません。",
+    "お問い合わせは下記URLのフォームからお願いします。",
+    inquiryUrl,
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "Qriine",
+  ].join("\n");
+  return sendMailViaResend({ to: email, subject, text, replyTo: SETUP_REPLY_TO });
+}
+
+// ① 申請: 申請を記録して確認メールを送る (未ログインで呼べる。回数制限あり)
+exports.submitApplication = onCall(
+  { secrets: [RESEND_API_KEY] },
+  async (request) => {
+    const d = request.data || {};
+    // ハニーポット (見えない入力欄に値がある = bot)。成功を装って何もしない
+    if (String(d.hp || "").trim() !== "") return { success: true };
+    const clip = (v, n) => String(v || "").trim().slice(0, n);
+    const app = {
+      ex_name: clip(d.exName, 100),
+      venue: clip(d.venue, 100),
+      start_date: clip(d.startDate, 10),
+      organizer: clip(d.organizer, 100),
+      email: clip(d.email, 200).toLowerCase(),
+      sandbox: d.sandbox === true || d.sandbox === "1",
+    };
+    if (!app.ex_name) throw new HttpsError("invalid-argument", "展覧会名を入力してください。");
+    if (!app.venue) throw new HttpsError("invalid-argument", "開催場所を入力してください。");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(app.start_date)) throw new HttpsError("invalid-argument", "開催予定日を入力してください。");
+    if (app.start_date <= jstToday()) throw new HttpsError("invalid-argument", "開催予定日は今日より後の日付を入力してください。");
+    if (!app.organizer) throw new HttpsError("invalid-argument", "主催者名を入力してください。");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) throw new HttpsError("invalid-argument", "メールアドレスの形式が正しくありません。");
+
+    const busy = "短時間に申し込みが集中しています。数分待ってから再度お試しください。";
+    await checkRateLimit("apply:" + app.email, 5 * 60, 3, busy);
+    await checkRateLimit("apply:global", 10 * 60, 30, busy);
+
+    const token = crypto.randomUUID();
+    await admin.firestore().collection("applications").doc(token).set(Object.assign({}, app, {
+      confirmed: false,
+      ex_code: "",
+      setup_at: "",
+      created_at: new Date().toISOString(),
+      created_at_jst: jstStamp(),
+    }));
+    try {
+      await sendSetupConfirmationEmail(app, token);
+    } catch (err) {
+      logger.error("submitApplication mail failed", { error: err.message });
+      throw new HttpsError("internal", "確認メールを送れませんでした。時間をおいてもう一度お試しください。");
+    }
+    logger.info("application submitted", { email: app.email, sandbox: app.sandbox });
+    return { success: true };
+  },
+);
+
+// ② メール確認: 確認メールのリンク (token) を確かめ、申請内容を返す
+exports.confirmApplication = onCall(async (request) => {
+  const token = String((request.data || {}).token || "").trim();
+  if (!/^[0-9a-f-]{36}$/.test(token)) {
+    throw new HttpsError("not-found", "このリンクは確認できませんでした。以前に申請された方は、お手数ですがもう一度申請してください。");
+  }
+  const ref = admin.firestore().collection("applications").doc(token);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    // 切り替え前 (スプレッドシート時代) の申請の token もここに来る → 再申請を案内 (ユーザー判断)
+    throw new HttpsError("not-found", "このリンクは確認できませんでした。以前に申請された方は、お手数ですがもう一度申請してください。");
+  }
+  const app = snap.data();
+  if (!app.confirmed) await ref.update({ confirmed: true, confirmed_at: new Date().toISOString() });
+  return {
+    success: true,
+    exName: app.ex_name, email: app.email, organizer: app.organizer, sandbox: !!app.sandbox,
+    alreadySetup: !!app.ex_code, exCode: app.ex_code || "",
+  };
+});
+
+// ③ 作成: token を確かめ、展覧会データ・作品枠を作る (旧 GAS runSetup + finalizeExhibitionSetup)。
+//   展覧会コードの重複確認・展覧会データの作成・申請への記録は1つのトランザクションで行う。
+//   同じ申請で2回呼ばれたら作成済みの展覧会を返す (二重作成しない)。
+exports.createExhibition = onCall(
+  { secrets: [RESEND_API_KEY, ARTIST_TOKEN_SECRET] },
+  async (request) => {
+    const d = request.data || {};
+    const token = String(d.token || "").trim();
+    const workCount = Math.floor(Number(d.workCount));
+    if (!/^[0-9a-f-]{36}$/.test(token)) throw new HttpsError("permission-denied", "認証が確認できません。メールの認証リンクから再度お試しください。");
+    if (!(workCount >= 1 && workCount <= 100)) throw new HttpsError("invalid-argument", "作品数は 1〜100 の範囲で入力してください。");
+
+    const db = admin.firestore();
+    const appRef = db.collection("applications").doc(token);
+    const nowIso = new Date().toISOString();
+    const stamp = jstStamp();
+    let result = null;
+    await db.runTransaction(async (tx) => {
+      const appSnap = await tx.get(appRef);
+      if (!appSnap.exists || !appSnap.data().confirmed) {
+        throw new HttpsError("permission-denied", "認証が確認できません。メールの認証リンクから再度お試しください。");
+      }
+      const app = appSnap.data();
+      if (app.ex_code) {
+        // 作成済み
+        result = { exCode: app.ex_code, exName: app.ex_name, isSandbox: !!app.sandbox, email: app.email, already: true };
+        return;
+      }
+      const base = suggestExCodeBase(app.ex_name);
+      let exCode = "";
+      for (let i = 0; i < 8 && !exCode; i++) {
+        const cand = (base + randomExCodeChars(4)).slice(0, 10).toUpperCase();
+        const s = await tx.get(db.collection("exhibitions").doc(cand));
+        if (!s.exists) exCode = cand;
+      }
+      if (!exCode) exCode = (base + randomExCodeChars(6)).slice(0, 12).toUpperCase();
+      const isSandbox = !!app.sandbox;
+      const exDoc = {
+        ex_code: exCode,
+        ex_name: app.ex_name,
+        status: "active",
+        artworks_registered: 0,
+        artworks_total: workCount,
+        last_artwork_update_at: "",
+        organizer: app.organizer,
+        email: app.email,
+        venue: app.venue,
+        start_date: app.start_date,
+        // 旧スプレッドシート時代の列 (後方互換で空文字)
+        image_folder_id: "", artwork_sheet_id: "", comment_sheet_id: "",
+        registration_fields: SETUP_DEFAULT_FIELDS,
+        caption_fields: SETUP_DEFAULT_FIELDS,
+        created_at: stamp,
+        updated_at: stamp,
+        memo: "",
+        is_sandbox: isSandbox,
+        expire_at: isSandbox ? new Date(Date.now() + SETUP_SANDBOX_DAYS * 86400000).toISOString() : "",
+        createdAt: nowIso,
+        last_artwork_seq: workCount,
+        application_id: token,
+      };
+      tx.set(db.collection("exhibitions").doc(exCode), exDoc);
+      tx.update(appRef, { ex_code: exCode, setup_at: nowIso, setup_at_jst: stamp });
+      result = { exCode, exName: app.ex_name, isSandbox, email: app.email, already: false };
+    });
+
+    if (result.already) return { success: true, exCode: result.exCode, exName: result.exName, already: true };
+
+    // 作品枠 (w001..wN) と短縮 QR。addArtworkSlots と同じ buildArtworkSlot を共用
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    const exp = Math.floor(Date.now() / 1000) + ARTWORK_QR_DEFAULT_DAYS * 86400;
     const writes = [];
-    for (let i = 1; i <= initialCount; i++) {
-      const slot = buildArtworkSlot(secret, exCode, i, exp, verifiedEmail, ts);
-      writes.push(
-        db.collection("artworks").doc(slot.docId)
-          .set(slot.data, { merge: true }),
-      );
-      writes.push(
-        db.collection("qr_codes").doc(slot.qrCode).set(slot.qrCodeData),
-      );
+    for (let i = 1; i <= workCount; i++) {
+      const slot = buildArtworkSlot(secret, result.exCode, i, exp, result.email, nowIso);
+      writes.push(db.collection("artworks").doc(slot.docId).set(slot.data, { merge: true }));
+      writes.push(db.collection("qr_codes").doc(slot.qrCode).set(slot.qrCodeData));
     }
     try {
       await Promise.all(writes);
-      artworkCount = writes.length;
     } catch (err) {
-      logger.warn("partial artwork write failed", {
-        exCode,
-        error: err.message,
-      });
+      // 作品枠は作品登録画面の「作品枠を追加」でも作れるので、展覧会の作成自体は成功扱い
+      logger.warn("createExhibition partial slot write failed", { exCode: result.exCode, error: err.message });
     }
-  }
-
-  logger.info("exhibition finalized", {
-    exCode,
-    email: verifiedEmail,
-    artworkCount,
-  });
-  return { success: true, exCode, artworkCount };
-}
-exports.finalizeExhibitionSetup = onCall(
-  { secrets: [ARTIST_TOKEN_SECRET] },
-  finalizeExhibitionSetupImpl,
-);
-
-// =========================================================
-// adminRecoverExhibitionDoc
-//   GAS 認証は通ったが Firestore 書き込みが取りこぼされた展覧会を、
-//   ex_code だけで Firestore に再書き込みする復旧用 Function。
-//   呼び出し側 (admin/recover-exhibition.html) は operator email で
-//   Firebase Auth 済みであることが前提。ここでも request.auth.token.email
-//   を OPERATOR_EMAILS と照合する二重チェック。
-//   GAS 側は ADMIN_SECRET (= GAS_ADMIN_SECRET) でゲート。
-// =========================================================
-async function fetchCanonicalDocFromGas(exCode, adminSecret) {
-  const params = new URLSearchParams({
-    action: "getCanonicalExhibitionDocAdmin",
-    exCode: exCode,
-    adminSecret: adminSecret,
-  });
-  const res = await fetch(GAS_EXEC_URL.value(), {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params,
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error("GAS HTTP " + res.status);
-  }
-  return res.json();
-}
-
-exports.adminRecoverExhibitionDoc = onCall(
-  { secrets: [GAS_ADMIN_SECRET] },
-  async (request) => {
-    const authEmail = String(
-      (request.auth && request.auth.token && request.auth.token.email) || "",
-    ).trim().toLowerCase();
-    if (!authEmail || OPERATOR_EMAILS.indexOf(authEmail) === -1) {
-      throw new HttpsError(
-        "permission-denied",
-        "運営者管理者の Firebase Auth が必要です",
-      );
-    }
-
-    const data = request.data || {};
-    const exCode = String(data.exCode || "").trim();
-    if (!exCode) {
-      throw new HttpsError("invalid-argument", "exCode が必要です");
-    }
-
-    const adminSecret = GAS_ADMIN_SECRET.value();
-    if (!adminSecret) {
-      throw new HttpsError("internal", "GAS_ADMIN_SECRET が未設定です");
-    }
-
-    let result;
+    let mailFailed = false;
     try {
-      result = await fetchCanonicalDocFromGas(exCode, adminSecret);
+      await sendSetupCompletionEmail(result.email, result.exCode, result.exName, result.isSandbox);
     } catch (err) {
-      logger.error("fetchCanonicalDocFromGas threw", {
-        exCode,
-        error: err.message,
-      });
-      throw new HttpsError(
-        "internal",
-        "GAS との通信に失敗しました: " + err.message,
-      );
+      mailFailed = true;
+      logger.error("createExhibition completion mail failed", { exCode: result.exCode, error: err.message });
     }
-    if (!result || !result.success) {
-      logger.warn("GAS rejected admin recovery", {
-        exCode,
-        error: result && result.error,
-      });
-      throw new HttpsError(
-        "failed-precondition",
-        (result && result.error) || "GAS から canonical doc を取得できませんでした",
-      );
-    }
-
-    const canonicalDoc = result.exhibitionDoc;
-    const verifiedEmail = String(result.email || "").trim().toLowerCase();
-    if (!canonicalDoc || typeof canonicalDoc !== "object") {
-      throw new HttpsError("internal", "GAS から exhibitionDoc が返されませんでした");
-    }
-
-    const db = admin.firestore();
-    const exRef = db.collection("exhibitions").doc(exCode);
-    const ts = new Date().toISOString();
-    const exDoc = Object.assign({}, canonicalDoc, {
-      ex_code: exCode,
-      email: verifiedEmail || canonicalDoc.email,
-      recoveredAt: ts,
-    });
-    if (!canonicalDoc.createdAt) {
-      exDoc.createdAt = ts;
-    }
-    try {
-      await exRef.set(exDoc, { merge: true });
-    } catch (err) {
-      logger.error("admin recover write failed", { exCode, error: err.message });
-      throw new HttpsError(
-        "internal",
-        "Firestore 書き込みに失敗しました: " + err.message,
-      );
-    }
-
-    logger.info("exhibition recovered by admin", {
-      exCode,
-      operator: authEmail,
-    });
-    return { success: true, exCode, exhibitionDoc: exDoc };
+    logger.info("exhibition created", { exCode: result.exCode, email: result.email, workCount });
+    return { success: true, exCode: result.exCode, exName: result.exName, mailFailed };
   },
 );
 
@@ -1609,7 +1683,7 @@ function generateShortQrCode() {
 }
 
 // 作品スロット 1 件分の Firestore doc data + seed を生成する純粋ヘルパ。
-// addArtworkSlots (主催者の増分追加) と finalizeExhibitionSetup (セットアップ時の
+// addArtworkSlots (主催者の増分追加) と createExhibition (セットアップ時の
 // 初期 seeding) で共用し、UI/経路で能力差が出ないようにする。
 // 呼び出し側は data と合わせて qr_codes/{qrCode} に qrCodeData を書き込むこと。
 function buildArtworkSlot(secret, exCode, seq, exp, organizerEmail, nowIso) {
@@ -1746,8 +1820,8 @@ exports.addArtworkSlots = onCall(
 //     Storage Rules をバイパス)
 // inquiries は意図的に残置 (運用ポリシー)。
 //
-// GAS の dailySandboxMaintenance は Master SS 行 / Drive フォルダ /
-// 通知メール担当でそのまま併存。
+// 練習モードの通知メール (明日削除 / 削除しました) も scheduledSandboxCleanup が送る
+// (2026-09-24 に GAS dailySandboxMaintenance から移設。マスター・スプレッドシートは使わない)。
 // =========================================================
 
 async function purgeExhibitionInternal(exCode) {
@@ -1838,8 +1912,8 @@ async function purgeExhibitionInternal(exCode) {
 //   organizer 本人 (or operator) が呼べる onCall。
 //   purge と違って exhibitions ドキュメントは消さず、
 //   is_sandbox=false / expire_at=null に更新する。
-//   client (register.html) がこれを呼ぶ前に、GAS 側で Master SS の
-//   is_sandbox を FALSE に更新しておく必要がある。
+//   (以前は client が先に GAS で Master SS を更新していたが、2026-09-24 に SS を退役。
+//    ここだけで完結する)
 // =========================================================
 exports.graduateExhibition = onCall(async (request) => {
   const authEmail = String(
@@ -1968,23 +2042,72 @@ exports.purgeExhibition = onCall(async (request) => {
   return Object.assign({ success: true, exCode }, stats);
 });
 
-// 毎日 5:00 JST に sandbox 展覧会の Firestore + Storage 残骸を掃除。
-// GAS dailySandboxMaintenance (4:00 JST) で Master SS 行 / Drive が消えた直後に走る。
+// 練習モードの通知メール (以前は GAS dailySandboxMaintenance が送っていた。文面も同じ)
+function formatJstDateTime(d) {
+  const s = new Date(d.getTime() + 9 * 3600 * 1000).toISOString();
+  return s.slice(0, 10) + " " + s.slice(11, 16);
+}
+function sendSandboxExpiringMail(email, exCode, exName, expireAt) {
+  const text = [
+    exName + " (" + exCode + ") は練習モードで作成された展覧会です。",
+    "明日 (" + formatJstDateTime(expireAt) + " 頃) 以降に自動的に削除されます。",
+    "",
+    "このまま運用を続けたい場合は、本日中に「本番運用に切替」ボタンを押してください:",
+    "https://qriine.com/register.html?ex=" + exCode + "&tab=manage",
+    "",
+    "削除後はテスト作品データ・コメント・いいねがすべて消えます。",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "Qriine",
+  ].join("\n");
+  return sendMailViaResend({ to: email, subject: "[練習モード] 明日削除されます: " + exName, text, replyTo: SETUP_REPLY_TO });
+}
+function sendSandboxDeletedMail(email, exCode, exName) {
+  const text = [
+    exName + " (" + exCode + ") は練習モードでの試行期間 (14 日) を過ぎたため、自動的に削除されました。",
+    "",
+    "新たに練習を始めたい場合、または本番運用したい場合は再度申請してください:",
+    "https://qriine.com/setup.html",
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "Qriine",
+  ].join("\n");
+  return sendMailViaResend({ to: email, subject: "[練習モード] 削除しました: " + exName, text, replyTo: SETUP_REPLY_TO });
+}
+
+// 毎日 5:00 JST: 練習モードの展覧会について
+//   - 期限まで24時間を切ったら「明日削除されます」を1回だけ送る (sandbox_warned_at で重複防止)
+//   - 期限を過ぎたら Firestore + Storage を削除して「削除しました」を送る
+// (2026-09-24 に GAS dailySandboxMaintenance の役目を統合。マスター・スプレッドシートは使わない)
 exports.scheduledSandboxCleanup = onSchedule(
-  { schedule: "0 5 * * *", timeZone: "Asia/Tokyo" },
+  { schedule: "0 5 * * *", timeZone: "Asia/Tokyo", secrets: [RESEND_API_KEY] },
   async () => {
     const db = admin.firestore();
     const now = new Date();
+    const soon = new Date(now.getTime() + 24 * 3600 * 1000);
     const snap = await db.collection("exhibitions")
       .where("is_sandbox", "==", true).get();
     let purged = 0;
     let failed = 0;
+    let warned = 0;
     for (const doc of snap.docs) {
       const data = doc.data() || {};
       const expireAtStr = String(data.expire_at || "");
       if (!expireAtStr) continue;
       const expireAt = new Date(expireAtStr);
-      if (isNaN(expireAt.getTime()) || expireAt > now) continue;
+      if (isNaN(expireAt.getTime())) continue;
+      const email = String(data.email || "").trim();
+      const exName = data.ex_name || doc.id;
+      if (expireAt > now) {
+        if (expireAt <= soon && !data.sandbox_warned_at && email) {
+          try {
+            await sendSandboxExpiringMail(email, doc.id, exName, expireAt);
+            await doc.ref.update({ sandbox_warned_at: now.toISOString() });
+            warned++;
+          } catch (e) {
+            logger.warn("sandbox expiring mail failed", { exCode: doc.id, error: e.message });
+          }
+        }
+        continue;
+      }
       try {
         const stats = await purgeExhibitionInternal(doc.id);
         logger.info("scheduledSandboxCleanup purged", { exCode: doc.id, stats });
@@ -1994,9 +2117,17 @@ exports.scheduledSandboxCleanup = onSchedule(
           exCode: doc.id, error: e.message,
         });
         failed++;
+        continue;
+      }
+      if (email) {
+        try {
+          await sendSandboxDeletedMail(email, doc.id, exName);
+        } catch (e) {
+          logger.warn("sandbox deleted mail failed", { exCode: doc.id, error: e.message });
+        }
       }
     }
-    logger.info("scheduledSandboxCleanup complete", { purged, failed });
+    logger.info("scheduledSandboxCleanup complete", { purged, failed, warned });
   },
 );
 
@@ -3306,9 +3437,14 @@ const GAS_PROXY_ACTIONS = {
   bumpArtworkCount: "organizer",
   graduateExhibition: "organizer",
 };
+// マスター・スプレッドシート退役 (2026-09-24) で GAS に送らなくなった操作。
+// 認可だけ通して成功を返す (callGasAuthed 内)。sendArtistGuide は CF で直接送る。
+const GAS_RETIRED_ACTIONS = [
+  "updateExName", "addArtworks", "saveRegistrationFields", "bumpArtworkCount", "graduateExhibition",
+];
 
 exports.callGasAuthed = onCall(
-  { secrets: [GAS_ADMIN_SECRET] },
+  { secrets: [GAS_ADMIN_SECRET, RESEND_API_KEY] },
   async (request) => {
     const authEmail = String(
       (request.auth && request.auth.token && request.auth.token.email) || "",
@@ -3349,6 +3485,33 @@ exports.callGasAuthed = onCall(
           );
         }
       }
+    }
+
+    // マスター・スプレッドシートへの写しだけだった操作 (2026-09-24 退役)。Firestore 側の
+    // 処理は各画面・CF が済ませているので何もしない。古い画面が開いたままでも失敗させない
+    if (GAS_RETIRED_ACTIONS.indexOf(action) !== -1) {
+      return { success: true, retired: true };
+    }
+
+    // 作家への案内メール: 宛先 (主催者メール) を Firestore の展覧会データから取り、ここで送る
+    // (以前は GAS がスプレッドシートの行から宛先を引いて送っていた)
+    if (action === "sendArtistGuide") {
+      const exCode = String(params.ex || params.exCode || "").trim();
+      const subject = String(params.subject || "").trim().slice(0, 300);
+      const body = String(params.body || "").slice(0, 20000);
+      if (!subject || !body) {
+        throw new HttpsError("invalid-argument", "パラメータが不足しています。");
+      }
+      const exSnap = await admin.firestore().collection("exhibitions").doc(exCode).get();
+      const to = exSnap.exists ? String(exSnap.data().email || "").trim() : "";
+      if (!to) throw new HttpsError("not-found", "主催者のメールアドレスが見つかりません。");
+      try {
+        await sendMailViaResend({ to, subject, text: body, replyTo: SETUP_REPLY_TO });
+      } catch (err) {
+        logger.error("sendArtistGuide mail failed", { exCode, error: err.message });
+        throw new HttpsError("internal", "メールを送れませんでした。時間をおいてもう一度お試しください。");
+      }
+      return { success: true, to };
     }
 
     const adminSecret = GAS_ADMIN_SECRET.value();

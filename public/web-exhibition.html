@@ -474,10 +474,10 @@
       const hintEl = document.getElementById('notOrganizerHint');
       if (!currentExDocExists) {
         hintEl.innerText = '展覧会 doc (' + currentEx + ') が Firestore に見つかりません。'
-          + 'admin/recover-exhibition.html で復旧するか、運営者 (rymist1@gmail.com) でログインしてください。';
+          + 'お手数ですが、画面下の「お問い合わせ」から運営者にご連絡ください。';
       } else if (!currentExEmail) {
         hintEl.innerText = '展覧会 doc に主催者 email フィールドが設定されていません。'
-          + 'admin/recover-exhibition.html で復旧するか、運営者 (rymist1@gmail.com) でログインしてください。';
+          + 'お手数ですが、画面下の「お問い合わせ」から運営者にご連絡ください。';
       } else {
         hintEl.innerText = '主催者として登録されているのは ' + currentExEmail + ' です。'
           + 'そのアカウントか、運営者 (rymist1@gmail.com) でログインしてください。';

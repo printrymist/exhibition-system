@@ -358,13 +358,16 @@
 
     async function loadNewMode(exCode) {
       try {
-        const res = await gasCall({ action: 'getInquiryContext', ex: exCode });
+        // 展覧会情報は Firestore から直接読む (exhibitions の get は公開)。以前は GAS がマスター・
+        // スプレッドシートの行から返していた (2026-09-24 に Firestore へ一本化)。
+        const snap = await db.collection('exhibitions').doc(exCode).get();
         document.getElementById('loadingArea').style.display = 'none';
-        if (!res.success || !res.context) {
+        const ex = snap.exists ? (snap.data() || {}) : null;
+        if (!ex || !ex.email) {
           showError('展覧会情報を取得できませんでした。コードを確認してください。');
           return;
         }
-        newCtx = res.context;
+        newCtx = { ex_code: exCode, ex_name: ex.ex_name || '', organizer: ex.organizer || '', email: ex.email || '' };
         document.getElementById('newCtxExName').innerText = newCtx.ex_name || '(名称未設定)';
         document.getElementById('newCtxExCode').innerText = newCtx.ex_code;
         document.getElementById('newCtxOrganizer').innerText = newCtx.organizer || '(未登録)';
@@ -532,23 +535,6 @@
         } catch (notifyErr) {
           notifyErrMsg = notifyErr.message;
         }
-        // SS 側 inquiries_index に行追加（fire-and-forget）
-        const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
-        gasCall({
-          action: 'appendInquiryToIndex',
-          payload: JSON.stringify({
-            inquiry_id: docRef.id,
-            ex_code: newCtx.ex_code,
-            ex_name: newCtx.ex_name || '',
-            organizer: newCtx.organizer || '',
-            email: newCtx.email || '',
-            category, subcategory,
-            subject,
-            status: 'open',
-            created_at: nowStr,
-            last_message_at: nowStr
-          })
-        }).catch(e => console.warn('appendInquiryToIndex failed:', e));
         if (notifyOk) {
           showSubmitMsg('✅ 送信しました。返信は登録メールアドレスへお送りします。', 'success');
         } else {
@@ -643,16 +629,6 @@
         });
         // status を open に戻す（運営者の Inbox で気づけるように）。失敗しても続行。
         try { await docRef.update({ status: 'open' }); } catch (e) { console.warn('status update skipped:', e); }
-        // SS 側 inquiries_index も更新（fire-and-forget）
-        const nowStr = new Date().toLocaleString('ja-JP', { hour12: false }).replace(/\//g, '/');
-        gasCall({
-          action: 'updateInquiryInIndex',
-          payload: JSON.stringify({
-            inquiry_id: threadCtx.id,
-            status: 'open',
-            last_message_at: nowStr
-          })
-        }).catch(e => console.warn('updateInquiryInIndex failed:', e));
         // 通知メール
         let notifyOk = false, notifyErrMsg = '';
         try {

@@ -3089,16 +3089,9 @@ ${artistMessage}
       msgEl.innerText = '処理中...';
 
       try {
-        // 1. GAS の master sheet を更新 (is_sandbox=FALSE, expire_at='')
-        const gasRes = await gasCallAuthed('graduateExhibition', {
-          ex: ex,
-          email: user.email
-        });
-        if (!gasRes || !gasRes.success) {
-          throw new Error(gasRes && gasRes.error ? gasRes.error : 'GAS 更新失敗');
-        }
-
-        // 2. Firestore + Storage cleanup と is_sandbox flag 更新を CF に任せる
+        // Firestore + Storage cleanup と is_sandbox flag 更新を CF に任せる。
+        // (以前はこの前に GAS でマスター・スプレッドシートを更新し、その成功を必須にしていた。
+        //  2026-09-24 にスプレッドシートを退役したので CF だけで完結する)
         //    (rules で artworks / likes の delete は operator 限定のため、
         //     organizer 本人で叩くと permission-denied になる)
         //    keepData=true のときは CF が削除をスキップ (練習データをそのまま本番化)。
@@ -3158,9 +3151,6 @@ ${artistMessage}
         const d = (res && res.data) || {};
         if (!d.success) throw new Error('作品枠の追加に失敗しました');
 
-        // Master SS の人間台帳カウンタ (artworks_total) を同期 (fire-and-forget)。
-        gasCallAuthed('bumpArtworkCount', { ex: currentEx, dT: d.added, dR: 0 })
-          .catch(e => console.warn('bumpArtworkCount sync failed:', e));
 
         msg.style.color = '#1a73e8';
         msg.innerText = `✅ ${d.added}件の作品枠を追加しました。`;
@@ -3233,9 +3223,6 @@ ${artistMessage}
         fields_confirmed_at: nowIso,
         updatedAt: nowIso
       }, { merge: true });
-      // SS にも反映（caption 側の参照向け、fire-and-forget）
-      gasCallAuthed('saveRegistrationFields', { ex: exCode, fieldsJson: fieldsJson })
-        .catch(e => console.warn('SS saveRegistrationFields sync failed:', e));
       return { success: true };
     };
     window.fsGetRegistrationFields = async (exCode) => {
@@ -3305,8 +3292,6 @@ ${artistMessage}
       if (candidates.length === 0) return { success: false, error: '登録可能な空きがありません。すべての作品枠が埋まっています。' };
       const targetId = candidates[0].artwork_id;
       await window.fsSetArtwork(exCode, targetId, { ...data, status: "1" });
-      gasCallAuthed('bumpArtworkCount', { ex: exCode, dT: 0, dR: 1 })
-        .catch(e => console.warn('bumpArtworkCount failed:', e));
       return { success: true, artworkId: targetId };
     };
     window.fsUpdateArtwork = async (exCode, artworkId, artworkData, artistData, originalArtist) => {
@@ -3360,9 +3345,6 @@ ${artistMessage}
     window.fsDeleteArtwork = async (exCode, artworkId) => {
       // 削除はスロットを空き枠 (status='0') に戻し、作家関連フィールドもクリアする。
       // Cloud Function 経由なので Firestore Rules を引き締めても通る。
-      const docRef = fsDb.collection('artworks').doc(exCode + '_' + artworkId);
-      const snap = await docRef.get();
-      const wasRegistered = snap.exists && (snap.data().status || '').toString().trim() === '1';
       await window.fsSetArtwork(exCode, artworkId, {
         status: "0",
         title: "", title_en: "",
@@ -3373,10 +3355,6 @@ ${artistMessage}
         image_url: "",
         insta: "", x: "", facebook: "", web: "", shop_url: "",
       });
-      if (wasRegistered) {
-        gasCallAuthed('bumpArtworkCount', { ex: exCode, dT: 0, dR: -1 })
-          .catch(e => console.warn('bumpArtworkCount failed:', e));
-      }
     };
   </script>
   <script src="js/sandbox-badge.js?v=20260505b"></script>
