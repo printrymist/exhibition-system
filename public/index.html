@@ -30,12 +30,45 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: white;
+      background: #f4f4f9;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      padding: 15px; /* body と同じ余白にして、差し替え時にカードの位置・幅が変わらないように */
+      box-sizing: border-box;
+      overflow-y: auto;
       z-index: 20000;
+    }
+
+    /* 読み込み中は作品画面の骨組みを先に出す (Cloud Function の起動待ちで初回だけ 2〜3 秒かかるため)。
+       展覧会名は Firestore から直接読めるので先に本物を入れ、画像・タイトル・作家名はグレーの仮置き。 */
+    .skel-wrap { width: 100%; }
+    #unityGlobalLoading .skel-card { margin: 0 auto; }
+    .skel-block {
+      background: linear-gradient(90deg, #eee 0%, #f6f6f6 50%, #eee 100%);
+      background-size: 200% 100%;
+      animation: skelShimmer 1.4s ease-in-out infinite;
+      border-radius: 8px;
+    }
+    .skel-img { width: 100%; aspect-ratio: 4 / 3; margin-bottom: 20px; }
+    .skel-bar { height: 22px; margin: 0 auto 10px; }
+    .skel-exname-bar { height: 14px; width: 45%; margin: 0 auto; }
+    .skel-status {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 22px; color: #888; font-size: 0.9em;
+    }
+    .skel-spinner {
+      width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #1a73e8;
+      border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0;
+    }
+    #globalLoadingSlow {
+      display: none; margin-top: 12px; padding: 10px 12px; background: #fff8e1; color: #8a6d3b;
+      border: 1px solid #ffe0a3; border-radius: 8px; font-size: 0.85em; line-height: 1.6;
+    }
+    @keyframes skelShimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
     }
 
     .reg-card {
@@ -224,6 +257,11 @@
       margin-bottom: 20px;
       display: none;
     }
+    /* 画像が届くまで場所を取っておき、下の文字やボタンが後から押し下げられる幅を小さくする */
+    .work-img.img-pending {
+      aspect-ratio: 4 / 3;
+      background: #eee;
+    }
 
     .work-info h2 {
       margin: 0;
@@ -399,8 +437,16 @@
   <!-- 旧 PROMPT_PASSWORD / SNS_SYNC_REQUEST モーダル類は Phase 5-B / 6 で機能撤去済 (legacy cleanup 2026-05-09) -->
 
   <div id="unityGlobalLoading">
-    <div class="spinner" style="border-top-color: #1a73e8;"></div>
-    <div id="globalLoadingMsg" style="font-weight:bold; color:#666;">作品ステータスを確認中...</div>
+    <div class="skel-wrap"><div class="ans-container skel-card" aria-busy="true">
+      <div class="ex-header" id="skelExName"><div class="skel-block skel-exname-bar"></div></div>
+      <div class="skel-block skel-img"></div>
+      <div class="skel-block skel-bar" style="width:70%;"></div>
+      <div class="skel-block skel-bar" style="width:40%; height:16px;"></div>
+      <div class="skel-status" role="status">
+        <span class="skel-spinner"></span><span id="globalLoadingMsg">作品を読み込んでいます</span>
+      </div>
+      <div id="globalLoadingSlow">通信に時間がかかっています。そのままお待ちください。</div>
+    </div></div>
   </div>
 
   <!-- QR パラメータ不備・読み込み失敗時の案内カード。
@@ -567,7 +613,8 @@
     // =========================================================
     const i18n = {
       ja: {
-        globalLoading:        "作品ステータスを確認中...",
+        globalLoading:        "作品を読み込んでいます",
+        globalLoadingSlow:    "通信に時間がかかっています。そのままお待ちください。",
         langBtn:              "EN",
         ansLoading:           "読み込み中...",
         ansAlreadyLiked:      "いいね受付済みです、追加コメントを受け付けます。",
@@ -605,7 +652,8 @@
         regError:             "登録に失敗しました。通信環境を確認して、もう一度お試しください。解決しないときは主催者にご連絡ください。",
       },
       en: {
-        globalLoading:        "Checking artwork status...",
+        globalLoading:        "Loading artwork…",
+        globalLoadingSlow:    "This is taking longer than usual. Please wait a moment.",
         langBtn:              "JP",
         ansLoading:           "Loading...",
         ansAlreadyLiked:      "You've already liked this. You can still leave a comment.",
@@ -712,6 +760,7 @@
       document.getElementById('langToggle').innerText = t('langBtn');
       document.getElementById('langToggleReg').innerText = t('langBtn');
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
+      document.getElementById('globalLoadingSlow').innerText = t('globalLoadingSlow');
       document.getElementById('ansLoading').innerText = t('ansLoading');
       document.getElementById('ansAlreadyLikedMsg').innerText = t('ansAlreadyLiked');
       document.getElementById('ansSnsLabel').innerText = t('ansSnsLabel');
@@ -785,10 +834,47 @@
       return _visitorAuthReady;
     }
 
+    // 読み込み中の骨組み画面。8 秒を過ぎたら「時間がかかっています」を添える
+    // (会場の電波が弱いと 10 秒以上かかることがあり、待っていいのか分からなくなるため)。
+    let _loadingSlowTimer = null;
+    function showLoading() {
+      const el = document.getElementById('unityGlobalLoading');
+      el.style.display = 'flex';
+      document.getElementById('globalLoadingSlow').style.display = 'none';
+      clearTimeout(_loadingSlowTimer);
+      _loadingSlowTimer = setTimeout(() => {
+        if (el.style.display !== 'none') {
+          document.getElementById('globalLoadingSlow').style.display = 'block';
+        }
+      }, 8000);
+    }
+    function hideLoading() {
+      clearTimeout(_loadingSlowTimer);
+      document.getElementById('unityGlobalLoading').style.display = 'none';
+    }
+
+    // 展覧会データは Cloud Function を通らず直接読めて速いので、先に読んで骨組みに展覧会名を出す。
+    // 読んだ結果は fsGetArtworkData でそのまま使う (同じ文書を 2 回読まない)。
+    let _exSnapPrefetch = null;
+    function prefetchExhibition(ex) {
+      const p = fsDb.collection('exhibitions').doc(ex).get();
+      _exSnapPrefetch = { ex: ex, p: p };
+      p.then(snap => {
+        const name = snap.exists ? String((snap.data() || {}).ex_name || '') : '';
+        if (name) document.getElementById('skelExName').innerText = name;
+      }).catch(() => { /* 失敗は fsGetArtworkData 側で案内する */ });
+    }
+    function takeExhibitionSnap(ex) {
+      const pre = _exSnapPrefetch;
+      _exSnapPrefetch = null;
+      if (pre && pre.ex === ex) return pre.p;
+      return fsDb.collection('exhibitions').doc(ex).get();
+    }
+
     // 読み込み失敗・パラメータ不備のときに画面内の案内カードを出す。
     // (alert() だけだと閉じた後に真っ白になるため使わない)
     function showGlobalNotice(title, text) {
-      document.getElementById('unityGlobalLoading').style.display = 'none';
+      hideLoading();
       document.getElementById('regWrapper').style.display = 'none';
       document.getElementById('ansWrapper').style.display = 'none';
       document.getElementById('globalNoticeTitle').innerText = title;
@@ -797,7 +883,7 @@
     }
 
     function reloadApp() {
-      document.getElementById('unityGlobalLoading').style.display = 'flex';
+      showLoading();
       document.getElementById('globalLoadingMsg').innerText = t('globalLoading');
       document.getElementById('regWrapper').style.display = 'none';
       document.getElementById('ansWrapper').style.display = 'none';
@@ -811,7 +897,7 @@
 
       // 🟣 Firestore から作品ステータスを取得（フェーズ3）
       fsGetArtworkData(exVal, idVal).then(data => {
-        document.getElementById('unityGlobalLoading').style.display = 'none';
+        hideLoading();
         if (!data.success) {
           showGlobalNotice('作品を読み込めませんでした',
             (data.msg || 'データを取得できませんでした。') +
@@ -840,7 +926,7 @@
       // 短縮 QR コードの解決 (qriine.com/A/{code})。
       // qr_codes/{code} から従来の ex/id/exp/sig を引いて以降のフローに合流する。
       if (shortQrMatch && !exVal) {
-        document.getElementById('unityGlobalLoading').style.display = 'flex';
+        showLoading();
         try {
           const snap = await fsDb.collection('qr_codes')
             .doc(shortQrMatch[1].toUpperCase()).get();
@@ -873,11 +959,12 @@
         return;
       }
 
-      document.getElementById('unityGlobalLoading').style.display = 'flex';
+      showLoading();
+      prefetchExhibition(exVal);
 
       // 🟣 Firestore から作品データ + 展覧会名を取得（フェーズ3）
       fsGetArtworkData(exVal, idVal).then(data => {
-        document.getElementById('unityGlobalLoading').style.display = 'none';
+        hideLoading();
         if (!data.success) {
           showGlobalNotice('作品を読み込めませんでした',
             (data.msg || 'データを取得できませんでした。') +
@@ -1335,8 +1422,11 @@
           var match = imgSrc.match(/[-\w]{25,}/);
           if (match) imgSrc = "https://drive.google.com/thumbnail?id=" + match[0] + "&sz=w400";
         }
-        document.getElementById('ansMainImg').src = imgSrc;
-        document.getElementById('ansMainImg').style.display = 'block';
+        const mainImg = document.getElementById('ansMainImg');
+        mainImg.classList.add('img-pending');
+        mainImg.onload = mainImg.onerror = () => mainImg.classList.remove('img-pending');
+        mainImg.src = imgSrc;
+        mainImg.style.display = 'block';
       }
       ansShowSnsButtons(res.sns);
       if (localStorage.getItem("voted_" + ex + "_" + id)) {
@@ -1608,7 +1698,7 @@
         const accessToken = _resolveArtworkAccessToken(exCode, artworkId);
         const [aRes, eSnap] = await Promise.all([
           _getArtworkFn({ exCode: exCode, artworkId: artworkId, accessToken: accessToken }),
-          fsDb.collection('exhibitions').doc(exCode).get()
+          takeExhibitionSnap(exCode)
         ]);
         if (eSnap.exists && window.sandboxBadge) {
           window.sandboxBadge.render('sandboxBadge', eSnap.data(), 'visitor', { maxWidth: '600px' });
