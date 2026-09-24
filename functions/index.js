@@ -2332,6 +2332,20 @@ exports.submitArtwork = onCall(
       }
     }
 
+    // 提出とロックの分離 (2026-09-24):
+    // 作家の「✓ 提出する」は「できました」の合図 (submitted_at) で、ロックはしない。ロックは主催者だけ。
+    // 提出後に作家が内容を変えたら changed_after_submit_at を付けて主催者に見えるようにする。
+    // これらの印と修正依頼 (edit_request) はサーバーだけが付け外しする (作家は直接書けない)。
+    // 作家は提出を submit:true で送る。古い画面が送る is_locked:true も提出として扱う (ロックしない)。
+    const SUBMIT_MANAGED_FIELDS = ["submitted_at", "changed_after_submit_at", "edit_request"];
+    let artistSubmit = false;
+    if (isArtistAuth) {
+      artistSubmit = cleanFields.submit === true || cleanFields.is_locked === true;
+      delete cleanFields.is_locked;
+      SUBMIT_MANAGED_FIELDS.forEach((k) => delete cleanFields[k]);
+    }
+    delete cleanFields.submit;
+
     // B-1: artist_token は token に紐付いた artistName しか触れない。
     // - 既存 doc の artist が空でない場合、token の artist と一致すること
     //   (空きスロット status='0' / artist='' は初回登録なので通る)
@@ -2433,6 +2447,32 @@ exports.submitArtwork = onCall(
       artwork_id: artworkId,
       updatedAt: new Date().toISOString(),
     });
+    if (existingSnap.exists) {
+      const existing = existingSnap.data() || {};
+      // admin.firestore.FieldValue はエミュレータの差し替えで見えないことがあるので、正式な入口から読む
+      const del = require("firebase-admin/firestore").FieldValue.delete();
+      if (isArtistAuth) {
+        if (String(cleanFields.status) === "0") {
+          // 作家が作品を削除 (空き枠に戻した): 提出の印も修正依頼も消す
+          writePayload.submitted_at = del;
+          writePayload.changed_after_submit_at = del;
+          writePayload.edit_request = del;
+        } else if (artistSubmit) {
+          writePayload.submitted_at = writePayload.updatedAt;
+          writePayload.changed_after_submit_at = del;
+        } else if (existing.submitted_at && Object.keys(cleanFields).some(
+          (k) => JSON.stringify(cleanFields[k]) !== JSON.stringify(existing[k] === undefined ? "" : existing[k]) &&
+            !(cleanFields[k] === "" && existing[k] == null),
+        )) {
+          // 値が実際に変わったときだけ。作家情報は同じ作家の全作品に同じ値で書き込まれる
+          // (同作家反映) ので、比べないと何も変えていない提出済み作品にまで印が付く
+          writePayload.changed_after_submit_at = writePayload.updatedAt;
+        }
+      } else if (cleanFields.is_locked === false && existing.edit_request) {
+        // 主催者がロックを解除した = 修正依頼に応えた。依頼は閉じる
+        writePayload.edit_request = del;
+      }
+    }
     if (!existingSnap.exists) {
       writePayload.security_key = writePayload.security_key || "";
       // β-3 server-managed fields: create 時に必ず初期化。
@@ -2809,6 +2849,99 @@ function decodeImageBase64(imageBase64, maxBytes) {
   }
   return buffer;
 }
+
+// 作家 → 主催者の「修正を依頼」(2026-09-24)。ロックされた作品は作家から直せないので、
+// 直したい内容を送ってもらい、作品に edit_request として残す + 主催者にメールで知らせる。
+// 主催者が作品登録の画面でロックを解除すると依頼は閉じる (submitArtwork 側)。
+// 作家の招待リンク (exhibition / artist token) と作品 QR (artwork token) から呼べる。
+exports.requestArtworkEdit = onCall(
+  { secrets: [ARTIST_TOKEN_SECRET, RESEND_API_KEY] },
+  async (request) => {
+    const data = request.data || {};
+    const exCode = String(data.exCode || "").trim();
+    const artworkId = String(data.artworkId || "").trim();
+    const message = String(data.message || "").trim();
+    const tok = data.accessToken || {};
+    if (!/^[A-Za-z0-9_-]+$/.test(exCode) || !/^[A-Za-z0-9_-]+$/.test(artworkId)) {
+      throw new HttpsError("invalid-argument", "exCode / artworkId が不正です");
+    }
+    if (!message) {
+      throw new HttpsError("invalid-argument", "直したい内容を書いてください");
+    }
+    if (message.length > 1000) {
+      throw new HttpsError("invalid-argument", "1000 文字以内で書いてください");
+    }
+    const secret = ARTIST_TOKEN_SECRET.value();
+    if (!secret) {
+      throw new HttpsError("internal", "ARTIST_TOKEN_SECRET が未設定です");
+    }
+    const authMode = verifyHmacAccessToken(tok, exCode, artworkId, secret);
+    if (!authMode) {
+      throw new HttpsError(
+        "permission-denied",
+        "このリンクは使用できません。主催者から新しい招待リンクを受け取ってください。",
+      );
+    }
+    const db = admin.firestore();
+    const ref = db.collection("artworks").doc(exCode + "_" + artworkId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "対象の作品が見つかりません");
+    }
+    const art = snap.data() || {};
+    if (authMode === "artist_token" && !isSameArtist(art.artist, tok.artist)) {
+      throw new HttpsError("permission-denied", "このリンクでは他の作家の作品に依頼できません");
+    }
+    if (art.is_locked !== true) {
+      throw new HttpsError("failed-precondition", "この作品はロックされていないので、そのまま直せます");
+    }
+    const prev = art.edit_request || {};
+    const prevAt = Date.parse(String(prev.at || ""));
+    if (!isNaN(prevAt) && Date.now() - prevAt < 10 * 60 * 1000) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "修正の依頼はすでに送っています。少し時間をおいてから、もう一度お送りください。",
+      );
+    }
+    const at = new Date().toISOString();
+    await ref.set({ edit_request: { message, at, artist: String(art.artist || "") } }, { merge: true });
+
+    let mailed = false;
+    try {
+      const exSnap = await db.collection("exhibitions").doc(exCode).get();
+      const ex = exSnap.exists ? (exSnap.data() || {}) : {};
+      const to = String(ex.email || "").trim();
+      if (to) {
+        const title = art.title || art.title_en || artworkId;
+        const text = [
+          (ex.ex_name || exCode) + " の作家から、作品の修正の依頼が届きました。",
+          "",
+          "作品: " + title + " (" + artworkId + ")",
+          "作家: " + (art.artist || ""),
+          "",
+          "── 直したい内容 ──",
+          message,
+          "──────────",
+          "",
+          "作品はロックされているため、作家からは直せません。",
+          "作品登録の画面でこの作品のロックを解除すると、作家が自分で直せるようになります",
+          "(主催者が代わりに直すこともできます):",
+          "https://qriine.com/register.html?ex=" + encodeURIComponent(exCode),
+          "━━━━━━━━━━━━━━━━━━━━━━━━",
+          "Qriine",
+        ].join("\n");
+        await sendMailViaResend({
+          to, subject: "[修正の依頼] " + title + " / " + (art.artist || ""), text, replyTo: SETUP_REPLY_TO,
+        });
+        mailed = true;
+      }
+    } catch (e) {
+      logger.warn("requestArtworkEdit mail failed", { exCode, artworkId, error: e && e.message });
+    }
+    logger.info("requestArtworkEdit", { exCode, artworkId, authMode, mailed });
+    return { success: true, at, mailed };
+  },
+);
 
 exports.uploadArtworkImage = onCall(
   { secrets: [ARTIST_TOKEN_SECRET], memory: "512MiB", timeoutSeconds: 60 },

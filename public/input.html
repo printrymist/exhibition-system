@@ -791,16 +791,39 @@
       const card = document.createElement('div');
       card.className = 'artwork-card'; card.dataset.id = art.artwork_id;
       const header = document.createElement('div'); header.className = 'artwork-card-header';
-      // is_locked が true なら 🔒 アイコンを chevron の前に表示 (主催者ロック中)
-      const lockIcon = art.is_locked
-        ? '<span class="artwork-lock" title="主催者ロック中" style="color:#888; margin-right:4px;">🔒</span>'
-        : '';
-      header.innerHTML = `<span class="artwork-id-badge">${escapeHtmlAttr(art.artwork_id)}</span><span class="artwork-card-title">${escapeHtmlAttr(art.title || art.title_en || '（タイトルなし）')}</span>${lockIcon}<span class="artwork-chevron">▼</span>`;
+      header.innerHTML = `<span class="artwork-id-badge">${escapeHtmlAttr(art.artwork_id)}</span><span class="artwork-card-title">${escapeHtmlAttr(art.title || art.title_en || '（タイトルなし）')}</span><span class="artwork-status">${cardStatusIcons(art)}</span><span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleCard(card, art));
       card.appendChild(header);
       const panel = document.createElement('div'); panel.className = 'edit-panel'; panel.id = 'editPanel_' + art.artwork_id;
       card.appendChild(panel);
       return card;
+    }
+
+    // カード見出しの状態: 🔒 主催者がロック / ✉ 修正を依頼済み / ✓ 提出済み / ✎ 提出後に変更あり
+    function cardStatusIcons(art) {
+      const icon = (ch, title, color) => '<span title="' + title + '" style="color:' + color + '; margin-right:4px;">' + ch + '</span>';
+      if (art.is_locked) {
+        return icon('🔒', '主催者がロックしています', '#888') + (art.edit_request ? icon('✉', '修正の依頼を送りました', '#1a73e8') : '');
+      }
+      if (art.submitted_at) {
+        return art.changed_after_submit_at ? icon('✎', '提出後に変更しました (もう一度提出してください)', '#b06000') : icon('✓', '提出済み', '#2e7d32');
+      }
+      return '';
+    }
+    function refreshCard(artworkId) {
+      const art = (existingWorks || []).find(a => a && a.artwork_id === artworkId);
+      const card = document.querySelector('.artwork-card[data-id="' + artworkId + '"]');
+      if (!art || !card) return;
+      const st = card.querySelector('.artwork-status');
+      if (st) st.innerHTML = cardStatusIcons(art);
+      const area = document.getElementById('submitArea_' + artworkId);
+      if (area) renderSubmitArea(area, art);
+    }
+    function fmtJst(iso) {
+      const t = Date.parse(iso || '');
+      if (isNaN(t)) return '';
+      const d = new Date(t + 9 * 3600 * 1000).toISOString();
+      return d.slice(5, 10).replace('-', '/') + ' ' + d.slice(11, 16);
     }
 
     function toggleCard(card, art) {
@@ -820,7 +843,7 @@
       if (locked) {
         const lockBanner = document.createElement('div');
         lockBanner.style.cssText = 'background:#fff3e0; border:1px solid #ffb74d; border-radius:6px; padding:10px 12px; margin-bottom:14px; font-size:0.88em; color:#a85700; line-height:1.55;';
-        lockBanner.innerHTML = '🔒 <b>主催者によりロックされています</b><br>編集が必要な場合は主催者にご連絡ください。';
+        lockBanner.innerHTML = '🔒 <b>主催者によりロックされています</b><br>直したいところがあれば、下の「修正を依頼する」から主催者に伝えてください。';
         panel.appendChild(lockBanner);
       }
 
@@ -865,19 +888,12 @@
         deleteArea.appendChild(btnDelete); panel.appendChild(deleteArea);
       }
 
-      // 「✓ 提出する」ボタン (ロック前のみ)。これで is_locked=true を Firestore に書く。
-      if (!locked) {
-        panel.appendChild(makeDivider());
-        const submitBanner = document.createElement('div');
-        submitBanner.style.cssText = 'background:#e8f5e9; border:1px solid #66bb6a; border-radius:6px; padding:10px 12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;';
-        submitBanner.innerHTML = `
-          <span style="flex:1; min-width:200px; font-size:0.85em; color:#2e7d32; line-height:1.5;">編集が完了したら「✓ 提出する」を押してください。<br>提出後は主催者の許可なしで編集できなくなります。</span>
-          <button type="button" id="btnSubmit_${art.artwork_id}"
-            style="padding:6px 14px; background:#2e7d32; color:white; border:none; border-radius:5px; font-size:0.88em; font-weight:bold; cursor:pointer; white-space:nowrap;">✓ 提出する</button>
-        `;
-        panel.appendChild(submitBanner);
-        document.getElementById('btnSubmit_' + art.artwork_id).addEventListener('click', () => submitArtworkLock(art));
-      }
+      // 提出 / 修正依頼の欄 (状態が変わったら refreshCard で描き直す)
+      panel.appendChild(makeDivider());
+      const submitArea = document.createElement('div');
+      submitArea.id = 'submitArea_' + art.artwork_id;
+      panel.appendChild(submitArea);
+      renderSubmitArea(submitArea, art);
 
       // ロック中: 全 input/textarea/select/file を disabled に (read-only モード)
       if (locked) {
@@ -885,6 +901,92 @@
           el.disabled = true;
         });
       }
+    }
+
+    // 提出は「できました」の合図で、ロックはしない (2026-09-24〜)。ロックするのは主催者だけ。
+    // - 未提出: 「✓ 提出する」
+    // - 提出済み: まだ直せる。直すと主催者に「提出後に変更あり」と伝わり、「もう一度提出する」が出る
+    // - ロック中: 作家からは直せないので「修正を依頼する」(主催者にメール + 作品に記録)
+    function renderSubmitArea(area, art) {
+      const box = (bg, border, color) => 'background:' + bg + '; border:1px solid ' + border + '; border-radius:6px; padding:10px 12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:0.85em; color:' + color + '; line-height:1.55;';
+      const btnStyle = (bg) => 'padding:6px 14px; background:' + bg + '; color:white; border:none; border-radius:5px; font-size:0.95em; font-weight:bold; cursor:pointer; white-space:nowrap;';
+      const id = art.artwork_id;
+      if (art.is_locked) {
+        const req = art.edit_request;
+        area.innerHTML = '<div style="' + box('#f7faff', '#c5d9f7', '#1a4f9c') + '">'
+          + '<span style="flex:1; min-width:200px;">' + (req
+            ? '✉ 修正の依頼を送りました（' + escapeHtmlAttr(fmtJst(req.at)) + '）。主催者がロックを解除すると、ここから直せるようになります。'
+            : '直したいところがあれば、内容を書いて主催者に依頼できます。')
+          + '</span><button type="button" id="btnRequestEdit_' + escapeHtmlAttr(id) + '" style="' + btnStyle('#1a73e8') + '">'
+          + (req ? 'もう一度依頼する' : '✉ 修正を依頼する') + '</button></div>';
+        document.getElementById('btnRequestEdit_' + id).addEventListener('click', () => requestEdit(art));
+        return;
+      }
+      if (art.submitted_at && !art.changed_after_submit_at) {
+        area.innerHTML = '<div style="' + box('#e8f5e9', '#66bb6a', '#2e7d32') + '">'
+          + '<span>✓ 提出済みです（' + escapeHtmlAttr(fmtJst(art.submitted_at)) + '）。主催者がロックするまでは直せます。直したときは、もう一度「提出する」を押してください。</span></div>';
+        return;
+      }
+      const again = !!art.submitted_at;
+      area.innerHTML = '<div style="' + box(again ? '#fff8e1' : '#e8f5e9', again ? '#ffe0a3' : '#66bb6a', again ? '#8a6d3b' : '#2e7d32') + '">'
+        + '<span style="flex:1; min-width:200px;">' + (again
+          ? '提出した後に内容を変えました。主催者にも「変更あり」と伝わっています。直し終わったら、もう一度提出してください。'
+          : '入力が終わったら「✓ 提出する」を押してください。<br>提出した後も、主催者がロックするまでは直せます。')
+        + '</span><button type="button" id="btnSubmit_' + escapeHtmlAttr(id) + '" style="' + btnStyle('#2e7d32') + '">'
+        + (again ? '✓ もう一度提出する' : '✓ 提出する') + '</button></div>';
+      document.getElementById('btnSubmit_' + id).addEventListener('click', () => submitArtworkLock(art));
+    }
+
+    // ロック中の作品について、直したい内容を主催者に送る (Cloud Function requestArtworkEdit)
+    async function requestEdit(art) {
+      const label = art.title || art.title_en || art.artwork_id;
+      const message = await promptEditRequest(label);
+      if (message === null) return;
+      if (!navigator.onLine) {
+        await window.showAlertModal('オフラインです。ネットワーク接続を確認してから再試行してください。');
+        return;
+      }
+      const btn = document.getElementById('btnRequestEdit_' + art.artwork_id);
+      if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+      try {
+        const res = await _requestArtworkEditFn({ exCode: ex, artworkId: art.artwork_id, message: message, accessToken: _resolveAccessToken() });
+        const at = (res && res.data && res.data.at) || new Date().toISOString();
+        existingWorks = existingWorks.map(a => a.artwork_id === art.artwork_id ? Object.assign({}, a, { edit_request: { message: message, at: at } }) : a);
+        refreshCard(art.artwork_id);
+        showTopToast('✉「' + label + '」の修正の依頼を主催者に送りました。');
+      } catch (e) {
+        console.error('requestArtworkEdit failed:', e);
+        await window.showAlertModal(friendlyError(e, '修正の依頼'));
+        refreshCard(art.artwork_id);
+      }
+    }
+
+    // 修正依頼の文面を書いてもらうモーダル (window.prompt はスマホ内蔵ブラウザで動かないので自前)。
+    // 送る → 文字列、やめる → null
+    function promptEditRequest(label) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+        overlay.innerHTML = '<div style="background:#fff;border-radius:10px;padding:20px;max-width:420px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.25);font-size:0.92em;line-height:1.6;">'
+          + '<div style="font-weight:bold;margin-bottom:6px;">「' + escapeHtmlAttr(label) + '」の修正を依頼</div>'
+          + '<div style="color:#666;font-size:0.9em;margin-bottom:8px;">どこをどう直したいかを書いてください。主催者にメールで届きます。</div>'
+          + '<textarea id="editRequestText" rows="5" maxlength="1000" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:16px;" placeholder="例: 制作年を 2025 から 2026 に直したいです"></textarea>'
+          + '<div id="editRequestErr" style="color:#d93025;font-size:0.85em;min-height:1.2em;"></div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">'
+          + '<button type="button" id="editRequestCancel" style="padding:10px 18px;background:#eee;color:#555;border:none;border-radius:6px;font-size:14px;cursor:pointer;">やめる</button>'
+          + '<button type="button" id="editRequestSend" style="padding:10px 18px;background:#1a73e8;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;">送る</button>'
+          + '</div></div>';
+        document.body.appendChild(overlay);
+        const ta = overlay.querySelector('#editRequestText');
+        ta.focus();
+        overlay.querySelector('#editRequestCancel').onclick = () => { overlay.remove(); resolve(null); };
+        overlay.querySelector('#editRequestSend').onclick = () => {
+          const v = ta.value.trim();
+          if (!v) { overlay.querySelector('#editRequestErr').textContent = '直したい内容を書いてください。'; return; }
+          overlay.remove();
+          resolve(v);
+        };
+      });
     }
 
     // 画面上部の一時トースト (スクロール位置に関係なく見える)。提出完了の明示などに使う。
@@ -908,7 +1010,7 @@
         if (fresh) art = fresh;
       }
 
-      // 提出 = ロック = 確定。空欄の必須項目があれば提出をブロック。
+      // 提出は「できました」の合図。空欄の必須項目があれば提出をブロック。
       // 作家は項目設定を変えられないので「主催者にご連絡」案内付き。
       const offenders = [];
       (activeFields || []).forEach(f => {
@@ -933,7 +1035,7 @@
 
       const label = art.title || art.title_en || art.artwork_id;
       const okToSubmit = await window.showConfirmModal(
-        `作品「${label}」を提出します。\n\n提出後は編集ができなくなります。\n再編集が必要な場合は主催者にご連絡ください。\n\n続行しますか?`,
+        `作品「${label}」を提出します。\n\n提出した後も、主催者がロックするまでは直せます。\n\n続行しますか?`,
         { okLabel: '提出する' }
       );
       if (!okToSubmit) return;
@@ -944,34 +1046,20 @@
       const btn = document.getElementById('btnSubmit_' + art.artwork_id);
       if (btn) { btn.disabled = true; btn.textContent = '提出中…'; }
       try {
-        await window.fsSetArtwork(ex, art.artwork_id, { is_locked: true });
-        // 状態反映
-        art.is_locked = true;
-        existingWorks = existingWorks.map(a =>
-          a.artwork_id === art.artwork_id ? Object.assign({}, a, { is_locked: true }) : a
-        );
-        const card = document.querySelector('.artwork-card[data-id="' + art.artwork_id + '"]');
-        if (card) {
-          // ヘッダ 🔒 アイコン追加
-          const header = card.querySelector('.artwork-card-header');
-          if (header && !header.querySelector('.artwork-lock')) {
-            const lockEl = document.createElement('span');
-            lockEl.className = 'artwork-lock';
-            lockEl.style.cssText = 'color:#888; margin-right:4px;';
-            lockEl.textContent = '🔒';
-            lockEl.title = '主催者ロック中';
-            const chevron = header.querySelector('.artwork-chevron');
-            if (chevron) chevron.before(lockEl);
-          }
-          // パネル全体を read-only モードで再構築
-          buildEditPanel(card, art);
-        }
-        // 提出できたことを明示 (カードのロック表示だけだと成功が分かりにくい)。
-        showTopToast('✅「' + label + '」を提出しました。あとは主催者にお任せください。再編集が必要なときは主催者にご連絡ください。');
+        await window.fsSetArtwork(ex, art.artwork_id, { submit: true });
+        existingWorks = existingWorks.map(a => {
+          if (a.artwork_id !== art.artwork_id) return a;
+          const n = Object.assign({}, a, { submitted_at: new Date().toISOString() });
+          delete n.changed_after_submit_at;
+          return n;
+        });
+        refreshCard(art.artwork_id);
+        // 提出できたことを明示 (カードの表示だけだと成功が分かりにくい)。
+        showTopToast('✅「' + label + '」を提出しました。主催者がロックするまでは、あとから直すこともできます。');
       } catch (e) {
         console.error('submitArtworkLock failed:', e);
         await window.showAlertModal(friendlyError(e, '提出'));
-        if (btn) { btn.disabled = false; btn.textContent = '✓ 提出する'; }
+        refreshCard(art.artwork_id);
       }
     }
 
@@ -1293,7 +1381,10 @@
         if (res.success) {
           const msg = '✅ 更新しました。' + (res.updatedArtistCount > 1 ? '（作家情報を' + res.updatedArtistCount + '件の作品に反映）' : '');
           if (msgEl) { msgEl.textContent = msg; msgEl.style.color = '#1a73e8'; }
-          existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData); if (a.artist === originalArtist) return Object.assign({}, a, artistData); return a; });
+          // 提出済みの作品を直したら「提出後に変更あり」(サーバー側でも同じ印が付く)
+          const markChanged = (a) => a.submitted_at ? { changed_after_submit_at: new Date().toISOString() } : {};
+          existingWorks = existingWorks.map(a => { if (a.artwork_id === artworkId) return Object.assign({}, a, artworkData, artistData, markChanged(a)); if (a.artist === originalArtist) return Object.assign({}, a, artistData, markChanged(a)); return a; });
+          existingWorks.forEach(a => refreshCard(a.artwork_id));
           const titleEl = card.querySelector('.artwork-card-title'); if (titleEl) titleEl.textContent = artworkData.title || artworkData.title_en || '（タイトルなし）';
         } else {
           if (msgEl) { msgEl.textContent = res.error || '更新に失敗しました。通信環境を確認して、もう一度お試しください。'; msgEl.style.color = '#d93025'; }
@@ -1494,6 +1585,7 @@
     const _getArtworkFn = firebase.app().functions('asia-northeast1').httpsCallable('getArtwork');
     const _listArtworksByArtistFn = firebase.app().functions('asia-northeast1').httpsCallable('listArtworksByArtist');
     const _findEmptyArtworkSlotFn = firebase.app().functions('asia-northeast1').httpsCallable('findEmptyArtworkSlot');
+    const _requestArtworkEditFn = firebase.app().functions('asia-northeast1').httpsCallable('requestArtworkEdit');
 
     // 招待 URL の exp+sig (exhibition / artist token) のみ受け付ける。
     // legacy security_key 経路はセッション 3 で撤去済 (誰でも doc を読めるため

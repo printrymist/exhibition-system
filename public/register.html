@@ -2470,7 +2470,9 @@ ${artistMessage}
             return;
           }
           artworkCache = res.artworks;
-          document.getElementById('listCount').innerHTML = '<b>' + res.artworks.length + '</b> 件登録済み';
+          document.getElementById('listCount').innerHTML = '<b>' + res.artworks.length + '</b> 件登録済み'
+            + ' <span id="submitSummary" style="margin-left:10px; font-size:0.9em;"></span>';
+          renderSubmitSummary();
           if (res.artworks.length === 0) {
             document.getElementById('artworkList').innerHTML = '<div class="list-empty">まだ登録された作品がありません。</div>';
             return;
@@ -2494,15 +2496,11 @@ ${artistMessage}
       // ヘッダー
       const header = document.createElement('div');
       header.className = 'artwork-row-header';
-      // is_locked が true なら 🔒 アイコンを chevron の前に表示 (作家側 input.html で編集不可状態)
-      const lockIcon = art.is_locked
-        ? '<span class="artwork-lock" title="作家側で編集不可" style="color:#888; margin-right:4px;">🔒</span>'
-        : '';
       header.innerHTML = `
         <span class="artwork-id">${escapeHtmlAttr(art.artwork_id)}</span>
         <span class="artwork-title">${escapeHtmlAttr(art.title || art.title_en || '（タイトルなし）')}</span>
         <span class="artwork-artist">${escapeHtmlAttr(art.artist || art.artist_en || '')}</span>
-        ${lockIcon}
+        <span class="artwork-status">${artworkStatusIcons(art)}</span>
         <span class="artwork-chevron">▼</span>`;
       header.addEventListener('click', () => toggleEditPanel(row, art));
       row.appendChild(header);
@@ -2514,6 +2512,98 @@ ${artistMessage}
       row.appendChild(panel);
 
       return row;
+    }
+
+    // 行見出しの状態 (2026-09-24〜 提出とロックを分離):
+    // 🔒 ロック中 / ✉ 作家から修正の依頼 / ✎ 提出後に作家が変更 / ✓ 作家が提出済み
+    function artworkStatusIcons(art) {
+      const icon = (ch, title, color) => '<span title="' + title + '" style="color:' + color + '; margin-right:4px;">' + ch + '</span>';
+      let h = '';
+      if (art.edit_request) h += icon('✉', '作家から修正の依頼があります', '#d93025');
+      if (art.changed_after_submit_at) h += icon('✎', '提出した後に作家が内容を変えました', '#b06000');
+      else if (art.submitted_at) h += icon('✓', '作家が提出済み', '#2e7d32');
+      if (art.is_locked) h += icon('🔒', '作家側で編集不可', '#888');
+      return h;
+    }
+    function fmtJstShort(iso) {
+      const t = Date.parse(iso || '');
+      if (isNaN(t)) return '';
+      const d = new Date(t + 9 * 3600 * 1000).toISOString();
+      return d.slice(5, 10).replace('-', '/') + ' ' + d.slice(11, 16);
+    }
+    // 作品の状態が変わったら、行見出し・編集パネルの状態欄・一覧上の件数をまとめて描き直す
+    function refreshArtworkStatus(artworkId) {
+      const art = (artworkCache || []).find(a => a && a.artwork_id === artworkId);
+      if (!art) return;
+      const row = document.querySelector('.artwork-row[data-id="' + artworkId + '"]');
+      const st = row && row.querySelector('.artwork-status');
+      if (st) st.innerHTML = artworkStatusIcons(art);
+      const notice = document.getElementById('submitNotice_' + artworkId);
+      if (notice) renderSubmitNotice(notice, art);
+      renderSubmitSummary();
+    }
+    function renderSubmitSummary() {
+      const el = document.getElementById('submitSummary');
+      if (!el) return;
+      const list = artworkCache || [];
+      const req = list.filter(a => a.edit_request).length;
+      const changed = list.filter(a => a.changed_after_submit_at).length;
+      const submitted = list.filter(a => a.submitted_at && !a.changed_after_submit_at).length;
+      const parts = [];
+      if (req) parts.push('<span style="color:#d93025; font-weight:bold;">✉ 修正の依頼 ' + req + ' 件</span>');
+      if (changed) parts.push('<span style="color:#b06000; font-weight:bold;">✎ 提出後の変更 ' + changed + ' 件</span>');
+      parts.push('<span style="color:#2e7d32;">✓ 提出済み ' + submitted + ' 件</span>');
+      el.innerHTML = parts.join('　');
+    }
+    // 提出・修正依頼の欄 (編集パネル上部)
+    function renderSubmitNotice(el, art) {
+      const id = art.artwork_id;
+      const btn = (key, label, bg) => '<button type="button" data-act="' + key + '" style="padding:5px 12px; background:' + bg + '; color:white; border:none; border-radius:5px; font-size:0.85em; cursor:pointer; white-space:nowrap;">' + label + '</button>';
+      let html = '';
+      if (art.edit_request) {
+        const r = art.edit_request;
+        html += '<div style="margin-bottom:8px; padding:10px 12px; background:#fdecea; border:1px solid #f5b7b1; border-radius:6px; font-size:0.88em; line-height:1.6;">'
+          + '<b style="color:#d93025;">✉ 作家から修正の依頼</b>（' + escapeHtmlAttr(fmtJstShort(r.at)) + '）'
+          + '<div style="white-space:pre-wrap; background:#fff; border:1px solid #f5d0cc; border-radius:4px; padding:6px 8px; margin:6px 0;">' + escapeHtmlAttr(r.message || '') + '</div>'
+          + '<div style="color:#666; font-size:0.92em; margin-bottom:6px;">' + (art.is_locked ? 'ロックを解除すると、作家が自分で直せるようになります (依頼は自動で閉じます)。この画面で主催者が直すこともできます。' : 'ロックは解除済みです。作家が直せる状態です。') + '</div>'
+          + (art.is_locked ? btn('unlock', '🔓 ロックを解除する', '#1a73e8') + ' ' : '') + btn('closeRequest', '依頼を閉じる', '#888')
+          + '</div>';
+      }
+      if (art.changed_after_submit_at) {
+        html += '<div style="margin-bottom:8px; padding:10px 12px; background:#fff8e1; border:1px solid #ffe0a3; border-radius:6px; font-size:0.88em; line-height:1.6;">'
+          + '<b style="color:#b06000;">✎ 提出した後に作家が内容を変えました</b>（' + escapeHtmlAttr(fmtJstShort(art.changed_after_submit_at)) + '）'
+          + '<div style="color:#666; font-size:0.92em; margin:2px 0 6px;">キャプションを印刷済みなら、刷り直しが必要か確かめてください。</div>'
+          + btn('ackChange', '確認した', '#b06000')
+          + '</div>';
+      } else if (art.submitted_at) {
+        html += '<div style="margin-bottom:8px; font-size:0.85em; color:#2e7d32;">✓ 作家が提出済み（' + escapeHtmlAttr(fmtJstShort(art.submitted_at)) + '）</div>';
+      }
+      el.innerHTML = html;
+      el.querySelectorAll('button[data-act]').forEach(b => {
+        b.addEventListener('click', () => {
+          const act = b.dataset.act;
+          if (act === 'unlock') toggleArtworkLock(art);
+          else if (act === 'closeRequest') setArtworkSubmitFlags(id, { edit_request: null }, b);
+          else if (act === 'ackChange') setArtworkSubmitFlags(id, { changed_after_submit_at: null }, b);
+        });
+      });
+    }
+    async function setArtworkSubmitFlags(artworkId, patch, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        await window.fsSetArtwork(currentEx, artworkId, patch);
+        artworkCache = (artworkCache || []).map(a => {
+          if (a.artwork_id !== artworkId) return a;
+          const n = Object.assign({}, a);
+          Object.keys(patch).forEach(k => { if (patch[k] === null) delete n[k]; else n[k] = patch[k]; });
+          return n;
+        });
+        refreshArtworkStatus(artworkId);
+      } catch (e) {
+        console.error('setArtworkSubmitFlags failed:', e);
+        if (btn) btn.disabled = false;
+        await window.showAlertModal(friendlyError(e, '更新'));
+      }
     }
 
     function toggleEditPanel(row, art) {
@@ -2537,7 +2627,7 @@ ${artistMessage}
       lockSection.innerHTML = `
         <span id="lockText_${art.artwork_id}" style="font-size:0.88em; color:#555;">${
           art.is_locked
-            ? '🔒 <b>ロック中</b> — 作家側 (input.html) では編集不可'
+            ? '🔒 <b>ロック中</b> — 作家の作品情報入力の画面からは編集できません'
             : '🔓 <b>編集可能</b> — 作家側で編集できる状態'
         }</span>
         <button type="button" id="btnToggleLock_${art.artwork_id}"
@@ -2548,6 +2638,10 @@ ${artistMessage}
       panel.appendChild(lockSection);
       document.getElementById('btnToggleLock_' + art.artwork_id)
         .addEventListener('click', () => toggleArtworkLock(art));
+      const submitNotice = document.createElement('div');
+      submitNotice.id = 'submitNotice_' + art.artwork_id;
+      panel.appendChild(submitNotice);
+      renderSubmitNotice(submitNotice, (artworkCache || []).find(a => a && a.artwork_id === art.artwork_id) || art);
 
       // ── 作品情報 ──
       const artLabel = document.createElement('div');
@@ -2679,35 +2773,21 @@ ${artistMessage}
       if (lockBtn) lockBtn.disabled = true;
       try {
         await window.fsSetArtwork(currentEx, art.artwork_id, { is_locked: newState });
-        // 状態反映 (art / artworkCache / 行ヘッダ / lockSection)
+        // 状態反映 (art / artworkCache / 行ヘッダ / 提出・依頼欄 / lockSection)。
+        // 解除すると修正の依頼は閉じる (Cloud Function 側でも消える)
         art.is_locked = newState;
-        artworkCache = artworkCache.map(a =>
-          a.artwork_id === art.artwork_id ? Object.assign({}, a, { is_locked: newState }) : a
-        );
-        // ヘッダ 🔒 アイコン更新
-        const row = document.querySelector('.artwork-row[data-id="' + art.artwork_id + '"]');
-        if (row) {
-          const header = row.querySelector('.artwork-row-header');
-          const existingLock = header.querySelector('.artwork-lock');
-          if (newState) {
-            if (!existingLock) {
-              const lockEl = document.createElement('span');
-              lockEl.className = 'artwork-lock';
-              lockEl.style.cssText = 'color:#888; margin-right:4px;';
-              lockEl.textContent = '🔒';
-              lockEl.title = '作家側で編集不可';
-              const chevron = header.querySelector('.artwork-chevron');
-              if (chevron) chevron.before(lockEl);
-            }
-          } else {
-            if (existingLock) existingLock.remove();
-          }
-        }
+        artworkCache = artworkCache.map(a => {
+          if (a.artwork_id !== art.artwork_id) return a;
+          const n = Object.assign({}, a, { is_locked: newState });
+          if (!newState) delete n.edit_request;
+          return n;
+        });
+        refreshArtworkStatus(art.artwork_id);
         // Lock セクションのテキスト + ボタンだけ更新 (パネル全体は再構築しない、編集中の入力を保護)
         const lockText = document.getElementById('lockText_' + art.artwork_id);
         if (lockText) {
           lockText.innerHTML = newState
-            ? '🔒 <b>ロック中</b> — 作家側 (input.html) では編集不可'
+            ? '🔒 <b>ロック中</b> — 作家の作品情報入力の画面からは編集できません'
             : '🔓 <b>編集可能</b> — 作家側で編集できる状態';
         }
         if (lockBtn) {
@@ -2826,30 +2906,13 @@ ${artistMessage}
         try {
           await window.fsSetArtwork(currentEx, art.artwork_id, { is_locked: targetState });
           done++;
-          // ローカル状態を更新 (artworkCache + 行ヘッダの 🔒 アイコン)
+          // ローカル状態を更新 (artworkCache + 行ヘッダの状態)。解除で修正の依頼は閉じる
           art.is_locked = targetState;
           if (Array.isArray(artworkCache)) {
             const ce = artworkCache.find(a => a.artwork_id === art.artwork_id);
-            if (ce) ce.is_locked = targetState;
+            if (ce) { ce.is_locked = targetState; if (!targetState) delete ce.edit_request; }
           }
-          const row = document.querySelector('.artwork-row[data-id="' + art.artwork_id + '"]');
-          if (row) {
-            const header = row.querySelector('.artwork-row-header');
-            const existingLock = header && header.querySelector('.artwork-lock');
-            if (targetState) {
-              if (header && !existingLock) {
-                const lockEl = document.createElement('span');
-                lockEl.className = 'artwork-lock';
-                lockEl.style.cssText = 'color:#888; margin-right:4px;';
-                lockEl.textContent = '🔒';
-                lockEl.title = '作家側で編集不可';
-                const chevron = header.querySelector('.artwork-chevron');
-                if (chevron) chevron.before(lockEl);
-              }
-            } else {
-              if (existingLock) existingLock.remove();
-            }
-          }
+          refreshArtworkStatus(art.artwork_id);
         } catch (e) {
           console.error('bulk lock toggle failed:', art.artwork_id, e);
           failed.push({ id: art.artwork_id, error: (e && e.message) || String(e) });
