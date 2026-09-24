@@ -496,6 +496,8 @@
     </div>
     <div class="msg-ok" id="searchOk"></div>
     <div class="msg-error" id="searchError"></div>
+    <!-- 入力した名前と表記だけ違う (空白・全角半角) 登録があったときの確認 -->
+    <div id="spellingChoice" style="display:none; margin-top:12px; padding:12px 14px; background:#fff8e1; border:1px solid #ffe0a3; border-radius:8px; font-size:0.9em; line-height:1.6;"></div>
   </div>
 
   <div id="mainArea">
@@ -637,6 +639,13 @@
     const ex = getUrlParam('ex');
     let activeFields = [];
     let currentArtist = '';
+    // 「別の作家です」を選んだとき true。表記の揺れを無視して見つかった他の方の作品を除く
+    let _artistExactOnly = false;
+    function _onlyCurrentArtist(works, artistName) {
+      if (!_artistExactOnly) return works;
+      const target = String(artistName || '').trim();
+      return works.filter(a => String(a.artist || '').trim() === target);
+    }
     let existingWorks = [];
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -699,6 +708,8 @@
       const name = document.getElementById('artistNameInput').value.trim();
       if (!name) return;
       currentArtist = name;
+      _artistExactOnly = false;
+      document.getElementById('spellingChoice').style.display = 'none';
       document.getElementById('btnSearch').disabled = true;
       document.getElementById('searchOk').innerHTML = '<span class="spinner-sm"></span> 検索中...';
       document.getElementById('searchError').innerText = '';
@@ -711,12 +722,60 @@
             document.getElementById('searchError').innerText = res.error || '読み込みに失敗しました。通信環境を確認して、もう一度お試しください。';
             return;
           }
-          existingWorks = res.artworks;
           document.getElementById('searchOk').innerText = '';
-          document.getElementById('mainArea').style.display = 'block';
-          if (existingWorks.length > 0) { showArtworkList(); }
-          else { showNewForm(); }
+          // 作品は空白・全角半角の違いを無視して見つかる (Cloud Function 側)。
+          // 入力した名前と違う表記で登録されていたら、同じ方か確認してから進む。
+          const spellings = [];
+          res.artworks.forEach(a => {
+            const sp = String(a.artist || '').trim();
+            if (sp && spellings.indexOf(sp) === -1) spellings.push(sp);
+          });
+          if (spellings.length > 0 && !(spellings.length === 1 && spellings[0] === name)) {
+            showSpellingChoice(name, res.artworks, spellings);
+            return;
+          }
+          startWithArtist(name, res.artworks);
         });
+    }
+
+    function startWithArtist(name, works) {
+      currentArtist = name;
+      document.getElementById('artistNameInput').value = name;
+      document.getElementById('spellingChoice').style.display = 'none';
+      existingWorks = works;
+      document.getElementById('mainArea').style.display = 'block';
+      if (existingWorks.length > 0) { showArtworkList(); }
+      else { showNewForm(); }
+    }
+
+    function showSpellingChoice(name, works, spellings) {
+      const box = document.getElementById('spellingChoice');
+      const esc = escapeHtmlAttr;
+      let html = '<div style="margin-bottom:8px;">この展覧会には、表記が少し違うお名前で作品が登録されています。'
+        + '同じ方でしたら、登録されている表記で続けます。</div>';
+      spellings.forEach((sp, i) => {
+        const n = works.filter(a => String(a.artist || '').trim() === sp).length;
+        html += '<button type="button" class="btn-primary" data-sp="' + i + '" style="display:block; width:100%; margin-bottom:6px;">'
+          + '「' + esc(sp) + '」で続ける（作品 ' + n + ' 点）</button>';
+      });
+      if (spellings.indexOf(name) === -1) {
+        html += '<button type="button" class="btn-cancel" data-other="1" style="display:block; width:100%;">'
+          + '別の作家です（「' + esc(name) + '」で新しく登録する）</button>';
+      }
+      box.innerHTML = html;
+      box.style.display = 'block';
+      box.querySelectorAll('button[data-sp]').forEach(btn => {
+        // 同じ方なら、どの表記の作品もその方の作品として一覧に出す。新しく登録する作品は選んだ表記になる
+        btn.onclick = () => startWithArtist(spellings[Number(btn.dataset.sp)], works);
+      });
+      const other = box.querySelector('button[data-other]');
+      if (other) {
+        other.onclick = () => {
+          // 別の作家: 以後の一覧・作家情報の反映は、入力どおりの表記の作品だけを対象にする
+          _artistExactOnly = true;
+          startWithArtist(name, works.filter(a => String(a.artist || '').trim() === name));
+        };
+      }
     }
 
     function showArtworkList() {
@@ -1488,7 +1547,7 @@
       if (!res || !res.data || !res.data.success) {
         throw new Error('処理に失敗しました。通信環境を確認して、もう一度お試しください。');
       }
-      return { success: true, artworks: res.data.artworks || [] };
+      return { success: true, artworks: _onlyCurrentArtist(res.data.artworks || [], artistName) };
     };
     window.fsSaveArtwork = async (exCode, data) => {
       // β-3: 空きスロット検索を CF 経由に。race は依然として残る (Phase 2 課題)。
@@ -1518,7 +1577,7 @@
         }
         try {
           const res = await _listArtworksByArtistFn({ exCode: exCode, artistName: target, accessToken: accessToken });
-          const others = (res && res.data && res.data.artworks) || [];
+          const others = _onlyCurrentArtist((res && res.data && res.data.artworks) || [], target);
           const tasks = [];
           others.forEach(d => {
             if (!d.artwork_id || d.artwork_id === artworkId) return;

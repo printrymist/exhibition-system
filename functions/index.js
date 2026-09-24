@@ -1350,6 +1350,19 @@ exports.imageProxy = onRequest(
 // security_key は doc に残置しているが認可には使わない (DB の遺物)。
 // =========================================================
 
+// 作家名が「同じ人か」の比較用。全角/半角と空白 (全角空白・半角空白・有無) の違いを無視する。
+// 作家が案内リンクから入力し直すときに「宮川 良平」(全角空白)「宮川良平」のように表記が揺れ、
+// 同じ人の作品が別人扱いで二重登録される問題への対策 (2026-09-24)。
+// 表示する作家名は入力どおりのまま。漢字の異体字 (髙/高 等) は別人の可能性があるので同一視しない。
+// HMAC の署名対象 (作家別リンクの artist) はリンクの文字列そのままで、ここでは変えない。
+function artistKey(name) {
+  return String(name == null ? "" : name).normalize("NFKC").replace(/\s+/g, "");
+}
+function isSameArtist(a, b) {
+  const ka = artistKey(a);
+  return ka !== "" && ka === artistKey(b);
+}
+
 function computeExhibitionSig(secret, exCode, exp) {
   return crypto.createHmac("sha256", secret)
     .update("exhibition:" + exCode + ":" + exp)
@@ -2328,7 +2341,7 @@ exports.submitArtwork = onCall(
       const tokArtist = String(tok.artist || "").trim();
       if (existingSnap.exists) {
         const existingArtist = String((existingSnap.data() || {}).artist || "").trim();
-        if (existingArtist && existingArtist !== tokArtist) {
+        if (existingArtist && !isSameArtist(existingArtist, tokArtist)) {
           throw new HttpsError(
             "permission-denied",
             "このトークンでは他の作家の作品を編集できません",
@@ -2337,7 +2350,7 @@ exports.submitArtwork = onCall(
       }
       if ("artist" in cleanFields) {
         const writeArtist = String(cleanFields.artist || "").trim();
-        if (writeArtist && writeArtist !== tokArtist) {
+        if (writeArtist && !isSameArtist(writeArtist, tokArtist)) {
           throw new HttpsError(
             "permission-denied",
             "このトークンでは指定された作家名のみ書き込み可能です",
@@ -2357,7 +2370,7 @@ exports.submitArtwork = onCall(
       const existingArtist = String((existingSnap.data() || {}).artist || "").trim();
       if ("artist" in cleanFields) {
         const writeArtist = String(cleanFields.artist || "").trim();
-        if (existingArtist && writeArtist && existingArtist !== writeArtist) {
+        if (existingArtist && writeArtist && !isSameArtist(existingArtist, writeArtist)) {
           throw new HttpsError(
             "permission-denied",
             "この作品は既に別の作家のものです。書き換えはできません",
@@ -2405,7 +2418,7 @@ exports.submitArtwork = onCall(
       }
       const targetArtist =
         String((existingSnap.data() || {}).artist || "").trim();
-      if (sourceArtist !== targetArtist) {
+      if (!isSameArtist(sourceArtist, targetArtist)) {
         throw new HttpsError(
           "permission-denied",
           "fan-out は同じ作家の作品にのみ可能です (" +
@@ -2917,7 +2930,7 @@ exports.uploadArtworkImage = onCall(
       if (authMode === "artist_token") {
         const tokArtist = String(tok.artist || "").trim();
         const existingArtist = String(existing.artist || "").trim();
-        if (existingArtist && existingArtist !== tokArtist) {
+        if (existingArtist && !isSameArtist(existingArtist, tokArtist)) {
           throw new HttpsError(
             "permission-denied",
             "このトークンでは他の作家の作品を編集できません",
@@ -3084,7 +3097,7 @@ exports.getArtwork = onCall(
     if (authMode === "artist_token") {
       const tokArtist = String(tok.artist || "").trim();
       const docArtist = String(docData.artist || "").trim();
-      if (docArtist && docArtist !== tokArtist) {
+      if (docArtist && !isSameArtist(docArtist, tokArtist)) {
         throw new HttpsError(
           "permission-denied",
           "このトークンでは他の作家の作品を読めません",
@@ -3158,7 +3171,7 @@ exports.listArtworksByArtist = onCall(
           throw new HttpsError("not-found", "対象の作品が見つかりません");
         }
         const docArtist = String((artSnap.data() || {}).artist || "").trim();
-        if (docArtist && docArtist === artistName) {
+        if (docArtist && isSameArtist(docArtist, artistName)) {
           authMode = "artwork_token";
         } else {
           // doc.artist が空 (= 新規スロット) や別作家の場合は拒否
@@ -3182,7 +3195,7 @@ exports.listArtworksByArtist = onCall(
     // artist_token のときは token.artist と要求 artistName が一致しなければならない。
     if (authMode === "artist_token") {
       const tokArtist = String(tok.artist || "").trim();
-      if (tokArtist !== artistName) {
+      if (!isSameArtist(tokArtist, artistName)) {
         throw new HttpsError(
           "permission-denied",
           "このトークンでは指定された作家以外の一覧を読めません",
@@ -3190,11 +3203,13 @@ exports.listArtworksByArtist = onCall(
       }
     }
 
+    // 表記の揺れ (空白・全角半角) を無視して探すため、展覧会の作品を読んでここで比べる
+    // (1 展覧会は多くて数百点)。返す作品の artist は登録されている表記のまま。
     const snap = await admin.firestore().collection("artworks")
       .where("exCode", "==", exCode)
-      .where("artist", "==", artistName)
       .get();
-    const artworks = snap.docs.map((d) => d.data());
+    const artworks = snap.docs.map((d) => d.data())
+      .filter((a) => isSameArtist(a.artist, artistName));
     return { success: true, artworks: artworks };
   },
 );
