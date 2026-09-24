@@ -160,8 +160,18 @@
       });
     }
 
+    // ISO 形式の世界標準時 (末尾 Z、例 2026-09-23T22:13:04.373Z) は日本時間で見せる。
+    // そのままだと日本時間の朝 0〜9 時の日時が前の日に見えて紛らわしいため。元の値は title (マウスを重ねる) で見える
+    var ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/;
+    function isoToJst(s) {
+      var t = Date.parse(s);
+      if (isNaN(t)) return s;
+      var d = new Date(t + 9 * 3600 * 1000).toISOString();
+      return d.slice(0, 10).replace(/-/g, '/') + ' ' + d.slice(11, 19) + ' (日本時間)';
+    }
     function valToStr(v) {
       if (v == null) return '';
+      if (typeof v === 'string' && ISO_UTC_RE.test(v)) return isoToJst(v);
       if (typeof v === 'object') {
         if (typeof v.toDate === 'function') { try { return v.toDate().toLocaleString('ja-JP', { hour12: false }); } catch (_e) {} }
         try { return JSON.stringify(v); } catch (_e) { return String(v); }
@@ -258,13 +268,16 @@
         html += '<tr onclick="toggleDetail(' + i + ')"><td class="docid">' + escapeHtml(d.id) + '</td>';
         keys.forEach(function(k){
           var s = valToStr(d.data[k]);
-          html += '<td title="' + escapeHtml(s) + '">' + escapeHtml(s) + '</td>';
+          var raw = (typeof d.data[k] === 'string') ? d.data[k] : s;
+          html += '<td title="' + escapeHtml(raw) + '">' + escapeHtml(s) + '</td>';
         });
         html += '</tr>';
         var detail = '<tr class="detail" id="detail-' + i + '" style="display:none;"><td colspan="' + (keys.length + 1) + '"><table><tbody>';
         detail += '<tr><th>__id__</th><td>' + escapeHtml(d.id) + '</td></tr>';
         Object.keys(d.data).sort().forEach(function(k){
-          detail += '<tr><th>' + escapeHtml(k) + '</th><td>' + escapeHtml(valToStr(d.data[k])) + '</td></tr>';
+          var dv = valToStr(d.data[k]);
+          var rawv = (typeof d.data[k] === 'string' && dv !== d.data[k]) ? ' <span style="color:#999;">[' + escapeHtml(d.data[k]) + ']</span>' : '';
+          detail += '<tr><th>' + escapeHtml(k) + '</th><td>' + escapeHtml(dv) + rawv + '</td></tr>';
         });
         detail += '</tbody></table></td></tr>';
         html += detail;

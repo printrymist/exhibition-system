@@ -84,6 +84,7 @@
         <button type="button" class="sub" onclick="downloadCsv()">CSV を書き出す</button>
         <span class="count" id="rowCount"></span>
       </div>
+      <div id="backfillNotice" style="display:none; margin:0 0 10px; padding:10px 12px; background:#f7faff; border:1px solid #c5d9f7; border-radius:8px; font-size:0.88em; line-height:1.6;"></div>
       <div id="result"><div class="empty">読み込み中…</div></div>
     </div>
 
@@ -170,6 +171,7 @@
           var q = d.data(), ex = q.ex_code || '';
           if (ex && (q.status || 'open') !== 'resolved') inq[ex] = (inq[ex] || 0) + 1;
         });
+        renderBackfillNotice(res[0].docs);
         rows = res[0].docs.map(function (d) {
           var e = d.data(), code = d.id, c = counts[code] || { entered: 0, slots: 0 };
           var sandbox = e.is_sandbox === true || String(e.is_sandbox).toUpperCase() === 'TRUE';
@@ -367,6 +369,76 @@
         console.error(err);
         await window.showAlertModal('削除できませんでした: ' + (err && err.message ? err.message : err));
       }
+    };
+
+    // ── 古い展覧会に createdAt を補う (2026-09-24) ──
+    // 作成日時は createdAt (ISO・UTC) にそろえた。旧スプレッドシート時代の展覧会には created_at
+    // (日本時間の文字 'yyyy/MM/dd, HH:mm:ss') しか無いものがあるので、変換して createdAt を足す。
+    // created_at は消さない。書き込みは運営者のボタン操作でだけ行い、変更は監査トリガーが記録する。
+    function legacyToIso(v) {
+      if (v == null || v === '') return null;
+      if (typeof v === 'object' && typeof v.toDate === 'function') { try { return v.toDate().toISOString(); } catch (e) { return null; } }
+      var str = String(v).trim();
+      var m = str.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2}),?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      var p2 = function (n) { return ('0' + n).slice(-2); };
+      var t = m ? Date.parse(m[1] + '-' + p2(m[2]) + '-' + p2(m[3]) + 'T' + p2(m[4]) + ':' + m[5] + ':' + (m[6] || '00') + '+09:00')
+        : (/[zZ]|[+-]\d{2}:\d{2}$/.test(str) ? Date.parse(str) : NaN);
+      return isNaN(t) ? null : new Date(t).toISOString();
+    }
+    function jstText(iso) {
+      var d = new Date(Date.parse(iso) + 9 * 3600 * 1000).toISOString();
+      return d.slice(0, 10).replace(/-/g, '/') + ' ' + d.slice(11, 19);
+    }
+    var backfillTargets = [];
+    function renderBackfillNotice(docs) {
+      var el = document.getElementById('backfillNotice');
+      backfillTargets = [];
+      var skipped = [];
+      docs.forEach(function (d) {
+        var e = d.data();
+        if (e.createdAt) return;
+        var iso = legacyToIso(e.created_at);
+        if (iso) backfillTargets.push({ code: d.id, name: e.ex_name || '', raw: String(e.created_at), iso: iso });
+        else skipped.push({ code: d.id, name: e.ex_name || '', raw: e.created_at == null ? '(なし)' : String(e.created_at) });
+      });
+      if (!backfillTargets.length && !skipped.length) { el.style.display = 'none'; return; }
+      var html = '作成日時 <code>createdAt</code> が無い古い展覧会が <b>' + (backfillTargets.length + skipped.length) + ' 件</b>あります。'
+        + (backfillTargets.length ? '旧形式の <code>created_at</code> (日本時間) から変換して補えます (<code>created_at</code> は消しません)。' : '')
+        + ' <a href="#" onclick="document.getElementById(\'backfillDetail\').style.display=\'block\';this.style.display=\'none\';return false;">内容を見る</a>'
+        + '<div id="backfillDetail" style="display:none; margin-top:8px;"><div class="table-wrap" style="max-height:40vh;"><table><thead><tr>'
+        + '<th style="cursor:default;">コード</th><th style="cursor:default;">展覧会名</th><th style="cursor:default;">created_at (元の値)</th><th style="cursor:default;">補う createdAt (日本時間で表示)</th></tr></thead><tbody>';
+      backfillTargets.forEach(function (t) {
+        html += '<tr><td><code>' + esc(t.code) + '</code></td><td class="name">' + esc(t.name) + '</td><td>' + esc(t.raw) + '</td><td>' + esc(jstText(t.iso)) + '</td></tr>';
+      });
+      skipped.forEach(function (t) {
+        html += '<tr><td><code>' + esc(t.code) + '</code></td><td class="name">' + esc(t.name) + '</td><td>' + esc(t.raw) + '</td><td style="color:#b06000;">変換できないので補いません</td></tr>';
+      });
+      html += '</tbody></table></div>'
+        + (backfillTargets.length ? '<button type="button" id="btnBackfill" style="margin-top:8px;" onclick="runBackfill()">' + backfillTargets.length + ' 件に createdAt を補う</button>' : '')
+        + '</div>';
+      el.innerHTML = html;
+      el.style.display = 'block';
+    }
+    window.runBackfill = async function () {
+      var list = backfillTargets.slice();
+      if (!list.length) return;
+      var ok = await window.showConfirmModal(list.length + ' 件の展覧会に createdAt を書き込みます。\n\n元の created_at は消しません。変更は監査ログに残ります。', { okLabel: '書き込む' });
+      if (!ok) return;
+      var btn = document.getElementById('btnBackfill');
+      if (btn) btn.disabled = true;
+      var done = 0, failed = [];
+      for (var i = 0; i < list.length; i++) {
+        if (btn) btn.textContent = '書き込み中… (' + (i + 1) + '/' + list.length + ')';
+        try {
+          await db.collection('exhibitions').doc(list[i].code).update({ createdAt: list[i].iso });
+          done++;
+        } catch (e) {
+          console.error(e);
+          failed.push(list[i].code);
+        }
+      }
+      await window.showAlertModal(done + ' 件に createdAt を補いました。' + (failed.length ? '\n書き込めなかった展覧会: ' + failed.join(', ') : ''));
+      await loadAll();
     };
 
     // 申請の一覧 (applications、doc id = 確認メールの token)。token は表示しない

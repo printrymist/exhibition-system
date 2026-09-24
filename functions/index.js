@@ -758,12 +758,13 @@ exports.createExhibition = onCall(
         image_folder_id: "", artwork_sheet_id: "", comment_sheet_id: "",
         registration_fields: SETUP_DEFAULT_FIELDS,
         caption_fields: SETUP_DEFAULT_FIELDS,
-        created_at: stamp,
-        updated_at: stamp,
+        // 作成日時は createdAt (ISO・UTC) だけにする。旧スプレッドシートの列 created_at / updated_at
+        // (日本時間の文字) は 2026-09-24 から書かない (同じ意味で 2 つあり、日付がずれて見えて紛らわしかった)
         memo: "",
         is_sandbox: isSandbox,
         expire_at: isSandbox ? new Date(Date.now() + SETUP_SANDBOX_DAYS * 86400000).toISOString() : "",
         createdAt: nowIso,
+        updatedAt: nowIso,
         last_artwork_seq: workCount,
         application_id: token,
       };
